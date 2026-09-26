@@ -1,12 +1,12 @@
 # 自动化 Code Review 管理平台实施流程
 
-> 版本：实施方案 v1.2，2026-09-26。本文同时描述目标流程与分阶段验收；本地启动方式和当前限制见[部署说明](./deployment.md)。Open Code Review 的已确认能力和官方来源见[调研笔记](./open-code-review-research.md)。
+> 版本：实施方案 v1.3，2026-09-26。本文同时描述目标流程与分阶段验收；四块后台配置的实际填写方式见[配置指南](./configuration-guide.md)，本地启动方式见[部署说明](./deployment.md)。Open Code Review 的已确认能力和官方来源见[调研笔记](./open-code-review-research.md)。
 
 开发阶段的代码组织、注释和质量要求见[工程规范采用说明](./governance/README.md)。
 
 ## 1. 目标与边界
 
-系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并完成后，通过项目 webhook 通知平台；平台确认合并结果，在目标分支上确定实际进入的提交，按提交 SHA 调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面管理仓库、GitLab webhook、模型、通知目标和评审任务。第一版不定时轮询 Git 仓库。
+系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并或默认分支快进 Push 后，通过项目 webhook 通知平台；平台确认提交范围，按提交 SHA 调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面分别管理 Agent 模型、项目、GitLab Webhook、飞书配置和评审任务。第一版不定时轮询 Git 仓库。
 
 第一版按以下约束实施：
 
@@ -14,9 +14,9 @@
 | --- | --- |
 | 评审引擎 | OCR 默认模式，直接调用配置的 LLM；不调用 Codex。 |
 | 评审单位 | 单个 Git commit，调用 `ocr review --commit <sha>`。 |
-| 触发方式 | GitLab Merge Request webhook 的 `merge` 事件；页面支持按 MR 手动补触发和任务重跑。 |
-| 部署范围 | 单台 Mac mini、单管理员、多个仓库、一个全局模型配置。 |
-| 通知方式 | 飞书群自定义机器人 webhook；一个仓库可指定一个通知目标。 |
+| 触发方式 | GitLab Merge Request 的 `merge` 事件和可选的默认分支快进 Push；页面支持按 MR 手动补触发和任务重跑。 |
+| 部署范围 | 单台 Mac mini、单管理员、多个仓库、多份模型配置且同一时间启用一份。 |
+| 通知方式 | 独立飞书群机器人配置可由多个仓库共享；一个仓库可关联一个通知目标。 |
 | 结果保留 | SQLite 保存索引和状态，文件系统保存 OCR 原始 JSON、预览结果及诊断日志。 |
 | 默认并发 | SQLite 持久化队列、单 Worker、同时只运行一个 OCR 任务；OCR 内部并发由 `--concurrency` 控制。 |
 
@@ -25,7 +25,7 @@
 ## 2. 总体结构
 
 ```text
-GitLab 项目：MR 合并 → Merge Request webhook
+GitLab 项目：MR 合并或默认分支 Push → 项目 webhook
                          │ HTTPS，仅开放回调路径
                          ▼
                   FastAPI webhook 接收端 ── SQLite 事件收件箱
@@ -41,9 +41,9 @@ GitLab 项目：MR 合并 → Merge Request webhook
 - **管理服务**提供页面、API 和轻量 webhook 接收端，不在 HTTP 请求中运行 Git 或 OCR。React 使用 Vite 构建为静态资源，由管理服务提供。
 - **Worker**作为独立进程运行，负责消费已落库的合并事件、确认实际提交、执行 OCR 和重试飞书投递。管理服务重启不应中断正在运行的评审。
 - **SQLite**使用 WAL 模式记录配置、任务、尝试和通知状态；第一版只有一个 Worker 实例。业务数据目录与代码目录分开。
-- **launchd**分别守护管理服务和 Worker，开机或登录后启动，异常退出后重启。部署环境提供管理口令、加密主密钥和 GitLab 只读 API token；模型与仓库 webhook/飞书密钥由管理 API 加密保存。
+- **launchd**分别守护管理服务和 Worker，开机或登录后启动，异常退出后重启。部署环境提供管理口令和加密主密钥；每仓库 GitLab Token、模型密钥、Webhook Secret 与飞书凭据由管理 API 加密保存。
 
-管理页可以只监听本机地址；GitLab webhook 必须能访问稳定的 HTTPS 地址。由反向代理或受控隧道只转发 `/api/webhooks/gitlab/` 到接收端。若使用 GitLab.com，私有局域网地址或仅供本机访问的地址无法直接作为回调；若使用自建 GitLab，需先验证 GitLab 所在网络能到达 Mac mini。合并后的评审只提供事后反馈，不会阻止已经完成的合并。
+管理页可以只监听本机地址；GitLab webhook 必须能访问稳定的 HTTPS 地址。由反向代理或受控隧道只转发 `/api/webhooks/gitlab` 到接收端。若使用 GitLab.com，私有局域网地址或仅供本机访问的地址无法直接作为回调；若使用自建 GitLab，需先验证 GitLab 所在网络能到达 Mac mini。评审只提供事后反馈，不会阻止已经完成的合并或 Push。
 
 ### 建议目录
 
@@ -66,16 +66,16 @@ Mac mini 数据目录/
 
 | 对象 | 关键字段 | 用途 |
 | --- | --- | --- |
-| `Repository` | 名称、GitLab 实例地址、项目数字 ID、remote URL、目标分支、启停状态、只读凭据引用 | 确定可信项目和代码来源。 |
-| `WebhookConfig` | 仓库、回调路径、webhook ID、鉴权方式、密钥引用、最近验证时间 | 管理每个 GitLab 项目的回调配置。 |
-| `MergeEvent` | 项目 ID、MR IID、投递 ID、目标分支、合并 SHA、接收时间、处理状态 | 持久化合并事件及其处理证据。 |
-| `ModelProfile` | OCR provider、model、内部并发、超时、密钥引用、配置版本 | 第一版全局共用；数据库不保存明文 API key。 |
-| `NotificationTarget` | 飞书群名称、webhook 密钥引用、启停状态、通知阈值 | 定义消息去向；数据库不保存明文 webhook。 |
+| `Repository` | 名称、命名空间、GitLab 实例地址、项目数字 ID、无凭据 HTTPS Clone URL、目标分支、启停状态、加密项目令牌及两个事件开关 | 确定可信项目和代码来源。 |
+| `WebhookConfig` | 统一回调路径；每仓库的加密 Secret、事件开关和最近验证时间 | 在仓库配置中管理各项目 Webhook，不额外复制凭据。 |
+| `MergeEvent` | 项目 ID、MR IID 或 Push 标识、投递 ID、目标分支、提交范围、接收时间、处理状态 | 持久化合并或 Push 事件及其处理证据。 |
+| `ModelProfile` | 配置名称、OCR provider、model、可选 Base URL、加密密钥、启用状态 | 可保存多份，同一时间只启用一份；不保存明文 API key。 |
+| `NotificationTarget` | 飞书配置名称、加密 webhook 与可选签名密钥 | 定义可共享消息去向；不保存明文 webhook。 |
 | `ReviewJob` | 仓库、MR IID、commit SHA、MR 内顺序、配置快照摘要、入队时间、下次可运行时间、评审状态、结果分类 | 一个需要评审的不可变输入；可从 MR 追溯。 |
 | `ReviewAttempt` | job、开始/结束时间、OCR 版本、退出码、工件路径、错误类别 | 记录每次尝试，保留失败证据。 |
 | `NotificationDelivery` | job、目标、发送状态、尝试次数、响应码、最后错误 | 通知失败可独立重试，不重新消费模型额度。 |
 
-webhook 投递优先按 `webhook_config_id + webhook-id` 去重；旧版本可使用 `Idempotency-Key`，再以 `project_id + mr_iid + 合并结果 SHA` 作为业务去重键。评审任务以 `repository_id + mr_iid + commit_sha + config_snapshot_hash` 去重：重复投递不重复评审，两个不同 MR 即使包含同一 SHA 也各自保留评审与通知关系。配置快照至少包含 OCR 版本、provider、model、项目规则文件内容摘要和评审参数。管理员点击“重新评审”时创建新的尝试并保留旧结果；按当前配置重新评审旧提交则形成新的任务快照。
+webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-Key`；缺少投递 ID 时，MR 使用 `repository_id + mr_iid`，默认分支 Push 使用 `repository_id + after SHA` 去重。评审任务以 `repository_id + mr_iid + commit_sha + config_snapshot_hash` 去重：重复投递不重复评审，两个不同 MR 即使包含同一 SHA 也各自保留评审与通知关系。配置快照至少包含 OCR 版本、provider、model、项目规则文件内容摘要和评审参数。管理员点击“重新评审”时创建新的尝试并保留旧结果；按当前配置重新评审旧提交则形成新的任务快照。
 
 评审状态建议为 `queued`、`running`、`complete`、`partial`、`failed`、`skipped`；飞书投递状态单独记录为 `pending`、`sending`、`sent`、`retryable_failure`、`permanent_failure`。这样“评审成功但飞书发送失败”不会被误认为需要重新评审。
 
@@ -84,17 +84,17 @@ webhook 投递优先按 `webhook_config_id + webhook-id` 去重；旧版本可�
 ### 4.1 首次初始化
 
 1. 在 Mac mini 安装 Git `>= 2.41` 和固定版本的 OCR，记录 `ocr version`。建议使用经校验的 Release 二进制；若使用 npm 包，设置 `OCR_NO_UPDATE=1` 防止包装器后台升级。
-2. 创建专用系统用户与数据目录，配置 OCR 所需模型。第一版先支持 OCR 内置 provider，例如 `dashscope`；用 `ocr llm test` 验证连通性。
+2. 创建专用系统用户与数据目录。在管理台新增并启用 OCR 模型；内置 provider 或兼容 OpenAI 协议的 HTTPS Base URL 均可使用，再用模型连接测试验证连通性。
 3. 创建飞书群自定义机器人，在密钥存储中保存 webhook，配置签名或其他适用的安全设置，并发送一条测试消息。
 4. 准备 GitLab 可访问的 HTTPS 回调地址，启动管理服务和 Worker，检查页面中的 Git、GitLab API、webhook 接收端、OCR、模型、数据库、飞书运行状态。
 
-页面提交 API key 时，后端使用 `OCR_APP_MASTER_KEY` 加密并写入 SQLite，页面不回显明文。Worker 只在启动 OCR 子进程时把模型密钥加入该子进程环境；运行诊断对已知密钥做脱敏。当前只支持一个全局模型配置，队列存在待处理事件或任务时不能更换模型。加密主密钥必须由部署环境独立保管并备份；丢失后不能解密已保存凭据。
+页面提交 API key 时，后端使用 `OCR_APP_MASTER_KEY` 加密并写入 SQLite，页面不回显明文。Worker 只在启动 OCR 子进程时把模型密钥加入该子进程环境；运行诊断对已知密钥做脱敏。可保存多份模型配置，队列存在待处理事件或任务时不能切换启用模型。加密主密钥必须由部署环境独立保管并备份；丢失后不能解密已保存凭据。
 
 ### 4.2 添加仓库
 
-1. 管理员填写 GitLab 实例地址、项目数字 ID、仓库名称、只读 remote URL、目标分支和飞书目标。第一版只接收与 GitLab 主机一致的 SSH remote，使用只读 SSH deploy key 拉取代码，并配置具备 `read_api` 等所需只读权限的 GitLab API 凭据以查询 MR 和提交；不要求写入 GitLab 的权限。
-2. 后端先验证实例与 remote URL、检查目标主机是否在允许列表并保存加密配置。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。所有 Git 命令以参数数组调用，不拼接 shell 命令。
-3. 页面生成该仓库专属的 HTTPS 回调 URL。选择 Secret token 时由服务端生成随机令牌；选择 Signing token 时录入 GitLab 生成的令牌。项目列表默认遮罩令牌，管理员可按需查看和复制；最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；页面提供按 MR IID 手动补触发入口。
+1. 管理员填写项目数字 ID、命名空间、仓库名称、无凭据 HTTPS Clone URL、目标分支、项目访问令牌、MR 与默认分支 Push 开关，并可选择已保存的飞书通知配置。新项目使用每仓库独立 GitLab Token；部署环境不再提供全局项目令牌。
+2. 后端验证 Clone URL 与 GitLab 实例同源、命名空间一致并加密保存令牌。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。HTTPS Git 通过临时 `GIT_ASKPASS` 使用令牌；命令参数和 Clone URL 不包含凭据。
+3. 独立的 GitLab Webhook 页面展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；项目页提供按 MR IID 手动补触发入口。
 4. 管理员可以对某个已合并 MR 手动试评审，核对提交范围、模型结果与飞书卡片。
 
 每个仓库的规则优先放在该仓库版本化的 `.opencodereview/rule.json` 中。页面展示规则文件是否存在及最近命中的预览结果；第一版不在页面中提供复杂的规则编辑器。
@@ -103,10 +103,10 @@ webhook 投递优先按 `webhook_config_id + webhook-id` 去重；旧版本可�
 
 每个接入项目都需要在 GitLab 的 **Settings > Webhooks** 中配置一条项目 webhook，操作者需具备该项目的 Maintainer 或 Owner 权限：
 
-1. 填入管理页提供的 `https://<回调域名>/api/webhooks/gitlab/<仓库标识>`，保持 SSL 验证开启。只勾选 **Merge request events**；平台还会在服务端检查目标分支，忽略 `open`、`update`、`close` 等事件。
-2. 新版 GitLab 优先在 GitLab 页面生成 **Signing token**，创建时立即录入管理页；接收端验证原始请求体的 HMAC-SHA256 签名、`webhook-timestamp` 的时效，并以 `webhook-id` 识别重投。若自建 GitLab 版本尚不支持签名令牌，选择 **Secret token**，保存项目后从管理页复制自动生成的令牌到 GitLab；接收端恒定时间比较 `X-Gitlab-Token`，同时限制可访问回调的网络来源。实际鉴权方式由所用 GitLab 版本决定。
+1. 填入管理页提供的 `https://<回调域名>/api/webhooks/gitlab`，保持 SSL 验证开启。按项目配置勾选 **Merge request events**，需要审查默认分支直接提交时再勾选 **Push events**；平台在服务端检查项目 ID、目标分支和事件开关。
+2. 将 Webhook 页面显示的项目专属 Secret 填入 GitLab 的 **Secret token**。接收端恒定时间比较 `X-Gitlab-Token`；重新生成 Secret 后须同步更新 GitLab。已有 Signing token 项目仍由旧回调入口兼容，但新配置统一使用 Secret token。
 3. 保存 webhook 后，在 GitLab 页面发送测试事件，确认回调返回 2xx、平台显示最近投递与鉴权结果。测试事件不满足 `action=merge` 时只验证链路，不触发 OCR。再用一个测试 MR 完成真实合并，验证整条链路。
-4. 管理页记录 GitLab webhook ID、回调地址、鉴权方式与最近成功投递时间，支持轮换令牌和检查接入状态。第一版由管理员在 GitLab 中创建 webhook；未来若要由管理页自动创建，需要另外授予 GitLab webhook 管理权限。
+4. 管理页记录统一回调地址、项目 Secret 与最近成功投递时间，支持轮换令牌和检查接入状态。第一版由管理员在 GitLab 中创建 webhook；未来若要由管理页自动创建，需要另外授予 GitLab webhook 管理权限。
 
 回调路径仅用于接收事件，不向外提供管理功能。必须限制请求体大小、校验 JSON 和项目 ID；鉴权失败返回 401，数据库无法保存事件返回 5xx，成功持久化后尽快返回 2xx。GitLab 可能重投同一事件，不能在 HTTP 请求内执行 Git fetch 或 OCR。
 
@@ -183,16 +183,17 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 | 页面 | 必要信息 | 主要操作 |
 | --- | --- | --- |
 | 概览 | 已接入仓库数、事件与任务积压、各仓库排队数、最近投递与评审失败、模型和飞书连接状态 | 进入异常事件、任务或仓库。 |
-| 仓库 | GitLab 项目、目标分支、webhook 接入状态、最近合并事件、启停状态 | 添加、编辑、暂停、测试 Git 和 GitLab API。 |
-| Webhook 配置 | 各仓库回调 URL、鉴权方式、GitLab webhook ID、最近投递与错误 | 查看配置步骤、轮换令牌、验证测试事件。 |
+| 项目配置 | GitLab 项目 ID、命名空间、Clone URL、目标分支、飞书关联、启停状态 | 添加、编辑、删除、测试 Git 和 GitLab API。 |
+| GitLab Webhook | 统一回调 URL、项目专属 Secret、事件开关、最近验证时间 | 查看和复制 Secret、轮换令牌、验证测试事件。 |
+| 飞书配置 | 通道名称、签名状态和关联项目 | 添加、编辑、删除并发送测试消息。 |
+| Agent 模型 | OCR provider、模型、Base URL、启用状态 | 添加、编辑、启用、删除和测试模型。 |
 | 合并事件 | MR、合并方式、接收时间、处理状态、关联任务 | 筛选、查看失败原因、按 MR 补触发。 |
 | 评审任务 | 状态、提交、覆盖、发现数、耗时、模型、通知状态 | 筛选、查看、重跑、重发通知。 |
 | 任务详情 | 提交信息、预览文件、发现列表、覆盖明细、尝试记录、日志摘要 | 按严重性/文件筛选，打开 Git 提交链接。 |
-| 系统设置 | OCR 版本、provider/model、并发/超时、飞书目标、服务健康 | 测试模型、测试飞书、修改设置。 |
 
-API 由管理服务提供，前端只访问本服务。建议按资源划分为 `/api/repositories`、`/api/webhook-configs`、`/api/merge-events`、`/api/review-jobs`、`/api/model-profile`、`/api/notification-targets` 和 `/api/health`；另设只接收 GitLab 请求的 `POST /api/webhooks/gitlab/<仓库标识>`。执行型管理接口提供按 MR 补触发、手动重审、重发通知和连接测试。所有修改配置及触发任务的动作写入审计日志，记录时间、动作、对象和结果，不记录密钥。
+API 由管理服务提供，前端只访问本服务。配置资源使用 `/api/repositories`、`/api/model-profiles`、`/api/notification-targets`，业务记录使用 `/api/events` 和 `/api/jobs`；新项目的 GitLab 回调统一使用 `POST /api/webhooks/gitlab`。执行型管理接口提供按 MR 补触发、手动重审、重发通知和连接测试。所有修改配置及触发任务的动作写入审计日志，记录时间、动作、对象和结果，不记录密钥。
 
-第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。模型 API key 与飞书 Hook 仍只单向更新；Webhook Token 可由管理员在项目列表中主动查看和复制，列表接口不批量返回明文。
+第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。模型 API key、GitLab Token 与飞书 Hook 只单向更新；Webhook Secret 可由管理员在独立 Webhook 页主动查看和复制，列表接口不批量返回明文。
 
 ## 6. 失败恢复与运维
 
@@ -216,7 +217,7 @@ API 由管理服务提供，前端只访问本服务。建议按资源划分为 
 
 - 完成 Git/OCR 安装、模型连接、飞书机器人测试和 GitLab 项目 webhook 配置。
 - 合并测试 MR，完成 `接收事件 → 确认提交 → preview → review → JSON 校验 → 飞书发送`。
-- 验收：只有 MR 的 `merge` 事件触发任务；能区分“完整且零发现”“有发现”“无可审查文件”“部分完成”“失败”，并保存事件与原始工件。
+- 验收：只有已合并 MR 或已开启的默认分支快进 Push 触发任务；能区分“完整且零发现”“有发现”“无可审查文件”“部分完成”“失败”，并保存事件与原始工件。
 
 ### 阶段二：后台自动化
 
@@ -242,7 +243,7 @@ API 由管理服务提供，前端只访问本服务。建议按资源划分为 
 3. 飞书通知目标是固定群还是按仓库分群；是否需要在消息中展示私有代码片段。
 4. Mac mini 管理页只在本机使用，还是要从其他设备通过内网访问；GitLab 项目中使用普通 merge、squash 还是 fast-forward。
 
-GitLab token、模型密钥、SSH 私钥和飞书 webhook 应通过部署环境的密钥录入流程配置，不写入本文或 Git 仓库。
+GitLab Token、模型密钥和飞书 webhook 在管理台录入，`OCR_APP_MASTER_KEY` 由部署环境提供；任何密钥均不写入本文或 Git 仓库。
 
 ## 9. 依据
 

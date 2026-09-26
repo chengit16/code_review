@@ -51,6 +51,26 @@ def _ocr_environment(settings: Settings, home: Path) -> dict[str, str]:
     return env
 
 
+def _prepare_custom_provider(
+    settings: Settings, env: dict[str, str], home: Path, timeout: int
+) -> str:
+    """OCR 使用 OpenAI 兼容协议读取自定义端点；只把非密钥 URL 写入隔离 HOME。"""
+
+    if not settings.ocr_base_url:
+        return settings.ocr_provider
+    provider = "managed-gateway"
+    for key, value in (
+        (f"custom_providers.{provider}.url", settings.ocr_base_url),
+        (f"custom_providers.{provider}.protocol", "openai"),
+    ):
+        code, _stderr = run_ocr_command(
+            [settings.ocr_command, "config", "set", key, value], env, home, timeout
+        )
+        if code:
+            raise RuntimeError("OCR 自定义模型端点配置失败")
+    return provider
+
+
 def classify_result(result: dict[str, Any], commit_sha: str) -> str:
     """以 manifest 的输入及覆盖事实判定结果，避免仅凭退出码宣称通过。"""
 
@@ -187,9 +207,10 @@ def check_model_connection(settings: Settings, run_dir: Path) -> None:
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     env = _ocr_environment(settings, home)
     timeout = min(max(settings.ocr_timeout_seconds, 10), 90)
+    provider = _prepare_custom_provider(settings, env, home, timeout)
     # llm test 没有 provider/model 参数，先在本次诊断专用 HOME 中写入非密钥配置。
     for args in (
-        ["config", "set", "provider", settings.ocr_provider],
+        ["config", "set", "provider", provider],
         ["config", "set", "model", settings.ocr_model],
         ["llm", "test"],
     ):
@@ -214,6 +235,7 @@ def run_review(
     isolated_home = run_dir / "home"
     isolated_home.mkdir(exist_ok=True, mode=0o700)
     env = _ocr_environment(settings, isolated_home)
+    provider = _prepare_custom_provider(settings, env, isolated_home, settings.ocr_timeout_seconds)
     base = [
         settings.ocr_command,
         "review",
@@ -224,7 +246,7 @@ def run_review(
         "--format",
         "json",
         "--provider",
-        settings.ocr_provider,
+        provider,
     ]
     if settings.ocr_model:
         base.extend(["--model", settings.ocr_model])

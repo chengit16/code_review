@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -9,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 10
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -148,6 +149,29 @@ SELECT id, name || ' 通知', feishu_webhook FROM repositories WHERE feishu_webh
 UPDATE repositories SET feishu_target_id=id, feishu_webhook=''
 WHERE feishu_webhook != '';
 """
+SCHEMA_V9 = """
+ALTER TABLE repositories ADD COLUMN path_with_namespace TEXT NOT NULL DEFAULT '';
+ALTER TABLE repositories ADD COLUMN gitlab_token_ciphertext TEXT NOT NULL DEFAULT '';
+ALTER TABLE repositories ADD COLUMN enable_merge_requests INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE repositories ADD COLUMN enable_default_branch_pushes INTEGER NOT NULL DEFAULT 0;
+"""
+SCHEMA_V10 = """
+CREATE TABLE model_profiles (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  base_url TEXT NOT NULL DEFAULT '',
+  api_key_ciphertext TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_model_profiles_enabled ON model_profiles(enabled) WHERE enabled=1;
+INSERT INTO model_profiles(id, name, provider, model, api_key_ciphertext, enabled, version)
+SELECT id, '原有模型', provider, model, api_key_ciphertext, 1, version FROM model_profile;
+"""
 
 
 class Store:
@@ -187,6 +211,8 @@ class Store:
                 (6, SCHEMA_V6),
                 (7, SCHEMA_V7),
                 (8, SCHEMA_V8),
+                (9, SCHEMA_V9),
+                (10, SCHEMA_V10),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -266,11 +292,24 @@ class Store:
             cursor = db.execute(
                 """INSERT INTO repositories
                 (name, gitlab_url, project_id, remote_url, target_branch,
-                 auth_kind, webhook_secret, feishu_webhook, feishu_target_id)
+                 auth_kind, webhook_secret, feishu_webhook, feishu_target_id,
+                 path_with_namespace, gitlab_token_ciphertext,
+                 enable_merge_requests, enable_default_branch_pushes)
                 VALUES (:name, :gitlab_url, :project_id, :remote_url,
                         :target_branch, :auth_kind, :webhook_secret,
-                        :feishu_webhook, :feishu_target_id)""",
-                values | {"feishu_target_id": values.get("feishu_target_id")},
+                        :feishu_webhook, :feishu_target_id,
+                        :path_with_namespace, :gitlab_token_ciphertext,
+                        :enable_merge_requests, :enable_default_branch_pushes)""",
+                values
+                | {
+                    "feishu_target_id": values.get("feishu_target_id"),
+                    "path_with_namespace": values.get("path_with_namespace", ""),
+                    "gitlab_token_ciphertext": values.get("gitlab_token_ciphertext", ""),
+                    "enable_merge_requests": values.get("enable_merge_requests", True),
+                    "enable_default_branch_pushes": values.get(
+                        "enable_default_branch_pushes", False
+                    ),
+                },
             )
             if cursor.lastrowid is None:
                 raise RuntimeError("仓库写入后未返回 ID")
@@ -300,6 +339,9 @@ class Store:
             "feishu_webhook",
             "feishu_target_id",
             "webhook_id",
+            "gitlab_token_ciphertext",
+            "enable_merge_requests",
+            "enable_default_branch_pushes",
         }
         if not values or not values.keys() <= allowed:
             raise ValueError("仓库更新字段无效")
@@ -419,6 +461,21 @@ class Store:
             )
             return cursor.rowcount == 1
 
+    def add_push_event(
+        self, repository_id: int, before_sha: str, after_sha: str, delivery_id: str | None
+    ) -> bool:
+        """复用事件队列保存 Push；负 IID 仅作内部区分，提交范围以后端 Git 为准。"""
+
+        synthetic_iid = -(int(hashlib.sha256(after_sha.encode()).hexdigest()[:15], 16) + 1)
+        with self.connection() as db:
+            cursor = db.execute(
+                """INSERT OR IGNORE INTO merge_events
+                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha)
+                VALUES (?, ?, ?, ?, ?)""",
+                (repository_id, synthetic_iid, delivery_id, after_sha, before_sha),
+            )
+            return cursor.rowcount == 1
+
     def enqueue_mr(self, repository_id: int, mr_iid: int) -> bool:
         """手动补触发已合并 MR；已有异常事件可重新展开，已完成事件不重复建任务。"""
 
@@ -526,36 +583,98 @@ class Store:
             return cursor.rowcount == 1
 
     def get_model_profile(self) -> dict[str, Any] | None:
-        """内部读取全局模型配置；API 响应必须移除密文。"""
+        """内部读取当前启用模型；旧单模型记录在迁移时复制到新配置表。"""
 
         with self.connection() as db:
-            row = db.execute("SELECT * FROM model_profile WHERE id=1").fetchone()
+            row = db.execute("SELECT * FROM model_profiles WHERE enabled=1").fetchone()
             return dict(row) if row else None
 
-    def save_model_profile(self, provider: str, model: str, ciphertext: str | None) -> None:
-        """更新模型配置版本；空密钥表示保留已有密钥。"""
+    def list_model_profiles(self) -> list[dict[str, Any]]:
+        with self.connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM model_profiles ORDER BY id")]
+
+    def add_model_profile(
+        self, name: str, provider: str, model: str, base_url: str, ciphertext: str
+    ) -> int:
+        """新增模型不影响运行任务；明确启用后才参与新任务快照。"""
 
         with self.connection() as db:
+            cursor = db.execute(
+                """INSERT INTO model_profiles(name, provider, model, base_url, api_key_ciphertext)
+                VALUES (?, ?, ?, ?, ?)""",
+                (name, provider, model, base_url, ciphertext),
+            )
+            assert cursor.lastrowid is not None
+            return cursor.lastrowid
+
+    def activate_model_profile(self, profile_id: int) -> bool:
+        """模型切换在单个事务中完成，排队任务仍受配置快照保护。"""
+
+        with self.connection() as db:
+            existing = db.execute(
+                "SELECT id FROM model_profiles WHERE id=?", (profile_id,)
+            ).fetchone()
+            if existing is None:
+                return False
+            active = db.execute("SELECT id FROM model_profiles WHERE enabled=1").fetchone()
+            if active and active["id"] == profile_id:
+                return True
             busy = db.execute(
                 """SELECT EXISTS(SELECT 1 FROM merge_events WHERE status IN ('queued','running'))
                 OR EXISTS(SELECT 1 FROM review_jobs WHERE status IN ('queued','running'))"""
             ).fetchone()[0]
-            if busy:
+            # 尚无启用模型时，积压事件需要允许首次启用才能继续处理。
+            if busy and active:
                 raise ValueError("队列运行期间不能更换全局模型配置")
-            existing = db.execute(
-                "SELECT api_key_ciphertext FROM model_profile WHERE id=1"
-            ).fetchone()
-            key = ciphertext or (existing["api_key_ciphertext"] if existing else "")
-            if not key:
-                raise ValueError("首次配置模型必须提供 API key")
+            db.execute("UPDATE model_profiles SET enabled=0 WHERE enabled=1")
             db.execute(
-                """INSERT INTO model_profile(id, provider, model, api_key_ciphertext)
-                VALUES (1, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,
-                model=excluded.model, api_key_ciphertext=excluded.api_key_ciphertext,
-                version=model_profile.version+1, updated_at=CURRENT_TIMESTAMP""",
-                (provider, model, key),
+                "UPDATE model_profiles SET enabled=1, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (profile_id,),
             )
+            return True
+
+    def update_model_profile(self, profile_id: int, values: dict[str, str]) -> bool:
+        """修改启用模型前确认队列空闲；版本递增使旧评审快照失效。"""
+
+        allowed = {"name", "provider", "model", "base_url", "api_key_ciphertext"}
+        if not values or not values.keys() <= allowed:
+            raise ValueError("模型更新字段无效")
+        assignments = ", ".join(f"{field}=?" for field in values)
+        with self.connection() as db:
+            profile = db.execute(
+                "SELECT enabled FROM model_profiles WHERE id=?", (profile_id,)
+            ).fetchone()
+            if profile is None:
+                return False
+            if profile["enabled"]:
+                busy = db.execute(
+                    """SELECT EXISTS(SELECT 1 FROM merge_events
+                    WHERE status IN ('queued','running'))
+                    OR EXISTS(SELECT 1 FROM review_jobs
+                    WHERE status IN ('queued','running'))"""
+                ).fetchone()[0]
+                if busy:
+                    raise ValueError("队列运行期间不能修改启用的模型配置")
+            db.execute(
+                f"UPDATE model_profiles SET {assignments}, version=version+1, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (*values.values(), profile_id),
+            )
+            return True
+
+    def delete_model_profile(self, profile_id: int) -> bool:
+        """不允许删除正在使用的模型，防止后续任务落回环境默认值。"""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT enabled FROM model_profiles WHERE id=?", (profile_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            if row["enabled"]:
+                raise ValueError("请先启用其他模型")
+            db.execute("DELETE FROM model_profiles WHERE id=?", (profile_id,))
+            return True
 
     def next_job(self, last_repository_id: int | None = None) -> dict[str, Any] | None:
         """同一 MR 保持顺序，不同仓库优先轮转领取。"""

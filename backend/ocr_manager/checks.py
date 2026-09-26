@@ -53,6 +53,7 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                     settings,
                     ocr_provider=profile["provider"],
                     ocr_model=profile["model"],
+                    ocr_base_url=profile["base_url"],
                     ocr_api_key=SecretBox(settings.master_key).decrypt(
                         profile["api_key_ciphertext"]
                     ),
@@ -61,9 +62,18 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
         elif repository is None:
             raise ValueError("仓库不存在")
         elif kind == "git":
+            if repository["gitlab_token_ciphertext"]:
+                repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
+                    repository["gitlab_token_ciphertext"]
+                )
             GitRepository(settings.data_dir, repository).check_access()
         elif kind == "gitlab":
-            GitLabClient(repository["gitlab_url"], settings.gitlab_api_token).check_access(
+            token = (
+                SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
+                if repository["gitlab_token_ciphertext"]
+                else settings.gitlab_api_token
+            )
+            GitLabClient(repository["gitlab_url"], token).check_access(
                 repository["project_id"],
                 repository["target_branch"],
                 repository["remote_url"],

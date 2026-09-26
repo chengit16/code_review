@@ -24,6 +24,7 @@ class Settings:
     ocr_timeout_seconds: int
     public_url: str
     dev_mode: bool = False
+    ocr_base_url: str = ""
 
 
 def load_settings() -> Settings:
@@ -63,12 +64,14 @@ def load_settings() -> Settings:
         data_dir=Path(setting("OCR_APP_DATA_DIR", ".local-data")).resolve(),
         admin_token=admin_token,
         master_key=master_key,
-        gitlab_api_token=setting("OCR_APP_GITLAB_API_TOKEN"),
+        gitlab_api_token="",
         ocr_command=setting("OCR_APP_OCR_COMMAND", "ocr"),
-        ocr_provider=setting("OCR_APP_OCR_PROVIDER", "dashscope"),
-        ocr_model=setting("OCR_APP_OCR_MODEL"),
-        ocr_api_key=setting("OCR_APP_OCR_API_KEY"),
+        # 模型和项目凭据仅由管理台保存；进程配置不再覆盖这些业务事实。
+        ocr_provider="",
+        ocr_model="",
+        ocr_api_key="",
         ocr_timeout_seconds=int(setting("OCR_APP_OCR_TIMEOUT_SECONDS", "3600")),
         public_url=setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/"),
         dev_mode=dev_mode,
+        ocr_base_url="",
     )

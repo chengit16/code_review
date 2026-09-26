@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, LogOut, ShieldCheck, Webhook } from "lucide-react";
+import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, LogOut, MessageSquare, ShieldCheck, Webhook } from "lucide-react";
 import { useState } from "react";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 
@@ -11,6 +11,7 @@ import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
+import { WebhooksPage } from "../pages/WebhooksPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
 import { apiRequest } from "../api/client";
@@ -19,8 +20,9 @@ import type { Health } from "../api/types";
 const navigation = [
   { to: "/", label: "概览", icon: LayoutDashboard, end: true },
   { to: "/repositories", label: "项目配置", icon: GitPullRequest },
-  { to: "/feishu", label: "飞书 Hook", icon: Webhook },
-  { to: "/events", label: "合并事件", icon: GitMerge },
+  { to: "/webhooks", label: "GitLab Webhook", icon: Webhook },
+  { to: "/feishu", label: "飞书配置", icon: MessageSquare },
+  { to: "/events", label: "GitLab 事件", icon: GitMerge },
   { to: "/jobs", label: "评审任务", icon: Activity },
   { to: "/settings", label: "Agent 模型", icon: Bot },
 ];
@@ -67,6 +69,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<OverviewPage token={token} />} />
             <Route path="/repositories" element={<RepositoriesPage token={token} />} />
+            <Route path="/webhooks" element={<WebhooksPage token={token} />} />
             <Route path="/feishu" element={<FeishuHooksPage token={token} />} />
             <Route path="/events" element={<EventsPage token={token} />} />
             <Route path="/jobs" element={<JobsPage token={token} />} />

@@ -16,6 +16,7 @@ class GitRepository:
         self.path = root / "repositories" / str(repository["id"])
         self.remote_url = str(repository["remote_url"])
         self.branch = str(repository["target_branch"])
+        self.gitlab_token = str(repository.get("gitlab_token") or "")
 
     def _git(self, *args: str, cwd: Path | None = None) -> str:
         """执行有截止时间的 Git 查询，保留可诊断的 stderr。"""
@@ -23,7 +24,7 @@ class GitRepository:
         result = subprocess.run(
             ["git", "-c", "core.hooksPath=/dev/null", *args],
             cwd=cwd or self.path,
-            env=self._git_environment(),
+            env=self._git_environment(with_token=args[0] in {"clone", "fetch"}),
             capture_output=True,
             text=True,
             timeout=90,
@@ -33,13 +34,50 @@ class GitRepository:
             raise RuntimeError(f"Git 命令失败：{result.stderr.strip()[:500]}")
         return result.stdout.strip()
 
-    def _git_environment(self) -> dict[str, str]:
+    def _git_environment(self, with_token: bool = False) -> dict[str, str]:
         """隔离服务用户的 Git 过滤器和 hooks；SSH deploy key 仍由 SSH 自身管理。"""
 
-        return os.environ.copy() | {
+        allowed = {
+            "PATH",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "TMPDIR",
+            "TMP",
+            "SSH_AUTH_SOCK",
+            "GIT_SSH_COMMAND",
+            "SSL_CERT_FILE",
+            "SSL_CERT_DIR",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "no_proxy",
+        }
+        env = {key: value for key, value in os.environ.items() if key in allowed} | {
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_NOSYSTEM": "1",
         }
+        if with_token and self.gitlab_token and self.remote_url.startswith("https://"):
+            # Git 通过受控 askpass 读取令牌；URL、命令参数和持久 Git 配置均不包含明文。
+            helper = self.path.parent / ".gitlab-askpass"
+            helper.parent.mkdir(parents=True, exist_ok=True)
+            helper.write_text(
+                '#!/bin/sh\ncase "$1" in *Username*) printf "%s" oauth2 ;; '
+                '*) printf "%s" "$OCR_GITLAB_TOKEN" ;; esac\n',
+                encoding="utf-8",
+            )
+            helper.chmod(0o700)
+            env.update(
+                {
+                    "GIT_ASKPASS": str(helper),
+                    "GIT_TERMINAL_PROMPT": "0",
+                    "OCR_GITLAB_TOKEN": self.gitlab_token,
+                }
+            )
+        return env
 
     def _commit_sha(self, sha: str) -> str:
         """仅允许完整 SHA 作为 Git 对象参数，阻止外部数据解释成命令选项。"""
@@ -101,6 +139,17 @@ class GitRepository:
         return self._git(
             "rev-list", "--reverse", "--topo-order", f"{merge_sha}^1..{merge_sha}"
         ).splitlines()
+
+    def push_commits(self, before_sha: str, after_sha: str) -> list[str]:
+        """只审查默认分支单次快进 Push 引入的提交，拒绝重写历史。"""
+
+        before = self._commit_sha(before_sha)
+        after = self._commit_sha(after_sha)
+        if not self.is_on_target(after):
+            raise ValueError("Push 提交不在目标分支上")
+        if self._git("merge-base", before, after) != before:
+            raise ValueError("默认分支 Push 不是快进更新")
+        return self._git("rev-list", "--reverse", "--topo-order", f"{before}..{after}").splitlines()
 
     def order_commits(self, commits: list[str]) -> list[str]:
         """将 fast-forward 的 MR 提交按祖先顺序排列并去重。"""

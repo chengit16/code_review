@@ -86,7 +86,8 @@ def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "")
     waived = coverage.get("waived", []) if isinstance(coverage, dict) else []
     lines = [
         f"仓库：{job['repository_name']} · {job['target_branch']}",
-        f"MR !{job['mr_iid']} · 提交 {str(job['commit_sha'])[:10]} · 任务 #{job['job_id']}",
+        f"{'MR !' + str(job['mr_iid']) if job['mr_iid'] > 0 else '默认分支 Push'}"
+        f" · 提交 {str(job['commit_sha'])[:10]} · 任务 #{job['job_id']}",
         f"状态：{job['review_status']} · 发现 {len(comments)} 条",
         f"覆盖：{len(completed) + len(reused)}/{len(selected)} 完成，"
         f"{len(failed)} 失败，{len(waived)} 豁免",

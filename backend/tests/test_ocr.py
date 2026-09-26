@@ -79,6 +79,31 @@ def test_budget_exhaustion_is_partial_even_with_complete_manifest() -> None:
     assert classify_result(exhausted, SHA) == "partial"
 
 
+def test_custom_endpoint_is_configured_in_isolated_ocr_home(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """自定义 Base URL 的 provider 配置必须在本次诊断 HOME 中生效。"""
+
+    commands: list[list[str]] = []
+
+    def fake_run(
+        command: list[str], _env: dict[str, str], _home: Path, _timeout: float
+    ) -> tuple[int, str]:
+        commands.append(command)
+        return 0, ""
+
+    monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
+    configured = replace(settings, ocr_base_url="https://gateway.example.test/v1")
+    check_model_connection(configured, tmp_path / "custom-model-check")
+    assert commands[0][-2:] == [
+        "custom_providers.managed-gateway.url",
+        "https://gateway.example.test/v1",
+    ]
+    assert commands[1][-2:] == ["custom_providers.managed-gateway.protocol", "openai"]
+    assert commands[2][-2:] == ["provider", "managed-gateway"]
+    assert commands[-1][-2:] == ["llm", "test"]
+
+
 def test_empty_preview_skips_model_and_preserves_exclusions(
     settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

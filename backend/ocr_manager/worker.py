@@ -72,14 +72,20 @@ def worker_is_running(data_dir: Path) -> bool:
 
 
 def review_settings(store: Store, settings: Settings) -> tuple[Settings, int]:
-    """优先读取管理员保存的全局模型；密钥仅在 OCR 子进程环境中使用。"""
+    """从启用的模型配置读取评审参数；测试注入的 Settings 只用于隔离验证。"""
 
     profile = store.get_model_profile()
     if profile is None:
-        return settings, 0
+        if settings.ocr_model and settings.ocr_api_key:
+            return settings, 0
+        raise ValueError("请先在管理台启用 Agent 模型")
     key = SecretBox(settings.master_key).decrypt(profile["api_key_ciphertext"])
     return replace(
-        settings, ocr_provider=profile["provider"], ocr_model=profile["model"], ocr_api_key=key
+        settings,
+        ocr_provider=profile["provider"],
+        ocr_model=profile["model"],
+        ocr_api_key=key,
+        ocr_base_url=profile["base_url"],
     ), int(profile["version"])
 
 
@@ -106,6 +112,7 @@ def config_hash(store: Store, settings: Settings, rule_digest: str = "") -> str:
         {
             "provider": model_settings.ocr_provider,
             "model": model_settings.ocr_model,
+            "base_url": model_settings.ocr_base_url,
             "model_version": model_version,
             "command": command_fingerprint,
             "timeout_seconds": settings.ocr_timeout_seconds,
@@ -133,10 +140,27 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         return
     try:
         # 1. 从 GitLab 重新确认 MR，防止 webhook 内容或投递顺序决定审查范围。
-        gitlab = GitLabClient(repository["gitlab_url"], settings.gitlab_api_token)
+        if repository["gitlab_token_ciphertext"]:
+            repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
+                repository["gitlab_token_ciphertext"]
+            )
+        gitlab = GitLabClient(
+            repository["gitlab_url"], repository.get("gitlab_token") or settings.gitlab_api_token
+        )
         gitlab.check_access(
             repository["project_id"], repository["target_branch"], repository["remote_url"]
         )
+        if event["mr_iid"] < 0:
+            # Push 不存在 MR；仅在 Git 确认快进范围后建立逐提交任务。
+            git = GitRepository(settings.data_dir, repository)
+            git.fetch()
+            commits = git.push_commits(event["squash_sha"], event["merge_sha"])
+            push_snapshots = {
+                sha: (config_hash(store, settings, git.rule_digest(sha)), git.rule_digest(sha))
+                for sha in commits
+            }
+            store.finish_event(event["id"], commits, push_snapshots, None)
+            return
         mr = gitlab.get_merge_request(repository["project_id"], event["mr_iid"])
         if (
             mr.get("state") != "merged"
@@ -198,10 +222,15 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         # 入队快照是不可变输入；管理员可用重评审创建当前配置的新任务。
         store.finish_job(job["id"], "failed", None, None, "评审配置已变化，请按当前配置重新评审")
         return
-    git = GitRepository(settings.data_dir, repository)
     run_dir = settings.data_dir / "runs" / str(job["id"]) / str(job["attempts"] + 1)
     checkout = run_dir / "checkout"
+    git: GitRepository | None = None
     try:
+        if repository["gitlab_token_ciphertext"]:
+            repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
+                repository["gitlab_token_ciphertext"]
+            )
+        git = GitRepository(settings.data_dir, repository)
         git.fetch()
         if not git.is_on_target(job["commit_sha"]):
             raise ValueError("待评审提交不再属于目标分支")
@@ -217,10 +246,11 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         else:
             store.finish_job(job["id"], "failed", None, None, str(error)[:500])
     finally:
-        try:
-            git.remove_checkout(checkout)
-        except (OSError, RuntimeError) as error:
-            LOGGER.warning("评审工作目录清理失败：%s", error)
+        if git is not None:
+            try:
+                git.remove_checkout(checkout)
+            except (OSError, RuntimeError) as error:
+                LOGGER.warning("评审工作目录清理失败：%s", error)
 
 
 def deliver_notification(store: Store, settings: Settings, delivery: dict[str, Any]) -> None:
@@ -250,7 +280,8 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
         )
         delivery["detail_url"] = f"{settings.public_url}/jobs/{delivery['job_id']}"
         project_url = project_web_url(repository["gitlab_url"], repository["remote_url"])
-        delivery["mr_url"] = f"{project_url}/-/merge_requests/{delivery['mr_iid']}"
+        if delivery["mr_iid"] > 0:
+            delivery["mr_url"] = f"{project_url}/-/merge_requests/{delivery['mr_iid']}"
         delivery["commit_url"] = f"{project_url}/-/commit/{delivery['commit_sha']}"
         if signing_secret:
             send_review(webhook, delivery, signing_secret)

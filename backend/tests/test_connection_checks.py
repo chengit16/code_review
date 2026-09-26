@@ -74,12 +74,21 @@ def test_model_check_uses_saved_secret_without_returning_it(
 ) -> None:
     """测试读取最新加密模型配置，诊断表与 API 均不保存明文密钥。"""
 
-    saved = client.put(
-        "/api/model-profile",
+    saved = client.post(
+        "/api/model-profiles",
         headers=ADMIN,
-        json={"provider": "dashscope", "model": "qwen-test", "api_key": "private-model-key"},
+        json={
+            "name": "连接测试模型",
+            "provider": "dashscope",
+            "model": "qwen-test",
+            "api_key": "private-model-key",
+        },
     )
-    assert saved.status_code == 200
+    assert saved.status_code == 201
+    assert (
+        client.post(f"/api/model-profiles/{saved.json()['id']}/activate", headers=ADMIN).status_code
+        == 200
+    )
     captured: list[tuple[str, str, Path]] = []
 
     def fake_model_check(model_settings: Settings, run_dir: Path) -> None:

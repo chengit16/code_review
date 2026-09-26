@@ -41,7 +41,7 @@ export function OverviewPage({ token }: { /** 内存中的管理口令。 */ tok
       </tbody></table></div>
     </section>
     <section className="section"><div className="section-head"><h2>待处理事件</h2><Link to="/events">查看全部 <ArrowUpRight size={15} /></Link></div>
-      <div className="event-strip">{(events.data ?? []).filter((event) => event.status !== "done").slice(0, 4).map((event) => <div key={event.id}><span>MR !{event.mr_iid}</span><Status value={event.status} /><small>{formatTime(event.created_at)}</small></div>)}{!(events.data ?? []).some((event) => event.status !== "done") && <p className="empty-inline">当前没有待处理事件</p>}</div>
+      <div className="event-strip">{(events.data ?? []).filter((event) => event.status !== "done").slice(0, 4).map((event) => <div key={event.id}><span>{event.mr_iid < 0 ? "默认分支 Push" : `MR !${event.mr_iid}`}</span><Status value={event.status} /><small>{formatTime(event.created_at)}</small></div>)}{!(events.data ?? []).some((event) => event.status !== "done") && <p className="empty-inline">当前没有待处理事件</p>}</div>
     </section>
   </>}</div>;
 }

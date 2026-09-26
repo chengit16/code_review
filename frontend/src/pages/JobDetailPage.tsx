@@ -23,7 +23,7 @@ export function JobDetailPage({ token }: { /** 内存中的管理口令。 */ to
   const coverage = job?.result?.manifest?.coverage;
   const comments = job?.result?.comments ?? [];
   const excluded = job?.result?.preview?.files.filter((file) => !file.will_review) ?? [];
-  return <div className="page"><Link className="back-link" to="/jobs"><ArrowLeft size={16} />返回任务列表</Link><PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `MR !${job.mr_iid} · ${job.commit_sha}` : "逐提交评审详情"} actions={
+  return <div className="page"><Link className="back-link" to="/jobs"><ArrowLeft size={16} />返回任务列表</Link><PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
     job && ["complete", "partial", "failed", "skipped"].includes(job.status) ? <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending} onClick={() => retry.mutate()}><RotateCcw size={16} />重新评审</button></> : null
   } /><QueryState loading={query.isLoading} error={query.error} />{(retry.error || resend.error) && <p className="form-error" role="alert">{(retry.error || resend.error)?.message}</p>}
   {job && <><section className="detail-summary"><div><span>评审状态</span><Status value={job.status} /></div><div><span>尝试次数</span><strong>{job.attempts}</strong></div><div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div><div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div></section>

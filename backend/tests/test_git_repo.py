@@ -61,3 +61,43 @@ def test_rule_digest_tracks_content_at_each_commit(tmp_path: Path) -> None:
     assert git.rule_digest(first) == ""
     assert git.rule_digest(second) != git.rule_digest(third)
     assert git.rule_digest(second) == command("rev-parse", f"{second}:.opencodereview/rule.json")
+
+
+def test_push_commits_uses_fast_forward_range_and_rejects_rewrite(tmp_path: Path) -> None:
+    """默认分支 Push 只审查本次新增提交，分叉旧 SHA 不能冒充快进更新。"""
+
+    root = tmp_path / "repositories" / "1"
+    root.mkdir(parents=True)
+
+    def command(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=root, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+    command("init", "-q")
+    command("config", "user.name", "Test")
+    command("config", "user.email", "test@example.test")
+    (root / "README.md").write_text("initial", encoding="utf-8")
+    command("add", "README.md")
+    command("commit", "-qm", "initial")
+    initial = command("rev-parse", "HEAD")
+    command("branch", "side")
+    (root / "README.md").write_text("second", encoding="utf-8")
+    command("commit", "-qam", "second")
+    second = command("rev-parse", "HEAD")
+    (root / "README.md").write_text("third", encoding="utf-8")
+    command("commit", "-qam", "third")
+    third = command("rev-parse", "HEAD")
+    command("update-ref", "refs/remotes/origin/main", third)
+    git = GitRepository(
+        tmp_path,
+        {"id": 1, "remote_url": "git@example.test:team/repo.git", "target_branch": "main"},
+    )
+    assert git.push_commits(initial, third) == [second, third]
+    command("checkout", "-q", "side")
+    (root / "side.txt").write_text("side", encoding="utf-8")
+    command("add", "side.txt")
+    command("commit", "-qm", "side")
+    side = command("rev-parse", "HEAD")
+    with pytest.raises(ValueError, match="不是快进"):
+        git.push_commits(side, third)

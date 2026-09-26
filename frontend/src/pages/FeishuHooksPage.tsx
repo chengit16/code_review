@@ -7,6 +7,7 @@ import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, NotificationTargetInput, Repository } from "../api/types";
+import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 
@@ -81,6 +82,10 @@ export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ 
     remove.mutate(target.id);
   }
 
+  const checkRepository = editing
+    ? repositories.data?.find((repository) => repository.feishu_target_id === editing.id)
+    : undefined;
+
   return <div className="page">
     <PageHeader title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
@@ -113,6 +118,7 @@ export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ 
         {save.error && <p className="form-error" role="alert">{save.error.message}</p>}
         <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
       </form>
+      {checkRepository && <div className="hook-form"><ConnectionChecks token={token} kinds={["feishu"]} repositoryId={checkRepository.id} /></div>}
     </div></div>}
   </div>;
 }

@@ -7,12 +7,16 @@ export interface Repository {
   gitlab_url: string;
   project_id: number;
   remote_url: string;
+  path_with_namespace: string;
   target_branch: string;
   auth_kind: "signing" | "secret";
   enabled: number;
   webhook_id: string | null;
   last_webhook_at: string | null;
   has_feishu_webhook: boolean;
+  has_gitlab_token: boolean;
+  enable_merge_requests: number;
+  enable_default_branch_pushes: number;
   feishu_target_id: number | null;
   webhook_url: string;
   created_at: string;
@@ -31,11 +35,14 @@ export interface RepositoryInput {
   gitlab_url: string;
   project_id: number;
   remote_url: string;
+  path_with_namespace: string;
   target_branch: string;
-  auth_kind: "signing" | "secret";
+  auth_kind?: "secret";
   webhook_token?: string;
-  feishu_webhook?: string;
+  gitlab_token: string;
   feishu_target_id?: number | null;
+  enable_merge_requests: boolean;
+  enable_default_branch_pushes: boolean;
 }
 
 /** 管理员主动查看单个项目令牌时的响应，不进入仓库列表缓存。 */
@@ -49,9 +56,11 @@ export interface RepositoryUpdateInput {
   enabled?: boolean;
   auth_kind?: "signing" | "secret";
   webhook_token?: string;
-  feishu_webhook?: string;
+  gitlab_token?: string;
   feishu_target_id?: number | null;
   webhook_id?: string | null;
+  enable_merge_requests?: boolean;
+  enable_default_branch_pushes?: boolean;
 }
 
 /** 可供多个仓库引用的飞书通知通道；凭据从不进入列表响应。 */
@@ -68,6 +77,18 @@ export interface NotificationTargetInput {
   name: string;
   webhook_url?: string;
   signing_secret?: string;
+}
+
+/** OCR 模型配置列表；始终不包含 API Key。 */
+export interface ModelConfiguration {
+  id: number;
+  name: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  enabled: number;
+  has_api_key: boolean;
+  version: number;
 }
 
 /** GitLab 合并事件收件箱记录。 */
@@ -159,14 +180,6 @@ export interface ReviewJobDetail extends ReviewJob {
     error: string | null;
     sent_at: string | null;
   } | null;
-}
-
-/** 全局 OCR 模型的安全投影；密钥仅可单向更新。 */
-export interface ModelProfile {
-  provider: string;
-  model: string;
-  has_api_key: boolean;
-  version: number;
 }
 
 /** 由 Worker 异步执行的外部连接测试，不包含凭据或原始响应。 */

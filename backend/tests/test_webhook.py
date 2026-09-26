@@ -338,10 +338,33 @@ def test_management_recovery_and_model_key_are_private(client: TestClient) -> No
     url = f"/api/repositories/{repository_id}/mrs/7/enqueue"
     assert client.post(url, headers=admin).json() == {"status": "queued"}
     assert client.post(url, headers=admin).status_code == 409
-    payload = {"provider": "dashscope", "model": "qwen-test", "api_key": "private-model-key"}
-    assert client.put("/api/model-profile", headers=admin, json=payload).status_code == 409
-    profile = client.get("/api/model-profile", headers=admin).json()
-    assert "api_key" not in profile
+    payload = {
+        "name": "首次启用的模型",
+        "provider": "dashscope",
+        "model": "qwen-test",
+        "api_key": "private-model-key",
+    }
+    created = client.post("/api/model-profiles", headers=admin, json=payload)
+    assert created.status_code == 201
+    assert (
+        client.post(
+            f"/api/model-profiles/{created.json()['id']}/activate", headers=admin
+        ).status_code
+        == 200
+    )
+    replacement = client.post(
+        "/api/model-profiles",
+        headers=admin,
+        json=payload | {"name": "排队期间创建的备用模型"},
+    )
+    assert replacement.status_code == 201
+    assert (
+        client.post(
+            f"/api/model-profiles/{replacement.json()['id']}/activate", headers=admin
+        ).status_code
+        == 409
+    )
+    assert "private-model-key" not in client.get("/api/model-profiles", headers=admin).text
 
 
 def test_remote_must_match_gitlab_host(client: TestClient) -> None:
@@ -365,29 +388,45 @@ def test_remote_must_match_gitlab_host(client: TestClient) -> None:
 
 
 def test_model_profile_can_be_saved_without_revealing_key(client: TestClient) -> None:
-    """空队列允许配置模型，更新时可保留旧密钥且响应不包含敏感字段。"""
+    """模型保存与启用分离，切换后旧配置保留且响应不包含密钥。"""
 
     admin = {"X-Admin-Token": "test-admin-token"}
-    first = client.put(
-        "/api/model-profile",
+    first = client.post(
+        "/api/model-profiles",
         headers=admin,
-        json={"provider": "dashscope", "model": "qwen-test", "api_key": "private-model-key"},
+        json={
+            "name": "默认模型",
+            "provider": "dashscope",
+            "model": "qwen-test",
+            "api_key": "private-model-key",
+        },
     )
-    assert first.status_code == 200
-    assert first.json() == {
-        "provider": "dashscope",
-        "model": "qwen-test",
-        "has_api_key": True,
-        "version": 1,
-    }
-    updated = client.put(
-        "/api/model-profile",
+    assert first.status_code == 201
+    assert first.json()["enabled"] == 0
+    assert (
+        client.post(f"/api/model-profiles/{first.json()['id']}/activate", headers=admin).status_code
+        == 200
+    )
+    second = client.post(
+        "/api/model-profiles",
         headers=admin,
-        json={"provider": "dashscope", "model": "qwen-next"},
+        json={
+            "name": "备用模型",
+            "provider": "dashscope",
+            "model": "qwen-next",
+            "api_key": "private-model-key-2",
+        },
     )
-    assert updated.status_code == 200
-    assert updated.json()["version"] == 2
-    assert "private-model-key" not in updated.text
+    assert second.status_code == 201
+    assert (
+        client.post(
+            f"/api/model-profiles/{second.json()['id']}/activate", headers=admin
+        ).status_code
+        == 200
+    )
+    listed = client.get("/api/model-profiles", headers=admin)
+    assert [profile["enabled"] for profile in listed.json()] == [0, 1]
+    assert "private-model-key" not in listed.text
 
 
 def test_repository_pause_and_webhook_rotation(client: TestClient, settings: Settings) -> None:

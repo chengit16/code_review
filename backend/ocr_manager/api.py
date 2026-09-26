@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import re
 import sqlite3
@@ -37,10 +38,14 @@ class RepositoryCreate(BaseModel):
     project_id: int = Field(gt=0)
     remote_url: str
     target_branch: str = Field(min_length=1, max_length=200)
-    auth_kind: Literal["signing", "secret"]
+    auth_kind: Literal["signing", "secret"] = "secret"
     webhook_token: str | None = Field(default=None, min_length=16)
     feishu_webhook: str | None = None
     feishu_target_id: int | None = Field(default=None, gt=0)
+    path_with_namespace: str | None = None
+    gitlab_token: str | None = None
+    enable_merge_requests: bool = True
+    enable_default_branch_pushes: bool = False
 
     model_config = {"extra": "forbid"}
 
@@ -55,16 +60,33 @@ class RepositoryUpdate(BaseModel):
     feishu_webhook: str | None = None
     feishu_target_id: int | None = Field(default=None, gt=0)
     webhook_id: str | None = Field(default=None, max_length=100)
+    gitlab_token: str | None = None
+    enable_merge_requests: bool | None = None
+    enable_default_branch_pushes: bool | None = None
 
     model_config = {"extra": "forbid"}
 
 
-class ModelProfileInput(BaseModel):
-    """全局 OCR 模型设置；空 API key 表示沿用已保存密钥。"""
+class ModelProfileCreate(BaseModel):
+    """OCR 模型可来自内置 provider 或 OpenAI 兼容端点。"""
 
-    provider: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=120)
     model: str = Field(min_length=1, max_length=160)
+    base_url: str = ""
+    api_key: str = Field(min_length=1)
+    provider: str = Field(default="dashscope", pattern=r"^[a-zA-Z0-9_-]+$")
+
+    model_config = {"extra": "forbid"}
+
+
+class ModelProfileUpdate(BaseModel):
+    """编辑模型时省略 API key 表示沿用加密保存的原密钥。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    model: str | None = Field(default=None, min_length=1, max_length=160)
+    base_url: str | None = None
     api_key: str | None = Field(default=None, min_length=1)
+    provider: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
 
     model_config = {"extra": "forbid"}
 
@@ -114,13 +136,29 @@ class FrontendFiles(StaticFiles):
 
 
 def validate_remote(gitlab_url: str, remote_url: str) -> bool:
-    """只接受与 GitLab 主机一致、无内嵌口令的 SSH Git 地址。"""
+    """只接受同源且无内嵌口令的 Git 地址；新配置优先使用 HTTPS。"""
 
-    host = urlparse(gitlab_url).hostname
+    gitlab = urlparse(gitlab_url)
+    host = gitlab.hostname
     scp = re.fullmatch(r"git@([a-zA-Z0-9.-]+):([^\s]+)", remote_url)
     if scp:
         return scp.group(1).lower() == host and not scp.group(2).startswith("-")
     remote = urlparse(remote_url)
+    if remote.scheme == "https":
+        try:
+            # 端口也是 GitLab 实例身份的一部分；无效端口应作为输入错误返回。
+            return (
+                remote.hostname == host
+                and remote.port == gitlab.port
+                and remote.username is None
+                and remote.password is None
+                and bool(remote.path.strip("/"))
+                and remote.path.endswith(".git")
+                and not remote.query
+                and not remote.fragment
+            )
+        except ValueError:
+            return False
     return (
         remote.scheme == "ssh"
         and remote.username == "git"
@@ -150,10 +188,13 @@ def public_repository(row: dict[str, Any], public_url: str) -> dict[str, Any]:
     """生成不含密钥或密文的管理页仓库信息，并标记飞书 Hook 是否已配置。"""
 
     return {
-        key: value for key, value in row.items() if key not in {"webhook_secret", "feishu_webhook"}
+        key: value
+        for key, value in row.items()
+        if key not in {"webhook_secret", "feishu_webhook", "gitlab_token_ciphertext"}
     } | {
-        "webhook_url": f"{public_url}/api/webhooks/gitlab/{row['id']}",
+        "webhook_url": f"{public_url}/api/webhooks/gitlab",
         "has_feishu_webhook": bool(row.get("feishu_target_id") or row.get("feishu_webhook")),
+        "has_gitlab_token": bool(row.get("gitlab_token_ciphertext")),
     }
 
 
@@ -165,6 +206,32 @@ def public_notification_target(row: dict[str, Any]) -> dict[str, Any]:
         for key, value in row.items()
         if key not in {"webhook_ciphertext", "signing_secret_ciphertext"}
     } | {"has_signing_secret": bool(row["signing_secret_ciphertext"])}
+
+
+def public_model_profile(row: dict[str, Any]) -> dict[str, Any]:
+    """模型列表只暴露 provider、端点和是否配置密钥。"""
+
+    return {key: value for key, value in row.items() if key != "api_key_ciphertext"} | {
+        "has_api_key": bool(row["api_key_ciphertext"])
+    }
+
+
+def validate_model_endpoint(base_url: str) -> str:
+    """自定义 OCR 端点只能使用无凭据 HTTPS 地址。"""
+
+    endpoint = base_url.strip().rstrip("/")
+    if endpoint:
+        parsed = urlparse(endpoint)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise HTTPException(status_code=422, detail="Base URL 必须是无凭据的 HTTPS 地址")
+    return endpoint
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -188,7 +255,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 object_type = {
                     "repositories": "repository",
                     "notification-targets": "notification_target",
-                    "model-profile": "model_profile",
+                    "model-profiles": "model_profile",
                     "connection-checks": "connection_check",
                     "events": "merge_event",
                     "jobs": "review_job",
@@ -265,6 +332,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             LOGGER.exception("Webhook 令牌查看审计记录失败")
         return {"webhook_token": token}
 
+    @app.post("/api/repositories/{repository_id}/webhook-token/rotate", dependencies=[admin])
+    def rotate_webhook_token(repository_id: int) -> dict[str, str]:
+        """服务端生成新 Secret；GitLab 中的令牌必须同步更新才能继续投递。"""
+
+        row = store.get_repository(repository_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+        if row["auth_kind"] != "secret":
+            raise HTTPException(status_code=409, detail="Signing token 须在 GitLab 生成后录入")
+        store.update_repository(
+            repository_id, {"webhook_secret": secrets.encrypt(token_urlsafe(32))}
+        )
+        return {"status": "rotated"}
+
     @app.get("/api/audit-logs", dependencies=[admin])
     def list_audit_logs() -> list[dict[str, Any]]:
         """展示近期管理写操作及 HTTP 结果，不返回请求内容。"""
@@ -339,8 +420,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="GitLab 地址必须是 HTTPS 主机")
         if not validate_remote(payload.gitlab_url, payload.remote_url):
             raise HTTPException(
-                status_code=422, detail="Git 地址必须是同一 GitLab 主机的只读 SSH 地址"
+                status_code=422, detail="Git 地址必须是同一 GitLab 主机的无凭据 HTTPS 或 SSH 地址"
             )
+        remote_path = (
+            urlparse(payload.remote_url).path.lstrip("/")
+            if payload.remote_url.startswith("https://")
+            else payload.remote_url.split(":", 1)[-1].lstrip("/")
+        ).removesuffix(".git")
+        if payload.path_with_namespace and payload.path_with_namespace != remote_path:
+            raise HTTPException(status_code=422, detail="仓库路径与 Clone URL 不一致")
+        if payload.remote_url.startswith("https://") and not payload.gitlab_token:
+            raise HTTPException(status_code=422, detail="HTTPS 仓库必须填写 GitLab Token")
         branch = payload.target_branch
         if (
             not re.fullmatch(r"[a-zA-Z0-9._/-]+", branch)
@@ -365,8 +455,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="请填写 GitLab 生成的 Signing token")
         # Secret token 由服务端生成，避免浏览器随机数兼容差异和弱口令。
         webhook_token = payload.webhook_token or token_urlsafe(32)
-        values = payload.model_dump(exclude={"webhook_token"})
+        values = payload.model_dump(exclude={"webhook_token", "gitlab_token"})
         values["gitlab_url"] = payload.gitlab_url.rstrip("/")
+        values["path_with_namespace"] = remote_path
+        values["gitlab_token_ciphertext"] = (
+            secrets.encrypt(payload.gitlab_token) if payload.gitlab_token else ""
+        )
         values["webhook_secret"] = secrets.encrypt(webhook_token)
         values["feishu_webhook"] = (
             secrets.encrypt(payload.feishu_webhook) if payload.feishu_webhook else ""
@@ -387,6 +481,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if current is None:
             raise HTTPException(status_code=404, detail="仓库不存在")
         values = payload.model_dump(exclude_unset=True, exclude_none=True)
+        gitlab_token = values.pop("gitlab_token", None)
+        if gitlab_token:
+            values["gitlab_token_ciphertext"] = secrets.encrypt(gitlab_token)
         if "feishu_target_id" in payload.model_fields_set:
             values["feishu_target_id"] = payload.feishu_target_id
             values["feishu_webhook"] = ""
@@ -455,35 +552,71 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="该 MR 已入队或已完成展开")
         return {"status": "queued"}
 
-    @app.get("/api/model-profile", dependencies=[admin])
-    def get_model_profile() -> dict[str, Any]:
-        """仅返回模型标识和是否已设置密钥，绝不回显密文。"""
+    @app.get("/api/model-profiles", dependencies=[admin])
+    def list_model_profiles() -> list[dict[str, Any]]:
+        return [public_model_profile(row) for row in store.list_model_profiles()]
 
-        profile = store.get_model_profile()
-        if profile is None:
-            return {
-                "provider": config.ocr_provider,
-                "model": config.ocr_model,
-                "has_api_key": bool(config.ocr_api_key),
-                "version": 0,
-            }
-        return {
-            "provider": profile["provider"],
-            "model": profile["model"],
-            "has_api_key": True,
-            "version": profile["version"],
-        }
+    @app.post("/api/model-profiles", dependencies=[admin], status_code=201)
+    def create_model_profile(payload: ModelProfileCreate) -> dict[str, Any]:
+        """新增配置先保持未启用，避免保存草稿立即改变评审任务。"""
 
-    @app.put("/api/model-profile", dependencies=[admin])
-    def save_model_profile(payload: ModelProfileInput) -> dict[str, Any]:
-        """加密保存模型密钥；任务排队或运行时锁定全局配置版本。"""
+        if not payload.name.strip():
+            raise HTTPException(status_code=422, detail="配置名称不能为空")
+        profile_id = store.add_model_profile(
+            payload.name.strip(),
+            payload.provider,
+            payload.model,
+            validate_model_endpoint(payload.base_url),
+            secrets.encrypt(payload.api_key),
+        )
+        row = next(row for row in store.list_model_profiles() if row["id"] == profile_id)
+        return public_model_profile(row)
 
-        ciphertext = secrets.encrypt(payload.api_key) if payload.api_key else None
+    @app.patch("/api/model-profiles/{profile_id}", dependencies=[admin])
+    def update_model_profile(profile_id: int, payload: ModelProfileUpdate) -> dict[str, Any]:
+        """更新已保存模型；启用配置在队列运行期间保持不可变。"""
+
+        values = payload.model_dump(exclude_unset=True, exclude_none=True)
+        if not values:
+            raise HTTPException(status_code=422, detail="没有可更新的模型设置")
+        if "name" in values:
+            values["name"] = values["name"].strip()
+            if not values["name"]:
+                raise HTTPException(status_code=422, detail="配置名称不能为空")
+        if "base_url" in values:
+            values["base_url"] = validate_model_endpoint(values["base_url"])
+        key = values.pop("api_key", None)
+        if key:
+            values["api_key_ciphertext"] = secrets.encrypt(key)
         try:
-            store.save_model_profile(payload.provider, payload.model, ciphertext)
+            updated = store.update_model_profile(profile_id, values)
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
-        return get_model_profile()
+        if not updated:
+            raise HTTPException(status_code=404, detail="模型配置不存在")
+        row = next(row for row in store.list_model_profiles() if row["id"] == profile_id)
+        return public_model_profile(row)
+
+    @app.post("/api/model-profiles/{profile_id}/activate", dependencies=[admin])
+    def activate_model_profile(profile_id: int) -> dict[str, Any]:
+        try:
+            activated = store.activate_model_profile(profile_id)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if not activated:
+            raise HTTPException(status_code=404, detail="模型配置不存在")
+        row = next(row for row in store.list_model_profiles() if row["id"] == profile_id)
+        return public_model_profile(row)
+
+    @app.delete("/api/model-profiles/{profile_id}", dependencies=[admin])
+    def delete_model_profile(profile_id: int) -> dict[str, str]:
+        try:
+            deleted = store.delete_model_profile(profile_id)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if not deleted:
+            raise HTTPException(status_code=404, detail="模型配置不存在")
+        return {"status": "deleted"}
 
     @app.get("/api/connection-checks", dependencies=[admin])
     def list_connection_checks() -> list[dict[str, Any]]:
@@ -498,8 +631,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if payload.kind == "model":
             if payload.repository_id is not None:
                 raise HTTPException(status_code=422, detail="模型测试不需要仓库 ID")
-            profile = get_model_profile()
-            if not profile["has_api_key"] or not profile["model"]:
+            profile = store.get_model_profile()
+            if profile is None:
                 raise HTTPException(status_code=409, detail="请先配置模型与 API key")
         elif payload.repository_id is None or store.get_repository(payload.repository_id) is None:
             raise HTTPException(status_code=404, detail="仓库不存在")
@@ -538,7 +671,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository = store.get_repository(job["repository_id"])
         if repository:
             project_url = project_web_url(repository["gitlab_url"], repository["remote_url"])
-            job["mr_url"] = f"{project_url}/-/merge_requests/{job['mr_iid']}"
+            if job["mr_iid"] > 0:
+                job["mr_url"] = f"{project_url}/-/merge_requests/{job['mr_iid']}"
             job["commit_url"] = f"{project_url}/-/commit/{job['commit_sha']}"
         return job
 
@@ -562,13 +696,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="通知当前无法重发")
         return {"status": "pending"}
 
-    @app.post("/api/webhooks/gitlab/{repository_id}")
-    async def receive_gitlab(repository_id: int, request: Request) -> dict[str, str]:
-        """先鉴权再持久化合并事件，避免 GitLab 等待耗时评审。"""
+    async def read_webhook_body(request: Request) -> bytes:
+        """统一限制入站大小，公开入口仅用请求体定位候选仓库。"""
 
-        row = store.get_repository(repository_id)
-        if row is None or not row["enabled"]:
-            raise HTTPException(status_code=404, detail="仓库未接入")
         # 在聚合原始签名字节时限定内存占用，不能等完整请求体读入后才判定上限。
         chunks: list[bytes] = []
         size = 0
@@ -577,24 +707,100 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if size > 1024 * 1024:
                 raise HTTPException(status_code=413, detail="GitLab 事件过大")
             chunks.append(chunk)
-        body = b"".join(chunks)
+        return b"".join(chunks)
+
+    def process_gitlab_webhook(
+        row: dict[str, Any], headers: dict[str, str], body: bytes
+    ) -> dict[str, str]:
+        """候选项目必须通过自身的密钥验证，未鉴权载荷不能产生事件。"""
+
         try:
             token = secrets.decrypt(row["webhook_secret"])
         except InvalidToken as error:
             raise HTTPException(status_code=503, detail="Webhook 密钥不可用") from error
-        headers = {key.lower(): value for key, value in request.headers.items()}
         verify_webhook(headers, body, row["auth_kind"], token)
-        store.record_webhook(repository_id)
+        store.record_webhook(row["id"])
+        if headers.get("x-gitlab-event") == "Push Hook":
+            if not row["enable_default_branch_pushes"]:
+                return {"status": "ignored"}
+            try:
+                push = json.loads(body)
+            except (ValueError, UnicodeDecodeError):
+                return {"status": "ignored"}
+            if not isinstance(push, dict) or push.get("object_kind") != "push":
+                return {"status": "ignored"}
+            project = push.get("project")
+            before, after = push.get("before"), push.get("after")
+            if (
+                not isinstance(project, dict)
+                or project.get("id") != row["project_id"]
+                or push.get("ref") != f"refs/heads/{row['target_branch']}"
+                or not isinstance(before, str)
+                or not isinstance(after, str)
+                or not re.fullmatch(r"[0-9a-fA-F]{40}", before)
+                or not re.fullmatch(r"[0-9a-fA-F]{40}", after)
+                or before == "0" * 40
+                or after == "0" * 40
+            ):
+                return {"status": "ignored"}
+            delivery_id = headers.get("webhook-id") or headers.get("idempotency-key")
+            created = store.add_push_event(row["id"], before, after, delivery_id)
+            return {"status": "queued" if created else "duplicate"}
         if headers.get("x-gitlab-event") != "Merge Request Hook":
+            return {"status": "ignored"}
+        if not row["enable_merge_requests"]:
             return {"status": "ignored"}
         event = parse_merge_event(body, row["project_id"], row["target_branch"])
         if event is None:
             return {"status": "ignored"}
         delivery_id = headers.get("webhook-id") or headers.get("idempotency-key")
         created = store.add_event(
-            repository_id, event["mr_iid"], delivery_id, event["merge_sha"], event["squash_sha"]
+            row["id"], event["mr_iid"], delivery_id, event["merge_sha"], event["squash_sha"]
         )
         return {"status": "queued" if created else "duplicate"}
+
+    @app.post("/api/webhooks/gitlab/{repository_id}")
+    async def receive_gitlab(repository_id: int, request: Request) -> dict[str, str]:
+        """保留旧项目的专属回调地址，新配置统一使用无 ID 地址。"""
+
+        row = store.get_repository(repository_id)
+        if row is None or not row["enabled"]:
+            raise HTTPException(status_code=404, detail="仓库未接入")
+        return process_gitlab_webhook(
+            row,
+            {key.lower(): value for key, value in request.headers.items()},
+            await read_webhook_body(request),
+        )
+
+    @app.post("/api/webhooks/gitlab", response_model=None)
+    async def receive_gitlab_shared(request: Request) -> dict[str, str] | Response:
+        """按 GitLab 项目和目标分支定位配置；匹配后仍必须验证该项目令牌。"""
+
+        body = await read_webhook_body(request)
+        try:
+            payload = json.loads(body)
+        except (ValueError, UnicodeDecodeError) as error:
+            raise HTTPException(status_code=400, detail="GitLab 事件格式无效") from error
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="GitLab 事件格式无效")
+        project = payload.get("project")
+        attributes = payload.get("object_attributes")
+        project_id = project.get("id") if isinstance(project, dict) else None
+        if payload.get("object_kind") == "push" and isinstance(payload.get("ref"), str):
+            branch = payload["ref"].removeprefix("refs/heads/")
+        else:
+            branch = attributes.get("target_branch") if isinstance(attributes, dict) else None
+        matches = [
+            row
+            for row in store.list_repositories()
+            if row["enabled"] and row["project_id"] == project_id and row["target_branch"] == branch
+        ]
+        if len(matches) != 1:
+            return Response(status_code=204)
+        result = process_gitlab_webhook(
+            matches[0], {key.lower(): value for key, value in request.headers.items()}, body
+        )
+        return Response(status_code=204) if result["status"] == "ignored" else result
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():
