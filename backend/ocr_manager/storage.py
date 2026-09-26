@@ -861,7 +861,7 @@ class Store:
             db.execute(
                 """UPDATE merge_events
                 SET status=CASE WHEN attempts>=3 THEN 'needs_attention' ELSE 'queued' END,
-                error=?, next_run_at=datetime('now', '+' || attempts * 20 || ' seconds')
+                error=?, next_run_at=datetime('now', printf('+%d seconds', attempts * 20))
                 WHERE id=?""",
                 (error[:500], event_id),
             )
@@ -1090,9 +1090,9 @@ class Store:
             final = attempts - int(job["retry_start_attempts"]) >= 3
             db.execute(
                 """UPDATE review_jobs SET status=?, error=?,
-                next_run_at=datetime('now', '+' || min(300,
+                next_run_at=datetime('now', printf('+%d seconds', min(300,
                   (attempts - retry_start_attempts) *
-                  (attempts - retry_start_attempts) * 20) || ' seconds'),
+                  (attempts - retry_start_attempts) * 20))),
                 finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?""",
                 ("failed" if final else "queued", error[:500], final, job_id),
             )
@@ -1259,7 +1259,7 @@ class Store:
                     SET status=CASE WHEN ? OR attempts>=5 THEN 'failed' ELSE 'pending' END,
                     error=?,
                     next_run_at=datetime(
-                      'now', '+' || min(300, attempts * attempts * 10) || ' seconds'
+                      'now', printf('+%d seconds', min(300, attempts * attempts * 10))
                     )
                     WHERE id=?""",
                     (not retryable, error[:500], delivery_id),

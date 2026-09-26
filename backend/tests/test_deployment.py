@@ -120,7 +120,14 @@ def test_launchd_plists_reference_config_without_embedding_secrets(tmp_path: Pat
     python.touch()
     config = tmp_path / "private.json"
     config.write_text("private-secret-value", encoding="utf-8")
-    api, worker = generate_plists(project, config, tmp_path / "data", tmp_path / "launchd", 8777)
+    node_dir = tmp_path / "node-bin"
+    node_dir.mkdir()
+    node = node_dir / "node"
+    node.touch(mode=0o755)
+    api, worker = generate_plists(
+        project, config, tmp_path / "data", tmp_path / "launchd", 8777,
+        "gitlab.example.test,127.0.0.1", node_dir,
+    )
     api_bytes = api.read_bytes()
     worker_bytes = worker.read_bytes()
     assert b"private-secret-value" not in api_bytes + worker_bytes
@@ -131,6 +138,17 @@ def test_launchd_plists_reference_config_without_embedding_secrets(tmp_path: Pat
     assert api_payload["ProgramArguments"][-1] == "8777"
     assert worker_payload["ProgramArguments"][-1] == "ocr_manager.worker"
     assert api_payload["EnvironmentVariables"]["OCR_APP_CONFIG_FILE"] == str(config)
+    assert api_payload["EnvironmentVariables"]["NO_PROXY"] == "gitlab.example.test,127.0.0.1"
+    assert worker_payload["EnvironmentVariables"]["no_proxy"] == "gitlab.example.test,127.0.0.1"
+    assert worker_payload["EnvironmentVariables"]["PATH"].startswith(f"{node_dir}:")
+    with pytest.raises(ValueError, match="NO_PROXY"):
+        generate_plists(project, config, tmp_path / "data", tmp_path / "launchd", 8781, "x\n")
+    node.chmod(0o644)
+    with pytest.raises(ValueError, match="Node"):
+        generate_plists(
+            project, config, tmp_path / "data", tmp_path / "launchd",
+            node_bin_dir=node_dir,
+        )
 
 
 def test_launchd_defaults_to_local_fixed_port(tmp_path: Path) -> None:

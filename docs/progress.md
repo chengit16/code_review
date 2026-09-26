@@ -41,16 +41,16 @@
 - 本机现有数据中有一条真实默认分支 Push 验收记录：Webhook 通过鉴权并入队，Worker 确认提交后完成 OCR 评审（1 个文件完成、0 个失败），飞书投递状态为 `sent`。这证明该 Push 路径曾跑通；MR 合并、重复投递和失败恢复仍需另外验收。
 - 本机 `launchd` 的 API 与 Worker 已成功加载，固定监听 `127.0.0.1:8781`；`/api/health` 返回 `status=ok`、`worker=running`。分别重启 API 与 Worker 后，两个进程都恢复，健康检查继续通过。
 - 每日 03:00 的 `launchd` 备份作业已安装；加载时生成了同名 SQLite 与私有配置快照。副本数据库 `quick_check=ok`、schema 版本为 14、原有评审任务仍存在；配置副本与源文件一致，备份目录为 `0700`、两个文件为 `0600`。旧版仅数据库快照仍保留，恢复加密凭据应使用新成对快照。
-- 2026-09-26 使用已保存配置联调：`App` 项目的完整 Git 克隆与目标分支拉取通过，已启用的 Agent 模型连接测试通过，飞书机器人连接测试消息发送成功。更新 GitLab Token 后发现项目数字 ID 误填为 331；按仓库路径查得真实 ID 为 311，修正后 GitLab API 项目、分支和路径校验通过。正式评审仍待真实入站事件验收。
-- 本地检查通过：`uv run pytest -q`（108 项）、`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。项目配置合并后已在桌面和窄屏核对编辑预填、保存按钮与列表布局，旧 `/webhooks` 地址可跳转到项目配置；审核规则页亦已核对桌面和窄屏布局，并用本机 OCR CLI 验证 `rule.json` 字段能命中项目规则。固定端口 `8781` 的 API 与 Worker 已重启并加载新代码。本机 `launchd` 试运行停在 Python 解释器加载阶段，已移除未运行的服务清单；当前 API 与 Worker 以前台进程运行，重启系统后须按部署文档重新启动。
+- 2026-09-26 使用已保存配置联调：`App` 项目的完整 Git 克隆与目标分支拉取通过，已启用的 Agent 模型连接测试通过，飞书机器人连接测试消息发送成功。更新 GitLab Token 后发现项目数字 ID 误填为 331；按仓库路径查得真实 ID 为 311，修正后 GitLab API 项目、分支和路径校验通过。
+- 2026-09-26 手动补触发 `App` 项目历史 MR `!2461`：GitLab API 确认后形成两条按顺序执行的提交任务。首次运行暴露 SQLite 退避时间表达式生成 `NULL`、`launchd` 未继承内网 GitLab 直连域名，以及 nvm 的 Node 不在服务 `PATH` 三个问题；修复后人工重试，两个任务的 OCR manifest 均为 `complete`，各完成 1 个文件、失败 0 个，飞书投递均为 `sent`。这次验证了历史 MR 的手动补触发与后续链路，不代表 GitLab 到公网回调的真实入站投递已验收。
+- 本机 API、Worker 与每日 03:00 备份任务由 `launchd` 管理；API 固定监听 `127.0.0.1:8781`，健康检查返回 `status=ok`、`worker=running`。Worker 清单显式设置内网直连域名与 Node 目录。当前后端完整测试、Ruff 和 mypy 已通过；前端检查及页面布局结论沿用此前已执行的验证，未在本次联调后重跑。
 
 ## 待完成
 
 - 配置可从 GitLab 访问的 HTTPS 内网穿透地址，再验证真实入站 Webhook。
-- 目标机器上的 `launchd` 安装和备份计划；本机后台启动须先解决 Python 解释器加载问题。
-- 在最终 Mac mini 部署用户下确认固定版 OCR CLI、模型配置与 API key 可用，并用真实 MR 输出核对 review manifest 与飞书卡片。
+- 在最终 Mac mini 部署用户下重验 `launchd`、备份、固定版 OCR CLI、模型配置与 API key。
 - 使用真实 GitLab 测试项目配置 SSH deploy key、只读 API token 与 HTTPS webhook；完成普通 merge、squash、fast-forward 和重复投递演练。
-- 使用已通过连接测试的模型密钥与飞书机器人 webhook 完成真实评审投递、错误恢复和消息质量验收。
+- 核对飞书卡片实际呈现和重点发现质量，继续演练限流、部分覆盖和消息重发。
 - 多仓库试运行及重启、限流、部分覆盖、版本回滚演练。
 
 真实联调需要试点 GitLab 地址与项目 ID、目标分支、可达的 HTTPS 回调方式、OCR provider/model，以及飞书通知目标。密钥由部署环境或管理页录入，不写入文档。

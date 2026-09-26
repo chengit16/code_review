@@ -92,6 +92,37 @@ def test_recovery_requeues_claimed_work(tmp_path: Path) -> None:
     assert store.next_event() is not None
 
 
+def test_event_retry_schedules_valid_timestamp_and_stops_after_three_attempts(
+    tmp_path: Path,
+) -> None:
+    """SQLite 退避修饰符必须是完整字符串，网络故障不能让 Worker 因 NULL 时间退出。"""
+
+    store, repository_id = make_store(tmp_path)
+    assert store.add_event(repository_id, 7, None, None, None)
+    for attempt in range(1, 4):
+        event = store.next_event()
+        assert event is not None
+        store.defer_event(event["id"], "临时网络错误")
+        with store.connection() as db:
+            row = db.execute(
+                """SELECT status, attempts, next_run_at,
+                next_run_at > CURRENT_TIMESTAMP AS delayed
+                FROM merge_events WHERE id=?""",
+                (event["id"],),
+            ).fetchone()
+            assert row is not None
+            assert row["attempts"] == attempt
+            assert row["next_run_at"] is not None
+            assert row["delayed"] == 1
+            assert row["status"] == ("needs_attention" if attempt == 3 else "queued")
+            if attempt < 3:
+                db.execute(
+                    "UPDATE merge_events SET next_run_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (event["id"],),
+                )
+    assert store.next_event() is None
+
+
 def test_worker_lock_rejects_a_second_instance(tmp_path: Path) -> None:
     """第二个 Worker 无法在首个实例运行时重置队列或重复领取任务。"""
 
@@ -145,6 +176,33 @@ def test_permanent_feishu_failure_stops_automatic_retry(tmp_path: Path) -> None:
     assert store.next_delivery() is not None
 
 
+def test_temporary_feishu_failure_schedules_valid_retry(tmp_path: Path) -> None:
+    """通知退避必须生成有效时间，避免瞬时失败后停留在不可领取状态。"""
+
+    store, repository_id = make_store(tmp_path)
+    store.add_event(repository_id, 7, None, None, None)
+    event = store.next_event()
+    assert event is not None
+    store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
+    job = store.next_job()
+    assert job is not None
+    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    delivery = store.next_delivery()
+    assert delivery is not None
+    store.finish_delivery(delivery["id"], "飞书暂时不可用")
+    with store.connection() as db:
+        row = db.execute(
+            """SELECT status, next_run_at,
+            next_run_at > CURRENT_TIMESTAMP AS delayed
+            FROM notification_deliveries WHERE id=?""",
+            (delivery["id"],),
+        ).fetchone()
+    assert row is not None
+    assert row["status"] == "pending"
+    assert row["next_run_at"] is not None
+    assert row["delayed"] == 1
+
+
 def test_recovery_honors_event_and_delivery_limits(tmp_path: Path) -> None:
     """中断中的事件及通知达到上限后进入可见终态。"""
 
@@ -188,6 +246,12 @@ def test_temporary_failure_is_bounded_and_records_attempts(tmp_path: Path) -> No
         detail = store.get_job(job["id"])
         assert detail is not None
         assert detail["status"] == ("failed" if attempt == 3 else "queued")
+        with store.connection() as db:
+            delayed = db.execute(
+                """SELECT next_run_at > CURRENT_TIMESTAMP FROM review_jobs WHERE id=?""",
+                (job["id"],),
+            ).fetchone()
+        assert delayed is not None and delayed[0] == 1
         if attempt < 3:
             with store.connection() as db:
                 db.execute(

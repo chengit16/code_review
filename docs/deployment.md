@@ -81,8 +81,12 @@ uv run python -m ocr_manager.launchd \
   --backup-hour 3 \
   --backup-minute 0 \
   --output-dir "/absolute/path/to/launchd-output" \
+  --no-proxy "gitlab.example.com,127.0.0.1" \
+  --node-bin-dir "/absolute/path/to/node-bin" \
   --port 8781
 ```
+
+当系统代理会处理内网 GitLab 请求时，`launchd` 不会继承终端的 `NO_PROXY`；用 `--no-proxy` 明确填写需要直连的 GitLab 主机和本机地址。遗漏时 GitLab API 可能在 TLS 握手阶段报 `UNEXPECTED_EOF_WHILE_READING`。若 Node.js 安装在 nvm 等用户目录，`--node-bin-dir` 应填写包含可执行 `node` 的绝对目录；`launchd` 不加载 shell 初始化文件，遗漏时 OCR 脚本可能无法运行。生成清单后须重新加载已运行的服务，单纯改写 plist 不会更新进程环境。
 
 生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。当前用户的本机实例可依次运行 `launchctl bootstrap gui/$(id -u) /absolute/path/to/ai.open-code-review.api.plist`、对应的 `worker.plist` 和 `backup.plist`；随后用 `launchctl print gui/$(id -u)/ai.open-code-review.api` 与 `/api/health` 核对进程。API 与 Worker 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。
 
