@@ -59,7 +59,12 @@ def parse_merge_event(body: bytes, project_id: int, target_branch: str) -> dict[
         raise HTTPException(status_code=422, detail="GitLab MR 字段缺失")
     if attributes.get("action") != "merge" or attributes.get("target_branch") != target_branch:
         return None
-    if project.get("id") != project_id or attributes.get("target_project_id") != project_id:
+    if (
+        type(project.get("id")) is not int
+        or type(attributes.get("target_project_id")) is not int
+        or project.get("id") != project_id
+        or attributes.get("target_project_id") != project_id
+    ):
         raise HTTPException(status_code=403, detail="GitLab 项目不匹配")
     mr_iid = attributes.get("iid")
     if not isinstance(mr_iid, int) or isinstance(mr_iid, bool) or mr_iid <= 0:

@@ -85,6 +85,8 @@ tbody tr:hover { background: #fafcfb; }
 .status--failed, .status--stopped { background: #fce8e4; color: #ad4936; }
 .status--skipped, .status--unknown { background: #eef0ed; color: #69736a; }
 .status--unconfigured { background: #fff0d9; color: #92622b; }
+.status--duplicate, .status--ignored { background: #eef0ed; color: #69736a; }
+.status--rejected { background: #fce8e4; color: #ad4936; }
 .status--queued, .status--pending { background: #e8eeed; color: #506f67; }
 .filter-bar { display: flex; align-items: center; gap: 10px; padding: 18px 0 2px; font-size: 13px; color: #52695b; }
 .filter-bar > span { margin-left: auto; color: #81938a; }

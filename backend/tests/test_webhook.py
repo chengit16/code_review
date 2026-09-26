@@ -69,6 +69,11 @@ def test_secret_webhook_only_queues_matching_merge(client: TestClient) -> None:
     events = client.get("/api/events", headers={"X-Admin-Token": "test-admin-token"}).json()
     assert len(events) == 1
     assert events[0]["mr_iid"] == 7
+    diagnostics = client.get(
+        "/api/webhook-diagnostics", headers={"X-Admin-Token": "test-admin-token"}
+    ).json()
+    assert diagnostics[-1]["reason"] == "merge_not_completed"
+    assert diagnostics[-2]["reason"] == "target_branch_mismatch"
 
 
 def test_project_can_be_saved_before_feishu_hook(client: TestClient) -> None:
@@ -297,6 +302,92 @@ def test_webhook_rejects_oversized_body_before_authentication(client: TestClient
     )
     assert response.status_code == 413
     assert client.get("/api/events", headers={"X-Admin-Token": "test-admin-token"}).json() == []
+
+
+def test_webhook_diagnostics_explain_unmatched_authentication_and_duplicate(
+    client: TestClient, settings: Settings
+) -> None:
+    """投递失败及重复原因可见，但不保存请求体、Token 或可信身份误判。"""
+
+    repository_id = create_repository(client, "local-secret-token-123")
+    admin = {"X-Admin-Token": "test-admin-token"}
+    url = "/api/webhooks/gitlab"
+    headers = {"X-Gitlab-Event": "Merge Request Hook"}
+    assert client.get("/api/webhook-diagnostics").status_code == 401
+
+    assert client.post(url, headers=headers, json=merge_payload(branch="test")).status_code == 204
+    wrong = client.post(
+        url, headers=headers | {"X-Gitlab-Token": "wrong-private-token"},
+        json=merge_payload(),
+    )
+    assert wrong.status_code == 401
+    accepted_headers = headers | {"X-Gitlab-Token": "local-secret-token-123"}
+    assert client.post(url, headers=accepted_headers, json=merge_payload()).status_code == 200
+    assert client.post(url, headers=accepted_headers, json=merge_payload()).status_code == 200
+    assert client.post(url, headers=headers, content=b"not-json").status_code == 400
+
+    response = client.get("/api/webhook-diagnostics", headers=admin)
+    diagnostics = response.json()
+    assert [item["reason"] for item in diagnostics[:5]] == [
+        "invalid_json", "duplicate", "queued", "authentication_failed",
+        "unmatched_project_or_branch",
+    ]
+    unmatched = diagnostics[4]
+    assert unmatched["repository_id"] is None
+    assert unmatched["claimed_project_id"] == 42
+    assert unmatched["claimed_branch"] == "test"
+    assert unmatched["http_status"] == 204
+    rejected = diagnostics[3]
+    assert rejected["repository_id"] == repository_id
+    assert rejected["http_status"] == 401
+    assert "wrong-private-token" not in response.text
+    assert "local-secret-token-123" not in response.text
+    assert "merge_commit_sha" not in response.text
+
+    # 删除项目后，已匹配项目的诊断按外键清理；未匹配投递仍可解释历史 204。
+    assert client.delete(f"/api/repositories/{repository_id}", headers=admin).status_code == 200
+    remaining = client.get("/api/webhook-diagnostics", headers=admin).json()
+    assert all(item["repository_id"] is None for item in remaining)
+    assert any(item["reason"] == "unmatched_project_or_branch" for item in remaining)
+
+
+def test_webhook_diagnostic_storage_has_fixed_limit(settings: Settings) -> None:
+    """公开回调受到无效请求冲击时，诊断表仍限制为最近 500 条。"""
+
+    store = Store(settings.data_dir / "app.db")
+    store.migrate()
+    for _ in range(505):
+        store.record_webhook_diagnostic(
+            None, None, None, "other", "rejected", "invalid_json", 400
+        )
+    with store.connection() as db:
+        assert db.execute("SELECT COUNT(*) FROM webhook_diagnostics").fetchone()[0] == 500
+    assert len(store.list_webhook_diagnostics()) == 100
+
+
+def test_boolean_project_id_cannot_match_numeric_repository(client: TestClient) -> None:
+    """JSON true 不能凭 Python 数字相等规则冒充 GitLab 数字项目 ID。"""
+
+    admin = {"X-Admin-Token": "test-admin-token"}
+    created = client.post("/api/repositories", headers=admin, json={
+        "name": "项目一",
+        "gitlab_url": "https://gitlab.example.test",
+        "project_id": 1,
+        "remote_url": "git@gitlab.example.test:team/one.git",
+        "target_branch": "main",
+        "webhook_token": "local-secret-token-123",
+    })
+    assert created.status_code == 201
+    payload = merge_payload()
+    payload["project"]["id"] = True
+    payload["object_attributes"]["target_project_id"] = True
+    headers = {"X-Gitlab-Token": "local-secret-token-123", "X-Gitlab-Event": "Merge Request Hook"}
+    assert client.post("/api/webhooks/gitlab", headers=headers, json=payload).status_code == 204
+    legacy = client.post(
+        f"/api/webhooks/gitlab/{created.json()['id']}", headers=headers, json=payload
+    )
+    assert legacy.status_code == 403
+    assert client.get("/api/events", headers=admin).json() == []
 
 
 def test_signing_webhook_checks_raw_body_and_timestamp(client: TestClient) -> None:

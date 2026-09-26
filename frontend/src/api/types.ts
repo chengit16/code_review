@@ -147,6 +147,19 @@ export interface MergeEvent {
   created_at: string;
 }
 
+/** Webhook 投递元数据；项目和分支在鉴权前只是请求自称值。 */
+export interface WebhookDiagnostic {
+  id: number;
+  repository_id: number | null;
+  claimed_project_id: number | null;
+  claimed_branch: string | null;
+  event_kind: "merge_request" | "push" | "other";
+  outcome: "queued" | "duplicate" | "ignored" | "rejected";
+  reason: string;
+  http_status: number;
+  created_at: string;
+}
+
 /** 逐提交评审任务列表数据。 */
 export interface ReviewJob {
   id: number;

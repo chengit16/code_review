@@ -847,6 +847,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="同一目标的连接测试正在执行")
         return {"id": check_id, "status": "queued"}
 
+    @app.get("/api/webhook-diagnostics", dependencies=[admin])
+    def list_webhook_diagnostics() -> list[dict[str, Any]]:
+        """展示最近投递的脱敏状态；未鉴权载荷字段仅作为自称值。"""
+
+        return store.list_webhook_diagnostics()
+
     @app.get("/api/events", dependencies=[admin])
     def list_events() -> list[dict[str, Any]]:
         """展示最近合并事件与队列处理状态。"""
@@ -913,6 +919,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async for chunk in request.stream():
             size += len(chunk)
             if size > 1024 * 1024:
+                store.record_webhook_diagnostic(
+                    None, None, None, "other", "rejected", "body_too_large", 413
+                )
                 raise HTTPException(status_code=413, detail="GitLab 事件过大")
             chunks.append(chunk)
         return b"".join(chunks)
@@ -967,17 +976,97 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return {"status": "queued" if created else "duplicate"}
 
+    def record_webhook_result(
+        repository_id: int | None, payload: dict[str, Any] | None,
+        headers: dict[str, str], outcome: str, reason: str, http_status: int,
+    ) -> None:
+        """只提取受限的自称项目与分支；未鉴权字段绝不能成为可信业务事实。"""
+
+        project = payload.get("project") if payload else None
+        project_id = project.get("id") if isinstance(project, dict) else None
+        if (
+            not isinstance(project_id, int) or isinstance(project_id, bool)
+            or not 0 < project_id <= 9223372036854775807
+        ):
+            project_id = None
+        attributes = payload.get("object_attributes") if payload else None
+        if payload and payload.get("object_kind") == "push":
+            branch = payload.get("ref")
+            if isinstance(branch, str):
+                branch = branch.removeprefix("refs/heads/")
+        else:
+            branch = attributes.get("target_branch") if isinstance(attributes, dict) else None
+        if not isinstance(branch, str) or not re.fullmatch(r"[a-zA-Z0-9._/-]{1,200}", branch):
+            branch = None
+        event_header = headers.get("x-gitlab-event")
+        event_kind = {
+            "Merge Request Hook": "merge_request",
+            "Push Hook": "push",
+        }.get(event_header or "", "other")
+        store.record_webhook_diagnostic(
+            repository_id, project_id, branch, event_kind, outcome, reason, http_status
+        )
+
+    def handle_webhook_candidate(
+        row: dict[str, Any], headers: dict[str, str], body: bytes,
+        payload: dict[str, Any] | None, ignored_http_status: int = 200,
+    ) -> dict[str, str]:
+        """鉴权与业务入队后记录结论，失败也只记录固定错误类别。"""
+
+        try:
+            result = process_gitlab_webhook(row, headers, body)
+        except HTTPException as error:
+            reason = {
+                401: "authentication_failed",
+                403: "project_mismatch",
+                422: "invalid_payload",
+                503: "secret_unavailable",
+            }.get(error.status_code, "rejected")
+            record_webhook_result(
+                row["id"], payload, headers, "rejected", reason, error.status_code
+            )
+            raise
+        outcome = result["status"]
+        if outcome == "ignored":
+            kind = headers.get("x-gitlab-event")
+            attributes = payload.get("object_attributes") if payload else None
+            reason = (
+                "push_disabled" if kind == "Push Hook" and not row["enable_default_branch_pushes"]
+                else "merge_disabled" if kind == "Merge Request Hook" and
+                not row["enable_merge_requests"] else
+                "merge_not_completed" if kind == "Merge Request Hook" and
+                isinstance(attributes, dict) and attributes.get("action") != "merge" else
+                "target_branch_mismatch" if kind == "Merge Request Hook" and
+                isinstance(attributes, dict) and
+                attributes.get("target_branch") != row["target_branch"] else
+                "invalid_push_range" if kind == "Push Hook" else "event_ignored"
+            )
+        else:
+            reason = outcome
+        record_webhook_result(
+            row["id"], payload, headers, outcome, reason,
+            ignored_http_status if outcome == "ignored" else 200,
+        )
+        return result
+
     @app.post("/api/webhooks/gitlab/{repository_id}")
     async def receive_gitlab(repository_id: int, request: Request) -> dict[str, str]:
         """保留旧项目的专属回调地址，新配置统一使用无 ID 地址。"""
 
         row = store.get_repository(repository_id)
         if row is None or not row["enabled"]:
+            store.record_webhook_diagnostic(
+                None, None, None, "other", "rejected", "repository_unavailable", 404
+            )
             raise HTTPException(status_code=404, detail="仓库未接入")
-        return process_gitlab_webhook(
-            row,
-            {key.lower(): value for key, value in request.headers.items()},
-            await read_webhook_body(request),
+        body = await read_webhook_body(request)
+        try:
+            parsed = json.loads(body)
+        except (ValueError, UnicodeDecodeError):
+            parsed = None
+        return handle_webhook_candidate(
+            row, {key.lower(): value for key, value in request.headers.items()},
+            body, parsed if isinstance(parsed, dict) else None,
         )
 
     @app.post("/api/webhooks/gitlab", response_model=None)
@@ -985,15 +1074,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """按 GitLab 项目和目标分支定位配置；匹配后仍必须验证该项目令牌。"""
 
         body = await read_webhook_body(request)
+        headers = {key.lower(): value for key, value in request.headers.items()}
         try:
             payload = json.loads(body)
         except (ValueError, UnicodeDecodeError) as error:
+            record_webhook_result(None, None, headers, "rejected", "invalid_json", 400)
             raise HTTPException(status_code=400, detail="GitLab 事件格式无效") from error
         if not isinstance(payload, dict):
+            record_webhook_result(None, None, headers, "rejected", "invalid_json", 400)
             raise HTTPException(status_code=400, detail="GitLab 事件格式无效")
         project = payload.get("project")
         attributes = payload.get("object_attributes")
         project_id = project.get("id") if isinstance(project, dict) else None
+        if not isinstance(project_id, int) or isinstance(project_id, bool):
+            project_id = None
         if payload.get("object_kind") == "push" and isinstance(payload.get("ref"), str):
             branch = payload["ref"].removeprefix("refs/heads/")
         else:
@@ -1004,10 +1098,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if row["enabled"] and row["project_id"] == project_id and row["target_branch"] == branch
         ]
         if len(matches) != 1:
+            record_webhook_result(
+                None, payload, headers, "ignored", "unmatched_project_or_branch", 204
+            )
             return Response(status_code=204)
-        result = process_gitlab_webhook(
-            matches[0], {key.lower(): value for key, value in request.headers.items()}, body
-        )
+        result = handle_webhook_candidate(matches[0], headers, body, payload, 204)
         return Response(status_code=204) if result["status"] == "ignored" else result
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"

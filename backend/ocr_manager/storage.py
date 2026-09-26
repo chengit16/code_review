@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -211,6 +211,20 @@ CREATE TABLE rule_previews (
 );
 CREATE INDEX idx_rule_previews_queue ON rule_previews(status, id);
 """
+SCHEMA_V14 = """
+CREATE TABLE webhook_diagnostics (
+  id INTEGER PRIMARY KEY,
+  repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+  claimed_project_id INTEGER,
+  claimed_branch TEXT,
+  event_kind TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('queued', 'duplicate', 'ignored', 'rejected')),
+  reason TEXT NOT NULL,
+  http_status INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_webhook_diagnostics_recent ON webhook_diagnostics(id DESC);
+"""
 
 
 class Store:
@@ -255,6 +269,7 @@ class Store:
                 (11, SCHEMA_V11),
                 (12, SCHEMA_V12),
                 (13, SCHEMA_V13),
+                (14, SCHEMA_V14),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -689,6 +704,38 @@ class Store:
                 "UPDATE repositories SET last_webhook_at=CURRENT_TIMESTAMP WHERE id=?",
                 (repository_id,),
             )
+
+    def record_webhook_diagnostic(
+        self, repository_id: int | None, claimed_project_id: int | None,
+        claimed_branch: str | None, event_kind: str, outcome: str,
+        reason: str, http_status: int,
+    ) -> None:
+        """仅保留有限数量的脱敏投递元数据，不保存请求体、标头或令牌。"""
+
+        with self.connection() as db:
+            db.execute(
+                """INSERT INTO webhook_diagnostics
+                (repository_id, claimed_project_id, claimed_branch, event_kind,
+                 outcome, reason, http_status) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (repository_id, claimed_project_id, claimed_branch, event_kind,
+                 outcome, reason, http_status),
+            )
+            # 公网回调会收到无效请求；固定保留上限防止诊断表无限增长。
+            db.execute(
+                """DELETE FROM webhook_diagnostics WHERE id NOT IN (
+                    SELECT id FROM webhook_diagnostics ORDER BY id DESC LIMIT 500
+                )"""
+            )
+
+    def list_webhook_diagnostics(self) -> list[dict[str, Any]]:
+        """管理页只读取最近 100 次投递的安全元数据。"""
+
+        with self.connection() as db:
+            return [
+                dict(row) for row in db.execute(
+                    "SELECT * FROM webhook_diagnostics ORDER BY id DESC LIMIT 100"
+                )
+            ]
 
     def add_event(
         self,

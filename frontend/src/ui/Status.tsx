@@ -16,6 +16,9 @@ const labels: Record<string, string> = {
   unconfigured: "未配置",
   stopped: "未运行",
   unknown: "未知",
+  duplicate: "重复投递",
+  ignored: "已忽略",
+  rejected: "已拒绝",
 };
 
 /** 对状态使用稳定尺寸和颜色，避免动态内容改变表格行高。 */
