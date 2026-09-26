@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import { apiRequest } from "../api/client";
 import type { AuditEntry, ModelConfiguration } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { formatTime } from "../ui/format";
@@ -74,8 +75,8 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
     {!profiles.isLoading && !profiles.error && <section className="section">
-      <div className="table-scroll"><table><thead><tr><th>配置名称</th><th>Provider</th><th>模型标识</th><th>Base URL</th><th>状态</th><th aria-label="操作" /></tr></thead><tbody>
-        {profiles.data?.map((profile) => <tr key={profile.id}><td><strong>{profile.name}</strong></td><td>{profile.provider}</td><td className="mono">{profile.model}</td><td className="mono">{profile.base_url || "内置端点"}</td><td>{profile.enabled ? "已启用" : "未启用"}</td><td><div className="row-actions">
+      <div className="table-scroll responsive-table"><table><thead><tr><th>配置名称</th><th>Provider</th><th>模型标识</th><th>Base URL</th><th>状态</th><th aria-label="操作" /></tr></thead><tbody>
+        {profiles.data?.map((profile) => <tr key={profile.id}><td data-label="配置名称"><strong>{profile.name}</strong></td><td data-label="Provider">{profile.provider}</td><td data-label="模型标识" className="mono">{profile.model}</td><td data-label="Base URL" className="mono">{profile.base_url || "内置端点"}</td><td data-label="状态">{profile.enabled ? "已启用" : "未启用"}</td><td data-label="操作"><div className="row-actions">
           {!profile.enabled && <button className="icon-button" type="button" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}><Check size={16} /></button>}
           <button className="icon-button" type="button" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}><Settings2 size={16} /></button>
           <button className="icon-button icon-button-danger" type="button" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}><Trash2 size={16} /></button>
@@ -85,7 +86,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </section>}
     <section className="section"><div className="section-head"><h2>管理操作</h2><span>最近 100 条</span></div><QueryState loading={audit.isLoading} error={audit.error} /><div className="table-scroll"><table><thead><tr><th>时间</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody>{audit.data?.map((entry) => <tr key={entry.id}><td>{formatTime(entry.created_at)}</td><td className="mono">{entry.action}</td><td>{entry.object_type}{entry.object_id !== null ? ` #${entry.object_id}` : ""}</td><td>{entry.outcome === "success" ? "成功" : entry.outcome}</td></tr>)}{audit.data?.length === 0 && <tr><td colSpan={4} className="empty-row">暂无管理操作</td></tr>}</tbody></table></div></section>
-    {open && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="model-title">
+    {open && <Modal titleId="model-title" onClose={() => setOpen(false)}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
@@ -96,6 +97,6 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
         {(create.error || update.error) && <p className="form-error" role="alert">{(create.error || update.error)?.message}</p>}
         <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
       </form>
-    </div></div>}
+    </Modal>}
   </div>;
 }

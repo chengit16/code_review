@@ -8,6 +8,7 @@ import type { FormEvent } from "react";
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, NotificationTargetInput, Repository } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 
@@ -108,7 +109,7 @@ export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ 
         {targets.data?.length === 0 && <p className="empty-inline">暂无飞书配置</p>}
       </div>
     </section>}
-    {open && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="target-title">
+    {open && <Modal titleId="target-title" onClose={() => setOpen(false)}>
       <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
@@ -119,6 +120,6 @@ export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ 
         <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
       </form>
       {checkRepository && <div className="hook-form"><ConnectionChecks token={token} kinds={["feishu"]} repositoryId={checkRepository.id} /></div>}
-    </div></div>}
+    </Modal>}
   </div>;
 }
