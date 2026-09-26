@@ -146,6 +146,13 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .webhook-callback > .button { flex: none; }
 .diagnostic { max-width: 300px; overflow: hidden; text-overflow: ellipsis; color: #9b5642; }
 .back-link { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 23px; color: #667a70; font-size: 12px; }
+.job-navigation { margin-bottom: 20px; }
+.job-navigation-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; }
+.job-navigation .back-link { min-height: 44px; margin: 0; }
+.job-navigation-actions { display: flex; gap: 8px; }
+.job-navigation-actions .button { min-width: 104px; }
+.job-navigation-status { display: block; margin-top: 4px; color: #576b61; font-size: 12px; }
+.job-navigation-error { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: #a54136; font-size: 12px; overflow-wrap: anywhere; }
 .detail-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; padding: 25px 0; border-bottom: 1px solid #dce3df; }
 .detail-summary > div { display: flex; flex-direction: column; gap: 9px; }
 .detail-summary span:not(.status) { color: #5b7062; font-size: 12px; }

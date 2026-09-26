@@ -1,12 +1,13 @@
 /** @description 展示单次 OCR 评审的覆盖、发现和可重跑状态。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, ExternalLink, RotateCcw, Send } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Download, ExternalLink, RotateCcw, Send } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
 import { JobFiles } from "./JobFiles";
+import { JobNavigation } from "./JobNavigation";
 import { TaskStop } from "./TaskControls";
 import { AttemptReports } from "./AttemptReports";
 import { FindingsPanel } from "./FindingsPanel";
@@ -18,19 +19,28 @@ import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
 import { formatTime } from "../ui/format";
 
-/** 保留 OCR 部分覆盖与失败结论，并在重跑后刷新服务端事实。 */
+/** 按任务重新挂载详情，防止连续导航时沿用旧任务的发现筛选和操作状态。 */
 export function JobDetailPage({ token, canEdit = true }: {
   /** 内存中的管理口令。 */ token: string;
   /** 只控制修改动作界面；服务端仍执行角色授权。 */ canEdit?: boolean;
 }) {
   const { id } = useParams();
+  return <JobDetail key={id} token={token} canEdit={canEdit} />;
+}
+
+function JobDetail({ token, canEdit }: {
+  token: string;
+  canEdit: boolean;
+}) {
+  const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const back = typeof location.state?.back === "string" && location.state.back.startsWith("/jobs?") ? location.state.back : "/jobs";
+  // 来源保存在 URL 中，刷新和分享仍保留筛选；兼容旧版列表的路由 state。
+  const back = location.search ? `/jobs${location.search}` : typeof location.state?.back === "string" && location.state.back.startsWith("/jobs?") ? location.state.back : "/jobs";
   const download = useMutation({ mutationFn: () => downloadTaskReport(token, Number(id)) });
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ["job", id], queryFn: () => apiRequest<ReviewJobDetail>(token, `/api/jobs/${id}`), refetchInterval: 5000, enabled: Boolean(id) });
-  const retry = useMutation({ mutationFn: () => apiRequest<{ job_id: number }>(token, `/api/jobs/${id}/retry`, { method: "POST" }), onSuccess: (result) => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["jobs"] }); if (result.job_id !== Number(id)) navigate(`/jobs/${result.job_id}`); } });
+  const query = useQuery({ queryKey: ["job", id], queryFn: ({ signal }) => apiRequest<ReviewJobDetail>(token, `/api/jobs/${id}`, { signal }), refetchInterval: 5000, enabled: Boolean(id) });
+  const retry = useMutation({ mutationFn: () => apiRequest<{ job_id: number }>(token, `/api/jobs/${id}/retry`, { method: "POST" }), onSuccess: (result) => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["jobs"] }); void queryClient.invalidateQueries({ queryKey: ["job-neighbors"] }); if (result.job_id !== Number(id)) navigate(`/jobs/${result.job_id}${back.startsWith("/jobs?") ? back.slice(5) : ""}`, { state: { back } }); } });
   const resend = useMutation({ mutationFn: () => apiRequest<unknown>(token, `/api/jobs/${id}/notification/retry`, { method: "POST" }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", id] }) });
   const feedback = useMutation({
     mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
@@ -40,7 +50,7 @@ export function JobDetailPage({ token, canEdit = true }: {
   const coverage = job?.result?.manifest?.coverage;
   const comments = job?.result?.comments ?? [];
   const excluded = job?.result?.preview?.files.filter((file) => !file.will_review) ?? [];
-  return <div className="page"><Link className="back-link" to={back}><ArrowLeft size={16} />返回任务列表</Link><PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
+  return <div className="page"><JobNavigation token={token} id={Number(id)} back={back} /><PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
     job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{canEdit && ["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending} onClick={() => retry.mutate()}><RotateCcw size={16} />重新评审</button></>}</>
   } /><QueryState loading={query.isLoading} error={query.error} />{(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
   {job && <><section className="detail-summary"><div><span>评审状态</span><Status value={job.status} /></div><div><span>尝试次数</span><strong>{job.attempts}</strong></div><div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div><div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div></section>

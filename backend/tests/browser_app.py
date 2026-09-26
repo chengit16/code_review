@@ -42,6 +42,14 @@ def main() -> None:
             "manifest": {"coverage": {"selected": [1, 2], "completed": [1],
                                       "reused": [], "failed": [2], "waived": []}},
         }, None)
+        # 导航夹具保留任务 1 的部分结果，新增带分支间隔的任务供跨页筛选验收。
+        commits = [f"{number:040x}" for number in range(2, 7)]
+        store.add_event(repository_id, 8, "navigation", commits[-1], None)
+        event = store.next_event()
+        assert event is not None
+        store.finish_event(event["id"], commits, {sha: ("navigation", "") for sha in commits}, None)
+        with store.connection() as db:
+            db.execute("UPDATE review_jobs SET target_branch='develop' WHERE id IN (3, 5)")
         uvicorn.run(app, host="127.0.0.1", port=8791)
 
 

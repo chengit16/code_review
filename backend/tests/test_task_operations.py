@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
@@ -68,3 +69,66 @@ def test_report_omits_thinking_paths_and_credentials(
     for secret in (settings.admin_token, "private-reasoning", "/private/internal"):
         assert secret not in response.text
     assert "[REDACTED]" in response.text
+
+
+def test_neighbors_cross_pages_and_missing_ids(client: TestClient, settings: Settings) -> None:
+    """编号不连续且相邻任务在另一页时，仍按列表降序导航并明确首尾。"""
+
+    store, _ = populate(client, settings, 31)
+    headers = {"X-Admin-Token": settings.admin_token}
+    with store.connection() as db:
+        db.execute("DELETE FROM review_jobs WHERE id=6")
+    items = client.get("/api/task-search", headers=headers).json()["items"]
+    assert items[-1]["id"] == 7
+    assert client.get("/api/jobs/7/neighbors?page=1&page_size=25", headers=headers).json() == {
+        "previous_id": 8, "next_id": 5,
+    }
+    assert client.get("/api/jobs/31/neighbors", headers=headers).json() == {
+        "previous_id": None, "next_id": 30,
+    }
+    assert client.get("/api/jobs/1/neighbors", headers=headers).json() == {
+        "previous_id": 2, "next_id": None,
+    }
+    assert client.get("/api/jobs/6/neighbors", headers=headers).status_code == 404
+
+
+def test_neighbors_share_all_search_filters(client: TestClient, settings: Settings) -> None:
+    """筛选后的邻项与列表一致，当前任务状态改变时仍可继续查看该筛选范围。"""
+
+    store, repository_id = populate(client, settings, 8)
+    with store.connection() as db:
+        db.execute("""UPDATE review_jobs SET status='partial', target_branch='develop',
+                   mr_iid=99, commit_sha='abcd' || substr(commit_sha, 5),
+                   created_at='2026-09-25 12:00:00' WHERE id IN (2, 7)""")
+    headers = {"X-Admin-Token": settings.admin_token}
+    filters: dict[str, Any] = {
+        "repository_id": repository_id, "status": "partial", "target_branch": "develop",
+        "mr_iid": 99, "sha": "ABCD", "since": "2026-09-25T19:00:00+08:00",
+        "until": "2026-09-25T13:00:00Z",
+    }
+    for params in ({key: value} for key, value in filters.items()):
+        items = client.get("/api/task-search", headers=headers, params=params).json()["items"]
+        ids = [item["id"] for item in items]
+        assert client.get("/api/jobs/5/neighbors", headers=headers, params=params).json() == {
+            "previous_id": min((item for item in ids if item > 5), default=None),
+            "next_id": max((item for item in ids if item < 5), default=None),
+        }
+    assert client.get("/api/jobs/5/neighbors", headers=headers, params=filters).json() == {
+        "previous_id": 7, "next_id": 2,
+    }
+    assert client.get("/api/jobs/5/neighbors", headers=headers,
+                      params={"status": "failed"}).json() == {
+        "previous_id": None, "next_id": None,
+    }
+
+
+@pytest.mark.parametrize("query", ["sha=%27", "repository_id=0", "status=unknown",
+                                     "since=2026-02-01&until=2026-01-01"])
+def test_neighbors_validate_filters_and_auth(
+    client: TestClient, settings: Settings, query: str,
+) -> None:
+    """只读导航仍须认证，并使用列表相同的字段及时间范围校验。"""
+
+    assert client.get("/api/jobs/1/neighbors").status_code == 401
+    assert client.get(f"/api/jobs/1/neighbors?{query}",
+                      headers={"X-Admin-Token": settings.admin_token}).status_code == 422

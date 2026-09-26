@@ -8,6 +8,14 @@ export function searchTasks(token: string, params: URLSearchParams, signal?: Abo
   return apiRequest<TaskPage>(token, `/api/task-search?${params}`, { signal });
 }
 
+/** 按列表筛选获取邻项，页码不限制导航范围；仅返回编号且支持取消旧请求。 */
+export function getTaskNeighbors(token: string, id: number, params: URLSearchParams, signal?: AbortSignal) {
+  const filters = new URLSearchParams(params);
+  filters.delete("page");
+  filters.delete("page_size");
+  return apiRequest<{ previous_id: number | null; next_id: number | null }>(token, `/api/jobs/${id}/neighbors?${filters}`, { signal });
+}
+
 /** 下载服务器白名单报告，浏览器对象地址用完即释放，令牌不进入下载 URL。 */
 export async function downloadTaskReport(token: string, id: number, attempt?: number) {
   const report = await apiRequest<unknown>(token, `/api/jobs/${id}/report${attempt ? `?attempt=${attempt}` : ""}`);

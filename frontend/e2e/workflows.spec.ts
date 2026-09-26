@@ -18,7 +18,8 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await page.getByRole("button", { name: "保存设置" }).click();
   await expect(page.getByRole("button", { name: "编辑 修改后仓库" })).toBeVisible();
   await page.goto("/config-history");
-  await page.getByRole("row").filter({ hasText: "修改后仓库" }).getByRole("button", { name: /恢复版本/ }).last().click();
+  // 对象名称与版本分别加载，按对象单元格和新增版本定位，避免提前选中最新修改。
+  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: "修改后仓库", exact: true }) }).filter({ hasText: "新增" }).getByRole("button", { name: /恢复版本/ }).click();
   await expect(page.getByRole("status")).toContainText("配置内容已恢复");
   await page.goto("/repositories");
   await page.getByRole("button", { name: "删除 验收仓库" }).click();
@@ -58,6 +59,30 @@ test("窄屏导航与布局", async ({ page }) => {
   await page.screenshot({ path: "test-results/mobile.png", fullPage: true });
 });
 
+test("详情连续导航跨页保留筛选、刷新与首尾边界", async ({ page }) => {
+  const search = "?page=2&page_size=2&mr_iid=8&target_branch=main";
+  await page.goto(`/jobs${search}`);
+  await page.getByRole("link", { name: "查看任务 2", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务 #2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "下一条", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "上一条", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务 #4", exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "上一条", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务 #6", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "上一条", exact: true })).toBeDisabled();
+  await page.screenshot({ path: "test-results/job-navigation-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "下一条", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/job-navigation-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "下一条", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务 #4", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "返回任务列表" }).click();
+  await expect(page).toHaveURL(`/jobs${search}`);
+  await expect(page.getByRole("link", { name: "查看任务 2", exact: true })).toBeVisible();
+});
+
 test("账号模式登录与只读界面", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("/users");
@@ -90,4 +115,7 @@ test("账号模式登录与只读界面", async ({ page }) => {
   await expect(page.getByText("部分完成").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "重新评审" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "误报" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "上一条", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "上一条", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "任务 #2", exact: true })).toBeVisible();
 });

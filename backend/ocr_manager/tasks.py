@@ -8,8 +8,8 @@ from typing import Any
 from ocr_manager.storage import Store
 
 
-def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int) -> dict[str, Any]:
-    """使用参数化 SQL 检索全量历史，以 ID 降序稳定分页。"""
+def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
+    """列表和详情导航共享筛选语义，字段名固定，用户值始终参数化。"""
 
     clauses: list[str] = []
     values: list[Any] = []
@@ -24,6 +24,13 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
         if filters.get(field):
             clauses.append(f"j.created_at {operator} ?")
             values.append(filters[field])
+    return clauses, values
+
+
+def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int) -> dict[str, Any]:
+    """使用参数化 SQL 检索全量历史，以 ID 降序稳定分页。"""
+
+    clauses, values = _job_filters(filters)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     with store.connection() as db:
         # 数量和数据在同一读事务内，避免 Worker 更新时出现自相矛盾的分页结果。
@@ -40,6 +47,26 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
         )
         return {"items": [dict(row) for row in rows], "total": total,
                 "page": page, "page_size": page_size}
+
+
+def job_neighbors(store: Store, job_id: int, filters: dict[str, Any]) -> dict[str, int | None]:
+    """查找降序列表中相邻任务，跨分页和编号空洞；当前任务消失时拒绝导航。"""
+
+    clauses, values = _job_filters(filters)
+    with store.connection() as db:
+        # 同一快照核对任务与邻项；状态已离开筛选时仍以当前编号作为导航锚点。
+        db.execute("BEGIN")
+        if db.execute("SELECT id FROM review_jobs WHERE id=?", (job_id,)).fetchone() is None:
+            raise LookupError("任务不存在")
+        neighbors: dict[str, int | None] = {}
+        for direction, operator, order in (("previous_id", ">", "ASC"), ("next_id", "<", "DESC")):
+            where = " AND ".join([*clauses, f"j.id {operator} ?"])
+            row = db.execute(
+                f"SELECT j.id FROM review_jobs j WHERE {where} ORDER BY j.id {order} LIMIT 1",
+                [*values, job_id],
+            ).fetchone()
+            neighbors[direction] = row["id"] if row else None
+        return neighbors
 
 
 def set_job_stage(store: Store, job_id: int, stage: str) -> None:
