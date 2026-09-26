@@ -222,6 +222,8 @@ export interface ReviewPreview {
 
 /** 评审详情包含 OCR 的机器可读发现与覆盖情况。 */
 export interface ReviewJobDetail extends ReviewJob {
+  /** Worker 确认停止前保持 running 状态。 */
+  cancel_requested?: number;
   mr_url?: string;
   commit_url?: string;
   result: {

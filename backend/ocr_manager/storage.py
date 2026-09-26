@@ -13,8 +13,9 @@ from typing import Any
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
+from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -278,6 +279,7 @@ class Store:
                 (16, history_migration()),
                 (17, READINESS_MIGRATION),
                 (18, FEEDBACK_MIGRATION),
+                (19, CONTROL_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1086,6 +1088,7 @@ class Store:
         """同一 MR 保持顺序，不同仓库优先轮转领取。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """SELECT j.* FROM review_jobs j
                 JOIN repositories r ON r.id=j.repository_id
@@ -1165,12 +1168,15 @@ class Store:
         )
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts, failure_stage FROM review_jobs WHERE id=?",
+                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested "
+                "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
             if job is None:
                 # 项目删除会级联移除任务，在途 OCR 完成后无需恢复已删除的业务记录。
                 return
+            if job["cancel_requested"]:
+                status, result_path, projection, error = "cancelled", None, None, "用户请求停止评审"
             db.execute(
                 """UPDATE review_jobs SET status=?, result_path=?, result_json=?, error=?,
                 finished_at=CURRENT_TIMESTAMP,
@@ -1185,9 +1191,10 @@ class Store:
                     job_id,
                 ),
             )
-            db.execute(
-                "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
-            )
+            if status != "cancelled":
+                db.execute(
+                    "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
+                )
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, result_path, error, failure_stage)
@@ -1201,20 +1208,23 @@ class Store:
 
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts, failure_stage FROM review_jobs WHERE id=?",
+                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested "
+                "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
             if job is None:
                 return
             attempts = int(job["attempts"])
             final = attempts - int(job["retry_start_attempts"]) >= 3
+            cancelled = bool(job["cancel_requested"])
             db.execute(
                 """UPDATE review_jobs SET status=?, error=?,
                 next_run_at=datetime('now', printf('+%d seconds', min(300,
                   (attempts - retry_start_attempts) *
                   (attempts - retry_start_attempts) * 20))),
                 finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?""",
-                ("failed" if final else "queued", error[:500], final, job_id),
+                ("cancelled" if cancelled else "failed" if final else "queued",
+                 "用户请求停止评审" if cancelled else error[:500], final or cancelled, job_id),
             )
             db.execute(
                 """INSERT INTO review_attempts
@@ -1222,7 +1232,7 @@ class Store:
                 VALUES (?, ?, 'failed', ?, ?)""",
                 (job_id, attempts, error[:500], job["failure_stage"]),
             )
-            if final:
+            if final and not cancelled:
                 db.execute(
                     "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
                 )
@@ -1324,7 +1334,9 @@ class Store:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM review_jobs WHERE id=?", (job_id,)).fetchone()
-            if old is None or old["status"] not in ("complete", "partial", "failed", "skipped"):
+            if old is None or old["status"] not in (
+                "complete", "partial", "failed", "skipped", "cancelled"
+            ):
                 return None
             if config_hash and config_hash != old["config_hash"]:
                 cursor = db.execute(
@@ -1349,10 +1361,10 @@ class Store:
                 return cursor.lastrowid if cursor.rowcount else None
             cursor = db.execute(
                 """UPDATE review_jobs SET status='queued', error=NULL,
-                retry_start_attempts=attempts,
+                retry_start_attempts=attempts, cancel_requested=0,
                 finished_at=NULL, failure_stage=NULL,
                 next_run_at=CURRENT_TIMESTAMP WHERE id=?
-                AND status IN ('complete','partial','failed','skipped')""",
+                AND status IN ('complete','partial','failed','skipped','cancelled')""",
                 (job_id,),
             )
             if cursor.rowcount:
@@ -1452,8 +1464,11 @@ class Store:
             )
             running = db.execute(
                 """SELECT id, attempts, retry_start_attempts
-                FROM review_jobs WHERE status='running'"""
+                FROM review_jobs WHERE status='running' AND cancel_requested=0"""
             ).fetchall()
+            db.execute("""UPDATE review_jobs SET status='cancelled',
+                       error='用户请求停止评审', finished_at=CURRENT_TIMESTAMP
+                       WHERE status='running' AND cancel_requested=1""")
             for job in running:
                 final = job["attempts"] - job["retry_start_attempts"] >= 3
                 db.execute(

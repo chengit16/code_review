@@ -25,6 +25,7 @@ from ocr_manager.gitlab import project_web_url
 from ocr_manager.operations_api import register_operations
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
+from ocr_manager.task_control import register_task_control
 from ocr_manager.webhook import parse_merge_event, verify_webhook
 from ocr_manager.worker import config_hash, worker_is_running
 
@@ -388,6 +389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     admin = Depends(require_admin)
     register_operations(app, store, config, admin)
+    register_task_control(app, store, config, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

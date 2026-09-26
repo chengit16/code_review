@@ -29,12 +29,12 @@ export function EventsPage({ token }: { /** 内存中的管理口令。 */ token
   });
   // 漏投补救只建立事件，Worker 仍会向 GitLab 确认 MR 已合并。
   const enqueue = useMutation({
-    mutationFn: () => apiRequest<{ status: string }>(token, `/api/repositories/${manualRepository}/mrs/${Number(manualMrIid)}/enqueue`, { method: "POST" }),
-    onSuccess: () => {
+    mutationFn: () => apiRequest<{ id: number; status: string }[]>(token, `/api/repositories/${manualRepository}/mrs/batch-enqueue`, { method: "POST", body: JSON.stringify({ ids: manualMrIid.split(/[\s,，]+/).filter(Boolean).map(Number) }) }),
+    onSuccess: (result) => {
       setManualOpen(false);
       setManualRepository("");
       setManualMrIid("");
-      setFeedback("已加入事件队列");
+      setFeedback(result.map((item) => `MR !${item.id}：${item.status === "queued" ? "已加入队列" : "重复或无法补触发"}`).join("；"));
       void queryClient.invalidateQueries({ queryKey: ["events"] });
     },
   });
@@ -50,7 +50,7 @@ export function EventsPage({ token }: { /** 内存中的管理口令。 */ token
   {manualOpen && <Modal titleId="enqueue-mr-title" onClose={() => setManualOpen(false)}><div className="modal-heading"><h2 id="enqueue-mr-title">补触发已合并 MR</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setManualOpen(false)}><X size={19} /></button></div>
     <form className="form-grid" onSubmit={(event) => { event.preventDefault(); enqueue.mutate(); }}>
       <SelectField label="仓库" name="repository" value={manualRepository} onValueChange={setManualRepository} placeholder="选择仓库" required options={enabledRepositories.map((repo) => ({ value: String(repo.id), label: repo.name }))} />
-      <label>MR IID<input type="number" min="1" step="1" value={manualMrIid} onChange={(event) => setManualMrIid(event.target.value)} required /></label>
+      <label>MR IID<input value={manualMrIid} onChange={(event) => setManualMrIid(event.target.value)} placeholder="7, 8, 9" required /></label>
       {enqueue.error && <p className="form-error wide" role="alert">{enqueue.error.message}</p>}
       <div className="form-actions wide"><button className="button button-secondary" type="button" onClick={() => setManualOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={enqueue.isPending || !manualRepository}>加入事件队列</button></div>
     </form>

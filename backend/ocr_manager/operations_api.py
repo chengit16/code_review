@@ -109,7 +109,9 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         page: int = Query(1, ge=1, le=1000000),
         page_size: int = Query(25, ge=1, le=100),
         repository_id: int | None = Query(None, gt=0),
-        status: Literal["queued", "running", "complete", "partial", "failed", "skipped"]
+        status: Literal[
+            "queued", "running", "complete", "partial", "failed", "skipped", "cancelled"
+        ]
         | None = None,
         target_branch: str | None = Query(None, max_length=200),
         mr_iid: int | None = Query(None, gt=0),

@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 from cryptography.fernet import InvalidToken
 
+from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.checks import run_connection_check
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.feishu import FeishuDeliveryError, send_review
@@ -27,6 +28,7 @@ from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
+from ocr_manager.task_control import cancellation_requested
 from ocr_manager.tasks import set_job_stage
 
 LOGGER = logging.getLogger(__name__)
@@ -247,6 +249,8 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
             )
         git = GitRepository(settings.data_dir, repository)
         git.fetch()
+        if cancellation_requested(store, job["id"]):
+            raise ReviewCancelled("用户请求停止评审")
         if not git.is_on_target(job["commit_sha"]):
             raise ValueError("待评审提交不再属于目标分支")
         git.checkout(job["commit_sha"], checkout)
@@ -255,12 +259,16 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
                        (json.dumps(git.changed_files(job["commit_sha"])), job["id"]))
         model_settings, _ = review_settings(store, settings)
         set_job_stage(store, job["id"], "ocr_configuration")
-        status, result = run_review(
-            model_settings, checkout, run_dir, job["commit_sha"],
-            store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
-            lambda stage: set_job_stage(store, job["id"], stage),
-        )
+        with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
+            status, result = run_review(
+                model_settings, checkout, run_dir, job["commit_sha"],
+                store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
+                lambda stage: set_job_stage(store, job["id"], stage),
+            )
+            check_cancellation()
         store.finish_job(job["id"], status, str(run_dir / "result.json"), result, None)
+    except ReviewCancelled:
+        store.finish_job(job["id"], "cancelled", None, None, "用户请求停止评审")
     except Exception as error:
         # 临时失败记录每次尝试并有限退避；提交范围冲突立即终止，避免盲目重试。
         LOGGER.warning("评审任务 %s 失败：%s", job["id"], error)

@@ -7,6 +7,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
 import { JobFiles } from "./JobFiles";
+import { TaskStop } from "./TaskControls";
 import type { ReviewJobDetail } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
@@ -36,6 +37,8 @@ export function JobDetailPage({ token }: { /** 内存中的管理口令。 */ to
     job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending} onClick={() => retry.mutate()}><RotateCcw size={16} />重新评审</button></>}</>
   } /><QueryState loading={query.isLoading} error={query.error} />{(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
   {job && <><section className="detail-summary"><div><span>评审状态</span><Status value={job.status} /></div><div><span>尝试次数</span><strong>{job.attempts}</strong></div><div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div><div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div></section>
+    <TaskStop token={token} id={job.id} status={job.status} stopping={Boolean(job.cancel_requested)} />
+    {job.status === "cancelled" && <button className="button button-secondary" onClick={() => retry.mutate()} disabled={retry.isPending}><RotateCcw size={16} />重新评审</button>}
     {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
     {job.failure_stage && <p className="detail-line">{job.status === "running" ? "当前阶段" : "失败阶段"}：{({ configuration: "配置校验", git: "Git 拉取与提交准备", ocr_configuration: "OCR 模型配置", preview: "范围预览", review: "模型评审", validation: "结果校验" } as Record<string, string>)[job.failure_stage] ?? job.failure_stage}</p>}
     <JobFiles job={job} />

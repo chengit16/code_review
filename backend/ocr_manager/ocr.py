@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.cancellation import check_cancellation
 from ocr_manager.config import Settings
 
 OCR_ENV_PASSTHROUGH = frozenset(
@@ -182,7 +183,18 @@ def _execute_ocr_command(
         start_new_session=True,
     )
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
+        # 停止请求以 SQLite 为准；短轮询同时保留整个命令的截止时间。
+        deadline = time.monotonic() + timeout
+        while True:
+            check_cancellation()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.25, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
     except BaseException:
         # Popen 的直接子进程可能是 npm 包装器，必须连同实际 OCR 进程一起终止。
         try:

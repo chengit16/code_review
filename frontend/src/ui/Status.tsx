@@ -8,6 +8,8 @@ const labels: Record<string, string> = {
   partial: "部分完成",
   failed: "失败",
   skipped: "已跳过",
+  cancelled: "已取消",
+  stopping: "正在停止",
   needs_attention: "需要处理",
   pending: "待发送",
   sent: "已发送",
