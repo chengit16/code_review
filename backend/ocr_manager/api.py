@@ -664,6 +664,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         assert row is not None
         return public_repository(row, config.public_url)
 
+    @app.post("/api/repositories/preflight", dependencies=[admin])
+    def preflight_repository(
+        payload: RepositoryCreate, repository_id: int | None = None,
+    ) -> dict[str, Any]:
+        """保存前复用来源约束；不访问外部系统，也不持久化表单中的密钥。"""
+
+        current = store.get_repository(repository_id) if repository_id else None
+        if repository_id and current is None:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        gitlab_url, path = validate_repository_source(
+            payload.gitlab_url, payload.remote_url, payload.path_with_namespace,
+            payload.target_branch,
+            bool(payload.gitlab_token or current and current["gitlab_token_ciphertext"]),
+        )
+        if payload.feishu_target_id and not store.get_notification_target(payload.feishu_target_id):
+            raise HTTPException(status_code=422, detail="飞书配置不存在")
+        if payload.auth_kind == "signing" and (
+            not payload.webhook_token and not current
+            or payload.webhook_token and not payload.webhook_token.startswith("whsec_")
+        ):
+            raise HTTPException(status_code=422, detail="Signing token 格式无效")
+        with store.connection() as db:
+            duplicate = db.execute(
+                """SELECT id FROM repositories WHERE gitlab_url=? AND project_id=?
+                AND target_branch=? AND id!=?""",
+                (gitlab_url, payload.project_id, payload.target_branch, repository_id or -1),
+            ).fetchone()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="仓库和目标分支已存在")
+        return {"status": "passed", "repository_path": path,
+                "next": "保存后执行 Git 与 GitLab API 连接测试"}
+
     @app.patch("/api/repositories/{repository_id}", dependencies=[admin])
     def update_repository(repository_id: int, payload: RepositoryUpdate) -> dict[str, Any]:
         """校验修改后的仓库来源，并在保留业务历史的前提下更新接入设置。"""

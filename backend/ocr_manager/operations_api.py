@@ -21,6 +21,33 @@ from ocr_manager.tasks import report_projection, search_jobs
 def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
 
+    @app.get("/api/repository-readiness", dependencies=[admin])
+    def repository_readiness() -> list[dict[str, Any]]:
+        """按保存版本与测试时间计算接入状态，旧测试不会冒充新配置已验证。"""
+
+        checks = store.list_connection_checks()
+        with store.connection() as db:
+            versions = {row["object_id"]: row["id"] for row in db.execute(
+                """SELECT object_id, MAX(id) AS id
+                FROM config_revisions WHERE object_type='repository' GROUP BY object_id"""
+            )}
+        result = []
+        for repository in store.list_repositories():
+            relevant = [check for check in checks if check["repository_id"] == repository["id"]]
+            git = next((check for check in relevant if check["kind"] == "git"), None)
+            gitlab = next((check for check in relevant if check["kind"] == "gitlab"), None)
+            version_id = versions.get(repository["id"])
+            tested = all(check and check["status"] == "passed"
+                         and check["config_revision_id"] == version_id for check in (git, gitlab))
+            result.append({"repository_id": repository["id"],
+                           "config_revision_id": version_id,
+                           "git": git["status"] if git else "untested",
+                           "gitlab": gitlab["status"] if gitlab else "untested",
+                           "status": "paused" if not repository["enabled"] else
+                           "ready" if tested else "needs_check",
+                           "last_webhook_at": repository["last_webhook_at"]})
+        return result
+
     @app.get("/api/config-history/{kind}", dependencies=[admin])
     def config_history(
         kind: Literal["repository", "notification_target", "model_profile"],

@@ -15,6 +15,8 @@ import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 import { WebhookTokenCell } from "./WebhookTokenCell";
 
+interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
+
 const initial: RepositoryInput = {
   name: "", gitlab_url: "", project_id: 0, remote_url: "", target_branch: "main",
   path_with_namespace: "", gitlab_token: "", enable_merge_requests: true,
@@ -26,6 +28,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
+  const readiness = useQuery({ queryKey: ["repository-readiness"], queryFn: () => apiRequest<Readiness[]>(token, "/api/repository-readiness"), refetchInterval: 10000 });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<RepositoryInput>(initial);
   const [editing, setEditing] = useState<Repository | null>(null);
@@ -36,16 +39,37 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   const [tokenRevision, setTokenRevision] = useState(0);
   const callbackUrl = query.data?.[0]?.webhook_url;
   const mutation = useMutation({
-    mutationFn: (input: RepositoryInput) => apiRequest<Repository>(token, "/api/repositories", { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: async (input: RepositoryInput) => {
+      // 预检是只读操作；成功后仍由正式保存路径重新校验并原子写入。
+      await apiRequest(token, "/api/repositories/preflight", { method: "POST", body: JSON.stringify(input) });
+      return apiRequest<Repository>(token, "/api/repositories", { method: "POST", body: JSON.stringify(input) });
+    },
     onSuccess: () => { setForm(initial); setOpen(false); void queryClient.invalidateQueries({ queryKey: ["repositories"] }); },
   });
   const update = useMutation({
-    mutationFn: ({ id, input }: { id: number; input: RepositoryUpdateInput }) => apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    mutationFn: async ({ id, input }: { id: number; input: RepositoryUpdateInput }) => {
+      if (!editing) throw new Error("项目不存在");
+      await apiRequest(token, `/api/repositories/preflight?repository_id=${id}`, { method: "POST", body: JSON.stringify({
+        name: input.name ?? editing.name, gitlab_url: input.gitlab_url ?? editing.gitlab_url,
+        project_id: input.project_id ?? editing.project_id,
+        remote_url: input.remote_url ?? editing.remote_url,
+        path_with_namespace: input.path_with_namespace ?? editing.path_with_namespace,
+        target_branch: input.target_branch ?? editing.target_branch,
+        auth_kind: input.auth_kind ?? editing.auth_kind,
+        webhook_token: input.webhook_token || undefined,
+        gitlab_token: input.gitlab_token || undefined,
+        feishu_target_id: input.feishu_target_id ?? undefined,
+        enable_merge_requests: input.enable_merge_requests ?? Boolean(editing.enable_merge_requests),
+        enable_default_branch_pushes: input.enable_default_branch_pushes ?? Boolean(editing.enable_default_branch_pushes),
+      }) });
+      return apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+    },
     onSuccess: (_result, { input }) => {
       if (input.webhook_token || input.auth_kind !== editing?.auth_kind) setTokenRevision((current) => current + 1);
       setEditing(null);
       setEditForm({});
       void queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      void queryClient.invalidateQueries({ queryKey: ["repository-readiness"] });
     },
   });
   const rotate = useMutation({
@@ -137,9 +161,9 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   } /><QueryState loading={query.isLoading} error={query.error} />{!query.isLoading && !query.error && <>
     {callbackUrl && <div className="webhook-callback"><span>GitLab 回调地址</span><input className="mono" aria-label="GitLab 回调地址" value={callbackUrl} readOnly onFocus={(event) => event.target.select()} /><button className="button button-secondary" type="button" onClick={() => copyCallback(callbackUrl)}>{callbackCopied ? <Check size={16} /> : <Copy size={16} />}{callbackCopied ? "已复制" : "复制地址"}</button></div>}
     {copyError && <p className="form-error" role="alert">{copyError}</p>}
-    <section className="section"><div className="table-scroll responsive-table"><table><thead><tr><th>仓库</th><th>项目 ID</th><th>目标分支</th><th>飞书配置</th><th>Webhook Token</th><th>接收</th><th aria-label="操作" /></tr></thead><tbody>
-      {query.data?.map((repo) => <tr key={repo.id}><td data-label="仓库"><strong>{repo.name}</strong><small className="table-sub">{repo.path_with_namespace || repo.gitlab_url}</small></td><td data-label="项目 ID" className="mono">{repo.project_id}</td><td data-label="目标分支" className="mono">{repo.target_branch}</td><td data-label="飞书配置">{targets.data?.find((target) => target.id === repo.feishu_target_id)?.name ?? "未配置"}</td><td data-label="Webhook Token"><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /><small className="table-sub">最近验证 {formatTime(repo.last_webhook_at)}</small></td><td data-label="接收"><label className="toggle-hit"><input className="repo-toggle" type="checkbox" checked={Boolean(repo.enabled)} disabled={toggle.isPending} onChange={(event) => toggle.mutate({ id: repo.id, enabled: event.target.checked })} aria-label={`${repo.name} 接收 webhook`} title={repo.enabled ? "暂停接收" : "恢复接收"} /></label></td><td data-label="操作"><div className="row-actions"><button className="icon-button" type="button" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></button><button className="icon-button icon-button-danger" type="button" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></button></div></td></tr>)}
-      {query.data?.length === 0 && <tr><td className="empty-row" colSpan={7}>尚未接入仓库</td></tr>}
+    <section className="section"><div className="table-scroll responsive-table"><table><thead><tr><th>仓库</th><th>项目 ID</th><th>目标分支</th><th>接入状态</th><th>飞书配置</th><th>Webhook Token</th><th>接收</th><th aria-label="操作" /></tr></thead><tbody>
+      {query.data?.map((repo) => <tr key={repo.id}><td data-label="仓库"><strong>{repo.name}</strong><small className="table-sub">{repo.path_with_namespace || repo.gitlab_url}</small></td><td data-label="项目 ID" className="mono">{repo.project_id}</td><td data-label="目标分支" className="mono">{repo.target_branch}</td><td data-label="接入状态">{({ ready: "已验证", needs_check: "待重新测试", paused: "已暂停" } as Record<string, string>)[readiness.data?.find((item) => item.repository_id === repo.id)?.status ?? "needs_check"]}</td><td data-label="飞书配置">{targets.data?.find((target) => target.id === repo.feishu_target_id)?.name ?? "未配置"}</td><td data-label="Webhook Token"><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /><small className="table-sub">最近验证 {formatTime(repo.last_webhook_at)}</small></td><td data-label="接收"><label className="toggle-hit"><input className="repo-toggle" type="checkbox" checked={Boolean(repo.enabled)} disabled={toggle.isPending} onChange={(event) => toggle.mutate({ id: repo.id, enabled: event.target.checked })} aria-label={`${repo.name} 接收 webhook`} title={repo.enabled ? "暂停接收" : "恢复接收"} /></label></td><td data-label="操作"><div className="row-actions"><button className="icon-button" type="button" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></button><button className="icon-button icon-button-danger" type="button" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></button></div></td></tr>)}
+      {query.data?.length === 0 && <tr><td className="empty-row" colSpan={8}>尚未接入仓库</td></tr>}
     </tbody></table></div>
   </section></>}
       {feedback && <p className="form-success" role="status">{feedback}</p>}

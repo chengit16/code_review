@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from ocr_manager.config_history import history_migration
-from ocr_manager.operation_migrations import TASK_MIGRATION
+from ocr_manager.operation_migrations import READINESS_MIGRATION, TASK_MIGRATION
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -275,6 +275,7 @@ class Store:
                 (14, SCHEMA_V14),
                 (15, TASK_MIGRATION),
                 (16, history_migration()),
+                (17, READINESS_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -290,9 +291,11 @@ class Store:
 
         with self.connection() as db:
             cursor = db.execute(
-                """INSERT OR IGNORE INTO connection_checks(kind, repository_id)
-                VALUES (?, ?)""",
-                (kind, repository_id),
+                """INSERT OR IGNORE INTO connection_checks
+                (kind, repository_id, config_revision_id)
+                VALUES (?, ?, (SELECT MAX(id) FROM config_revisions
+                  WHERE object_type='repository' AND object_id=?))""",
+                (kind, repository_id, repository_id),
             )
             return cursor.lastrowid if cursor.rowcount else None
 

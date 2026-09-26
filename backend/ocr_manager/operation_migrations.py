@@ -11,3 +11,7 @@ ALTER TABLE review_attempts ADD COLUMN failure_stage TEXT;
 CREATE INDEX idx_jobs_search ON review_jobs(repository_id, status, id DESC);
 CREATE INDEX idx_jobs_time ON review_jobs(created_at, id DESC);
 """
+
+READINESS_MIGRATION = """
+ALTER TABLE connection_checks ADD COLUMN config_revision_id INTEGER;
+"""
