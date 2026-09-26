@@ -114,11 +114,13 @@ def capture_findings(db: sqlite3.Connection, job: dict[str, Any],
         line = comment.get("start_line")
         db.execute("""INSERT INTO review_issue_occurrences
             (issue_id,job_id,attempt_number,comment_index,mr_iid,commit_sha,path,
-             start_line,content) VALUES(?,?,?,?,?,?,?,?,?)""",
+             start_line,content,severity,category) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (issue_id, job["id"], job["attempts"], index, job["mr_iid"],
              job["commit_sha"], comment["path"],
              line if isinstance(line, int) and not isinstance(line, bool) else None,
-             comment["content"]))
+             comment["content"],
+             comment.get("severity") if isinstance(comment.get("severity"), str) else None,
+             comment.get("category") if isinstance(comment.get("category"), str) else None))
 
 
 def backfill_existing_issues(db: sqlite3.Connection) -> None:

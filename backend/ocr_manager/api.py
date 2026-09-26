@@ -36,6 +36,7 @@ from ocr_manager.premerge import (
 )
 from ocr_manager.project_limits_api import register_project_limits
 from ocr_manager.publications import register_publications
+from ocr_manager.review_effectiveness import register_effectiveness
 from ocr_manager.review_issues import register_review_issues
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
@@ -447,6 +448,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_event_search(app, store, admin)
     register_publications(app, store, admin)
     register_review_issues(app, store, admin)
+    register_effectiveness(app, store, admin)
     register_premerge(app, store, admin)
 
     @app.get("/api/health")
