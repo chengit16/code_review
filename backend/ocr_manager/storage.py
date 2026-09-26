@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 
@@ -1312,7 +1313,16 @@ class Store:
     def retry_job(self, job_id: int, config_hash: str | None = None) -> int | None:
         """同配置保留尝试历史；配置变化则建立新的不可变任务快照。"""
 
+        with artifact_lock(self.path.parent, job_id) as acquired:
+            if not acquired:
+                return None
+            return self._retry_job(job_id, config_hash)
+
+    def _retry_job(self, job_id: int, config_hash: str | None) -> int | None:
+        """调用方已持有工件锁，排队转换不会与目录清理交叉执行。"""
+
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM review_jobs WHERE id=?", (job_id,)).fetchone()
             if old is None or old["status"] not in ("complete", "partial", "failed", "skipped"):
                 return None
@@ -1399,6 +1409,14 @@ class Store:
 
     def retry_delivery(self, job_id: int) -> bool:
         """仅对已结束评审的投递重新发送，避免读到重审中的旧结果。"""
+
+        with artifact_lock(self.path.parent, job_id) as acquired:
+            if not acquired:
+                return False
+            return self._retry_delivery(job_id)
+
+    def _retry_delivery(self, job_id: int) -> bool:
+        """重发也受工件锁保护，避免清理时产生新的在途投递。"""
 
         with self.connection() as db:
             cursor = db.execute(

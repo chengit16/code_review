@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.storage import Store
 
 
@@ -79,7 +80,9 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
             }, "alerts": alerts}
 
 
-def eligible_artifacts(store: Store, data_dir: Path, days: int) -> list[tuple[int, Path, int]]:
+def eligible_artifacts(
+    store: Store, data_dir: Path, days: int, job_id: int | None = None,
+) -> list[tuple[int, Path, int]]:
     """只匹配终态任务 ID 对应的非符号链接目录；保留所有 SQLite 结论。"""
 
     cutoff = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
@@ -87,9 +90,10 @@ def eligible_artifacts(store: Store, data_dir: Path, days: int) -> list[tuple[in
         rows = db.execute(
             """SELECT j.id FROM review_jobs j WHERE j.finished_at<?
             AND j.status IN ('complete','partial','failed','skipped')
+            AND (? IS NULL OR j.id=?)
             AND NOT EXISTS (SELECT 1 FROM notification_deliveries d
               WHERE d.job_id=j.id AND d.status IN ('pending','sending'))""",
-            (cutoff,),
+            (cutoff, job_id, job_id),
         ).fetchall()
     root = data_dir / "runs"
     result = []
@@ -107,10 +111,18 @@ def eligible_artifacts(store: Store, data_dir: Path, days: int) -> list[tuple[in
 def prune_artifacts(store: Store, data_dir: Path, days: int) -> dict[str, int]:
     """删除已确认的旧工件目录，任务与报告安全投影继续保留。"""
 
-    candidates = eligible_artifacts(store, data_dir, days)
-    for _job_id, path, _size in candidates:
-        shutil.rmtree(path)
-    with store.connection() as db:
-        for job_id, _path, _size in candidates:
-            db.execute("UPDATE review_jobs SET result_path=NULL WHERE id=?", (job_id,))
-    return {"count": len(candidates), "bytes": sum(item[2] for item in candidates)}
+    removed = []
+    for job_id, _path, _size in eligible_artifacts(store, data_dir, days):
+        with artifact_lock(data_dir, job_id) as acquired:
+            if not acquired:
+                continue
+            # 预览与删除间任务可能被重审或通知重发，锁内重新校验当前事实。
+            candidates = eligible_artifacts(store, data_dir, days, job_id)
+            if not candidates:
+                continue
+            _candidate_id, path, size = candidates[0]
+            shutil.rmtree(path)
+            with store.connection() as db:
+                db.execute("UPDATE review_jobs SET result_path=NULL WHERE id=?", (job_id,))
+            removed.append(size)
+    return {"count": len(removed), "bytes": sum(removed)}
