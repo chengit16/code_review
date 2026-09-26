@@ -75,7 +75,8 @@ def _prepare_custom_provider(
     return provider
 
 
-def classify_result(result: dict[str, Any], commit_sha: str) -> str:
+def classify_result(result: dict[str, Any], commit_sha: str,
+                    base_sha: str | None = None) -> str:
     """以 manifest 的输入及覆盖事实判定结果，避免仅凭退出码宣称通过。"""
 
     manifest = result.get("manifest")
@@ -85,7 +86,10 @@ def classify_result(result: dict[str, Any], commit_sha: str) -> str:
     coverage = manifest.get("coverage")
     if not isinstance(input_data, dict) or not isinstance(coverage, dict):
         raise ValueError("OCR manifest 字段缺失")
-    if input_data.get("mode") != "commit" or input_data.get("resolved_head") != commit_sha:
+    expected_mode = "range" if base_sha else "commit"
+    if (input_data.get("mode") != expected_mode or
+        input_data.get("resolved_head") != commit_sha or
+        base_sha is not None and input_data.get("resolved_base") != base_sha):
         raise ValueError("OCR 审查输入 SHA 不匹配")
     sets = [coverage.get(name) for name in ("completed", "reused", "failed", "waived")]
     selected = coverage.get("selected")
@@ -145,7 +149,8 @@ def read_preview(path: Path) -> dict[str, Any]:
     return payload
 
 
-def skipped_result(preview: dict[str, Any], sha: str) -> dict[str, Any]:
+def skipped_result(preview: dict[str, Any], sha: str,
+                   base_sha: str | None = None) -> dict[str, Any]:
     """无可审查文件时保留预览证据，明确结论来自预览而非模型。"""
 
     return {
@@ -156,7 +161,8 @@ def skipped_result(preview: dict[str, Any], sha: str) -> dict[str, Any]:
         "manifest": {
             "schema_version": "ocr.run-manifest/v1",
             "terminal_state": "skipped",
-            "input": {"mode": "commit", "resolved_head": sha},
+            "input": {"mode": "range" if base_sha else "commit",
+                      "resolved_head": sha, **({"resolved_base": base_sha} if base_sha else {})},
             "coverage": {
                 "selected": [],
                 "completed": [],
@@ -281,8 +287,9 @@ def run_review(
     settings: Settings, checkout: Path, run_dir: Path, sha: str,
     global_rule: str | None = None, project_rule: str | None = None,
     on_stage: Callable[[str], None] | None = None,
+    base_sha: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """保存 preview、JSON 与诊断输出；全程不经过 shell。"""
+    """保存 preview、JSON 与诊断输出；合并前范围以冻结的 base/head 验证。"""
 
     run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     deadline = time.monotonic() + settings.ocr_timeout_seconds
@@ -301,8 +308,7 @@ def run_review(
         "review",
         "--repo",
         str(checkout),
-        "--commit",
-        sha,
+        *(["--from", base_sha, "--to", sha] if base_sha else ["--commit", sha]),
         "--format",
         "json",
         "--provider",
@@ -344,7 +350,7 @@ def run_review(
                 raise ValueError("可审查文件超过项目上限，未调用模型")
             if preview["reviewable_count"] == 0:
                 # 只在明确的零文件预览下跳过，保留文件及排除原因供管理页查看。
-                payload = skipped_result(preview, sha)
+                payload = skipped_result(preview, sha, base_sha)
                 (run_dir / "result.json").write_text(
                     json.dumps(payload, ensure_ascii=False), encoding="utf-8"
                 )
@@ -361,7 +367,7 @@ def run_review(
                 raise RuntimeError("OCR JSON 结果无法解析") from error
             if not isinstance(payload, dict):
                 raise RuntimeError("OCR JSON 结果不是对象")
-            status = classify_result(payload, sha)
+            status = classify_result(payload, sha, base_sha)
             if returncode and status not in {"failed", "partial"}:
                 raise RuntimeError("OCR 退出码与结果状态冲突")
             # 原始工件保持 OCR 输出；数据库结果补入同一输入的范围预览供管理页核对。

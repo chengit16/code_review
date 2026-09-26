@@ -25,6 +25,7 @@ from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
 from ocr_manager.operations_api import register_operations
+from ocr_manager.premerge import enqueue_premerge, parse_premerge_event, register_premerge
 from ocr_manager.project_limits_api import register_project_limits
 from ocr_manager.publications import register_publications
 from ocr_manager.secrets import SecretBox
@@ -398,6 +399,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_project_limits(app, store, admin)
     register_event_search(app, store, admin)
     register_publications(app, store, admin)
+    register_premerge(app, store, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -1080,6 +1082,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return {"status": "queued" if created else "duplicate"}
         if headers.get("x-gitlab-event") != "Merge Request Hook":
             return {"status": "ignored"}
+        with store.connection() as db:
+            premerge_setting = db.execute(
+                "SELECT enabled FROM premerge_settings WHERE repository_id=?", (row["id"],)
+            ).fetchone()
+        if premerge_setting and premerge_setting["enabled"]:
+            version = parse_premerge_event(body, row["project_id"], row["target_branch"])
+            if version:
+                created = enqueue_premerge(store, row["id"], *version)
+                return {"status": "queued" if created else "duplicate"}
         if not row["enable_merge_requests"]:
             return {"status": "ignored"}
         event = parse_merge_event(body, row["project_id"], row["target_branch"])
@@ -1089,6 +1100,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         created = store.add_event(
             row["id"], event["mr_iid"], delivery_id, event["merge_sha"], event["squash_sha"]
         )
+        with store.connection() as db:
+            # 合并后的旧预审结论不能继续作为当前未合并 MR 结果展示。
+            db.execute("""UPDATE premerge_reviews SET status='superseded',
+                finished_at=CURRENT_TIMESTAMP WHERE repository_id=? AND mr_iid=?
+                AND status!='superseded'""", (row["id"], event["mr_iid"]))
         return {"status": "queued" if created else "duplicate"}
 
     def record_webhook_result(

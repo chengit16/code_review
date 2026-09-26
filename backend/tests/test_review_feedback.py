@@ -208,6 +208,8 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
         db.execute("DROP TABLE job_identity")
         db.execute("DROP TABLE gitlab_publications")
         db.execute("DROP TABLE gitlab_publication_settings")
+        db.execute("DROP TABLE premerge_reviews")
+        db.execute("DROP TABLE premerge_settings")
         db.execute("PRAGMA user_version=17")
     store.migrate()
     assert store.get_repository(repository_id) is not None

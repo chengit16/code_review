@@ -194,7 +194,9 @@ def register_publications(app: FastAPI, store: Store, admin: Any) -> None:
         with store.connection() as db:
             changed = db.execute("""UPDATE gitlab_publications SET status='pending',
                 attempts=0,error=NULL,next_run_at=CURRENT_TIMESTAMP WHERE id=?
-                AND status IN ('failed','skipped')""", (publication_id,)).rowcount
+                AND status IN ('failed','skipped') AND attempt_number=(
+                    SELECT attempts FROM review_jobs WHERE id=gitlab_publications.job_id
+                )""", (publication_id,)).rowcount
             if not changed:
                 raise HTTPException(409, "评论当前无法重试")
         return {"status": "pending"}

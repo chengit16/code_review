@@ -102,6 +102,40 @@ class GitRepository:
             "fetch", self.remote_url, f"+refs/heads/{self.branch}:refs/remotes/origin/{self.branch}"
         )
 
+    def fetch_mr_head(self, mr_iid: int, expected_sha: str) -> None:
+        """只从已配置项目的 MR 引用拉取，且核对 GitLab 当前版本，拒绝竞态中的旧头。"""
+
+        if mr_iid <= 0:
+            raise ValueError("MR IID 无效")
+        expected_sha = self._commit_sha(expected_sha)
+        self._git("fetch", self.remote_url,
+                  f"+refs/merge-requests/{mr_iid}/head:refs/remotes/origin/mr-{mr_iid}")
+        actual = self._git("rev-parse", "--verify",
+                           f"refs/remotes/origin/mr-{mr_iid}^{{commit}}")
+        if actual != expected_sha:
+            raise ValueError("MR 提交已更新")
+
+    def range_changed_files(
+        self, base_sha: str, head_sha: str
+    ) -> list[dict[str, str | int | None]]:
+        """记录完整 MR 差异的文件范围，不把最后一个提交误当作整个 MR。"""
+
+        output = self._git("diff", "--numstat", "--no-renames", "-z",
+                           self._commit_sha(base_sha), self._commit_sha(head_sha), "--")
+        files: list[dict[str, str | int | None]] = []
+        for entry in output.split("\0"):
+            if entry:
+                added, deleted, path = entry.split("\t", 2)
+                files.append({"path": path, "added": int(added) if added.isdigit() else None,
+                              "deleted": int(deleted) if deleted.isdigit() else None})
+        return files
+
+    def is_range_base(self, base_sha: str, head_sha: str) -> bool:
+        """确认 GitLab 所称差异基准确为当前 MR 头与目标分支的共同祖先。"""
+
+        base, head = self._commit_sha(base_sha), self._commit_sha(head_sha)
+        return self.is_on_target(base) and self._git("merge-base", base, head) == base
+
     def check_access(self) -> None:
         """验证只读 Git 访问和目标分支存在，不创建评审任务。"""
 

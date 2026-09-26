@@ -60,6 +60,20 @@ def test_input_and_coverage_must_match() -> None:
         classify_result(incomplete, SHA)
 
 
+def test_range_result_requires_frozen_base_and_head() -> None:
+    """合并前范围审查必须同时匹配两端 SHA，不能接受单提交结果。"""
+
+    base = "b" * 40
+    ranged = result("complete")
+    ranged["manifest"]["input"] = {"mode": "range", "resolved_base": base,
+                                      "resolved_head": SHA}
+    assert classify_result(ranged, SHA, base) == "complete"
+    with pytest.raises(ValueError, match="SHA"):
+        classify_result(ranged, SHA, "c" * 40)
+    with pytest.raises(ValueError, match="SHA"):
+        classify_result(result("complete"), SHA, base)
+
+
 def test_duplicate_coverage_items_are_not_complete() -> None:
     """同一文件不能在多个覆盖分组或分母中重复计数。"""
 
@@ -140,6 +154,29 @@ def test_empty_preview_skips_model_and_preserves_exclusions(
     assert payload["source"] == "preview"
     assert payload["preview"]["files"][0]["exclude_reason"] == "provider_directory"
     assert (tmp_path / "run" / "result.json").exists()
+
+
+def test_range_command_uses_from_to_without_commit(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MR 差异只调用 OCR 范围模式，零文件预览仍保留范围输入。"""
+
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
+        commands.append(command)
+        Path(command[command.index("--output") + 1]).write_text(
+            json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8")
+        return 0, ""
+
+    monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
+    status, payload = run_review(settings, tmp_path, tmp_path / "range", SHA,
+                                 base_sha="b" * 40)
+    assert status == "skipped"
+    assert commands[0][commands[0].index("--from") + 1] == "b" * 40
+    assert commands[0][commands[0].index("--to") + 1] == SHA
+    assert "--commit" not in commands[0]
+    assert payload["manifest"]["input"]["mode"] == "range"
 
 
 def test_invalid_preview_does_not_start_model(

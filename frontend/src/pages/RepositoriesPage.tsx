@@ -16,6 +16,7 @@ import { formatTime } from "../ui/format";
 import { WebhookTokenCell } from "./WebhookTokenCell";
 import { ProjectReviewLimits } from "./ProjectReviewLimits";
 import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
+import { PremergeSetting } from "./PremergeSetting";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
 
@@ -209,6 +210,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} />
     <ProjectReviewLimits token={token} repositoryId={editing.id} />
     <GitLabPublicationSetting token={token} repositoryId={editing.id} />
+    <PremergeSetting token={token} repositoryId={editing.id} />
   </Modal>}
   </div>;
 }

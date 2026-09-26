@@ -17,11 +17,12 @@ from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
+from ocr_manager.premerge import PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -292,6 +293,7 @@ class Store:
                 (23, EVENT_SEARCH_MIGRATION),
                 (24, MAINTENANCE_MIGRATION),
                 (25, PUBLICATION_MIGRATION),
+                (26, PREMERGE_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1512,6 +1514,11 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            # 合并前结果仅在当前版本有效；重启不恢复旧版本，当前运行任务有限重试。
+            db.execute("""UPDATE premerge_reviews SET
+                status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END,
+                error='Worker 中断，合并前结果未确认',next_run_at=CURRENT_TIMESTAMP
+                WHERE status='running'""")
             db.execute("UPDATE gitlab_publications SET status='pending' WHERE status='sending'")
             db.execute("""UPDATE mr_backfills SET status='queued' WHERE status='running'""")
             db.execute(

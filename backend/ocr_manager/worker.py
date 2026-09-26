@@ -28,6 +28,7 @@ from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
+from ocr_manager.premerge import SHA, finish_premerge, next_premerge, premerge_is_current
 from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.publications import next_publication, publish_one
 from ocr_manager.secrets import SecretBox
@@ -405,6 +406,10 @@ def run_once(
     if event:
         expand_event(store, settings, event)
         return True, last_repository_id
+    premerge = next_premerge(store)
+    if premerge:
+        review_premerge(store, settings, premerge)
+        return True, last_repository_id
     delivery = store.next_delivery()
     if delivery:
         deliver_notification(store, settings, delivery)
@@ -427,6 +432,82 @@ def run_once(
             review_job(store, settings, job)
         return True, int(job["repository_id"])
     return False, last_repository_id
+
+
+def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) -> None:
+    """复核当前 MR 头与 merge-base，以范围模式审查完整未合并差异。"""
+
+    repository = store.get_repository(review["repository_id"])
+    if repository is None:
+        finish_premerge(store, review["id"], "failed", None, None, None, None, "项目已删除")
+        return
+    run_dir = settings.data_dir / "premerge-runs" / str(review["id"]) / str(review["attempts"] + 1)
+    checkout = run_dir / "checkout"
+    git: GitRepository | None = None
+    base_sha: str | None = None
+    try:
+        # 1. Webhook 只提供待核验版本；GitLab 当前 MR 身份和 SHA 才能确定输入。
+        token = SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
+        client = GitLabClient(repository["gitlab_url"], token)
+        mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
+        if (mr.get("state") != "opened" or
+            mr.get("target_branch") != repository["target_branch"] or
+            mr.get("target_project_id") != repository["project_id"] or
+            mr.get("sha") != review["head_sha"]):
+            finish_premerge(store, review["id"], "superseded", None, None, None, None,
+                            "MR 状态或提交版本已变化")
+            return
+        refs = mr.get("diff_refs")
+        base_sha = refs.get("base_sha") if isinstance(refs, dict) else None
+        if not isinstance(base_sha, str) or not SHA.fullmatch(base_sha):
+            raise RuntimeError("GitLab 尚未生成 MR diff 基准")
+        git = GitRepository(settings.data_dir, {**repository, "gitlab_token": token})
+        git.fetch()
+        git.fetch_mr_head(review["mr_iid"], review["head_sha"])
+        if not git.is_range_base(base_sha, review["head_sha"]):
+            raise ValueError("MR diff 基准与目标分支不符")
+        if not premerge_is_current(store, review["id"]):
+            return
+
+        # 2. 工作区固定在可信目标分支基准；OCR 用已拉取的头对象计算完整 MR 差异。
+        git.checkout(base_sha, checkout)
+        model_settings, _ = review_settings(store, settings, repository["id"])
+        changed_files = git.range_changed_files(base_sha, review["head_sha"])
+        with cancellation_scope(lambda: not premerge_is_current(store, review["id"])):
+            status, result = run_review(
+                model_settings, checkout, run_dir, review["head_sha"],
+                store.get_review_rule(None), store.get_review_rule(repository["id"]),
+                base_sha=base_sha,
+            )
+            check_cancellation()
+        latest_mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
+        if latest_mr.get("state") != "opened" or latest_mr.get("sha") != review["head_sha"]:
+            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
+                            "GitLab MR 已更新")
+            return
+        # 3. 条件更新避免迟到结果覆盖新提交，原始工件仅供受控本机诊断。
+        finish_premerge(store, review["id"], status, base_sha, result,
+                        str(run_dir / "result.json"), changed_files, None)
+    except ReviewCancelled:
+        finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
+                        "已有新的 MR 提交版本")
+    except Exception as error:
+        LOGGER.warning("合并前审查 %s 失败：%s", review["id"], type(error).__name__)
+        if is_temporary(error) and review["attempts"] < 3:
+            with store.connection() as db:
+                db.execute("""UPDATE premerge_reviews SET status='queued',
+                    error=?,next_run_at=datetime('now',printf('+%d seconds',attempts*20))
+                    WHERE id=? AND status='running'""",
+                    (f"合并前审查暂时失败：{type(error).__name__}", review["id"]))
+        else:
+            finish_premerge(store, review["id"], "failed", base_sha, None, None, None,
+                            f"合并前审查失败：{type(error).__name__}")
+    finally:
+        if git is not None:
+            try:
+                git.remove_checkout(checkout)
+            except (OSError, RuntimeError) as error:
+                LOGGER.warning("合并前工作目录清理失败：%s", type(error).__name__)
 
 
 def process_backfill(store: Store, settings: Settings) -> bool:
