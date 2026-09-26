@@ -9,11 +9,11 @@ import re
 import sqlite3
 from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from cryptography.fernet import InvalidToken
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -21,6 +21,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
 from ocr_manager.alerts_api import register_alerts
+from ocr_manager.auth import register_auth, session_identity, users_mode
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
@@ -376,23 +377,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "success" if response.status_code < 400 else f"http_{response.status_code}"
                 )
                 try:
+                    identity = getattr(request.state, "identity", None)
                     store.record_audit(
-                        f"{request.method} {route.path}", object_type, object_id, outcome
+                        f"{request.method} {route.path}", object_type, object_id, outcome,
+                        identity["id"] if identity else None,
+                        identity["username"] if identity else None,
                     )
                 except sqlite3.Error:
                     # 审计写入异常不能让已提交的配置操作向客户端伪装成失败。
                     LOGGER.exception("管理操作审计记录失败")
         return response
 
-    def require_admin(x_admin_token: Annotated[str | None, Header()] = None) -> None:
-        """开发模式跳过管理台口令；其他模式仍使用服务端口令，Webhook 不共享权限。"""
+    def require_admin(request: Request) -> dict[str, Any]:
+        """账号模式按角色授权；默认模式兼容本机开发与共享口令。"""
 
-        if config.dev_mode:
-            return
-        if not x_admin_token or not hmac.compare_digest(x_admin_token, config.admin_token):
-            raise HTTPException(status_code=401, detail="管理口令无效")
+        if users_mode(store):
+            header = request.headers.get("authorization", "")
+            token = header.removeprefix("Bearer ") if header.startswith("Bearer ") else ""
+            identity = session_identity(store, token) if token else None
+            if identity is None:
+                raise HTTPException(status_code=401, detail="管理会话无效或已过期")
+        elif config.dev_mode:
+            identity = {"id": None, "username": "本机开发", "role": "admin"}
+        else:
+            token = request.headers.get("x-admin-token", "")
+            if not token or not hmac.compare_digest(token, config.admin_token):
+                raise HTTPException(status_code=401, detail="管理口令无效")
+            identity = {"id": None, "username": "共享管理员", "role": "admin"}
+        request.state.identity = identity
+        if (identity["role"] != "admin" and request.method not in {"GET", "HEAD"}
+            and request.url.path != "/api/auth/logout"):
+            raise HTTPException(status_code=403, detail="只读用户不能修改配置或任务")
+        if (identity["role"] != "admin" and
+            request.url.path.endswith("/webhook-token")):
+            raise HTTPException(status_code=403, detail="只有管理员可以查看 Webhook Token")
+        return identity
 
     admin = Depends(require_admin)
+    register_auth(app, store, require_admin)
     register_operations(app, store, config, admin)
     register_task_control(app, store, config, admin)
     register_alerts(app, store, admin)
@@ -409,7 +431,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             db.execute("SELECT 1")
         return {
             "status": "ok",
-            "auth_mode": "dev" if config.dev_mode else "admin",
+            "auth_mode": "users" if users_mode(store) else
+                "dev" if config.dev_mode else "admin",
             "worker": "running" if worker_is_running(config.data_dir) else "stopped",
         }
 
@@ -576,7 +599,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return restore_rule(repository_id, revision_id)
 
     @app.get("/api/repositories/{repository_id}/webhook-token", dependencies=[admin])
-    def get_webhook_token(repository_id: int, response: Response) -> dict[str, str]:
+    def get_webhook_token(repository_id: int, response: Response,
+                          request: Request) -> dict[str, str]:
         """管理员按需查看已有令牌，响应禁止缓存且审计不记录明文。"""
 
         response.headers["Cache-Control"] = "no-store"
@@ -593,6 +617,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "repository",
                 repository_id,
                 "success",
+                request.state.identity["id"],
+                request.state.identity["username"],
             )
         except sqlite3.Error:
             LOGGER.exception("Webhook 令牌查看审计记录失败")

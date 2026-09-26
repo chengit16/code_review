@@ -13,6 +13,7 @@ from typing import Any
 from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
+from ocr_manager.auth import AUTH_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
@@ -22,7 +23,7 @@ from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -294,6 +295,7 @@ class Store:
                 (24, MAINTENANCE_MIGRATION),
                 (25, PUBLICATION_MIGRATION),
                 (26, PREMERGE_MIGRATION),
+                (27, AUTH_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -348,15 +350,16 @@ class Store:
             )
 
     def record_audit(
-        self, action: str, object_type: str, object_id: int | None, outcome: str
+        self, action: str, object_type: str, object_id: int | None, outcome: str,
+        actor_id: int | None = None, actor_name: str | None = None,
     ) -> None:
         """仅记录操作元数据，绝不保存请求体、令牌或外部服务响应。"""
 
         with self.connection() as db:
             db.execute(
-                """INSERT INTO audit_log(action, object_type, object_id, outcome)
-                VALUES (?, ?, ?, ?)""",
-                (action, object_type, object_id, outcome),
+                """INSERT INTO audit_log(action, object_type, object_id, outcome,
+                actor_id, actor_name) VALUES (?, ?, ?, ?, ?, ?)""",
+                (action, object_type, object_id, outcome, actor_id, actor_name),
             )
 
     def list_audit(self) -> list[dict[str, Any]]:

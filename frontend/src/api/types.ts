@@ -25,7 +25,7 @@ export interface Repository {
 /** API 存活状态与独立 Worker 的文件锁状态。 */
 export interface Health {
   status: "ok";
-  auth_mode: "dev" | "admin";
+  auth_mode: "dev" | "admin" | "users";
   worker: "running" | "stopped";
 }
 
@@ -284,6 +284,8 @@ export interface ConnectionCheck {
 /** 管理写操作的路由级审计记录，不包含请求体或密钥。 */
 export interface AuditEntry {
   id: number;
+  actor_id: number | null;
+  actor_name: string | null;
   action: string;
   object_type: string;
   object_id: number | null;

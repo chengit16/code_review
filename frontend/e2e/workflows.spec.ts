@@ -57,3 +57,31 @@ test("窄屏导航与布局", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "飞书配置" })).toBeVisible();
   await page.screenshot({ path: "test-results/mobile.png", fullPage: true });
 });
+
+test("账号模式登录与只读界面", async ({ page }) => {
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto("/users");
+  await page.getByRole("button", { name: "添加账号" }).click();
+  await page.getByLabel("用户名").fill("browser-admin");
+  await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
+  await page.getByRole("combobox", { name: "角色", exact: true }).click();
+  await page.getByRole("option", { name: "管理员" }).click();
+  await page.getByRole("button", { name: "保存账号" }).click();
+  await expect(page.getByText("browser-admin", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "添加账号" }).click();
+  await page.getByLabel("用户名").fill("browser-reader");
+  await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
+  await page.getByRole("button", { name: "保存账号" }).click();
+  await page.getByLabel("启用多人账号登录").click();
+  await expect(page.getByLabel("用户名")).toBeVisible();
+  await page.getByLabel("用户名").fill("browser-reader");
+  await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
+  await page.getByRole("button", { name: "进入管理台" }).click();
+  await expect(page.getByText("browser-reader · 只读")).toBeVisible();
+  await expect(page.getByRole("link", { name: "项目配置" })).toHaveCount(0);
+  await page.getByRole("link", { name: "评审任务" }).click();
+  await page.getByRole("link", { name: "查看任务 1" }).click();
+  await expect(page.getByText("部分完成").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "重新评审" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "误报" })).toHaveCount(0);
+});

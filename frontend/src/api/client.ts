@@ -10,7 +10,7 @@ export class ApiError extends Error {
 
 /**
  * 请求同源管理 API。
- * 生产模式的管理口令只保留在 React 内存中；开发模式不发送空的认证头。
+ * 共享口令和账号会话只保留在 React 内存中；开发模式不发送空的认证头。
  */
 export async function apiRequest<T>(
   token: string,
@@ -20,7 +20,8 @@ export async function apiRequest<T>(
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(token ? { "X-Admin-Token": token } : {}),
+      ...(token.startsWith("session:") ? { Authorization: `Bearer ${token.slice(8)}` } :
+        token ? { "X-Admin-Token": token } : {}),
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },

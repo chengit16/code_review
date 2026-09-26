@@ -55,7 +55,7 @@ OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
 uv run python -m ocr_manager.worker
 ```
 
-访问 `GET /api/health` 可分别核对 API/SQLite、鉴权模式与 Worker：`status=ok` 表示管理进程和数据库可用，`auth_mode=dev` 表示本地开发模式不要求管理口令，`auth_mode=admin` 表示生产管理口令已启用；`worker=running` 表示独立 Worker 正持有单实例锁，`worker=stopped` 时即使页面仍可访问，队列也不会继续消费。概览页会显示同一状态。
+访问 `GET /api/health` 可分别核对 API/SQLite、鉴权模式与 Worker：`status=ok` 表示管理进程和数据库可用，`auth_mode=dev` 表示本地开发模式不要求管理口令，`auth_mode=admin` 表示共享管理口令已启用，`auth_mode=users` 表示已在管理页切换为多人账号登录；`worker=running` 表示独立 Worker 正持有单实例锁，`worker=stopped` 时即使页面仍可访问，队列也不会继续消费。概览页会显示同一状态。
 
 开发前端可在 `frontend/` 运行 `npm run dev`，Vite 默认监听 `127.0.0.1:5173` 并代理 `/api` 到 `8781`。生产页面由 FastAPI 从 `frontend/dist` 提供。请在专用系统用户的环境中配置主密钥，限制数据目录权限，并在该用户会话验证 HTTPS Git、OCR 和飞书连接。两个进程可分别交给 `launchd` 守护；正式启用 webhook 前须确认重启后两个进程与环境变量均可恢复。
 
