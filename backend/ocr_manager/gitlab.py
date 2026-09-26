@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -76,6 +77,35 @@ class GitLabClient:
                 if not next_page:
                     return commits
                 page = int(next_page)
+
+    def list_merged_requests(
+        self, project_id: int, since: datetime, until: datetime
+    ) -> list[int]:
+        """扫描更新过的已合并 MR，按 merged_at 二次过滤；最多 100 页防止无界任务。"""
+
+        url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests"
+        result: list[int] = []
+        with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
+            for page in range(1, 101):
+                response = client.get(url, params={"state": "merged", "updated_after":
+                                      since.isoformat(), "per_page": 100, "page": page})
+                response.raise_for_status()
+                rows = response.json()
+                if not isinstance(rows, list):
+                    raise ValueError("GitLab MR 列表响应无效")
+                for row in rows:
+                    if not isinstance(row, dict) or not isinstance(row.get("iid"), int):
+                        raise ValueError("GitLab MR 列表缺少 IID")
+                    raw = row.get("merged_at")
+                    if not isinstance(raw, str):
+                        raise ValueError("GitLab MR 列表缺少合并时间")
+                    merged = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                    if since <= merged <= until:
+                        result.append(row["iid"])
+                next_page = response.headers.get("x-next-page", "")
+                if not next_page:
+                    return result
+            raise ValueError("补审范围超过 100 页，请缩小时间区间")
 
 
 def project_web_url(gitlab_url: str, remote_url: str) -> str:

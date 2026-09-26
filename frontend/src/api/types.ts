@@ -145,6 +145,8 @@ export interface MergeEvent {
   attempts: number;
   next_run_at: string;
   created_at: string;
+  job_count?: number;
+  latest_job_id?: number | null;
 }
 
 /** Webhook 投递元数据；项目和分支在鉴权前只是请求自称值。 */

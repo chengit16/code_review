@@ -397,6 +397,8 @@ def run_once(
 ) -> tuple[bool, int | None]:
     """处理一个工作单元，并记住上次评审的仓库供下次轮转。"""
 
+    if process_backfill(store, settings):
+        return True, last_repository_id
     event = store.next_event()
     if event:
         expand_event(store, settings, event)
@@ -418,6 +420,42 @@ def run_once(
         review_job(store, settings, job)
         return True, int(job["repository_id"])
     return False, last_repository_id
+
+
+def process_backfill(store: Store, settings: Settings) -> bool:
+    """先查询 GitLab，再把已核验时间范围的 IID 入队；失败保留诊断供重建申请。"""
+
+    from datetime import datetime
+
+    with store.connection() as db:
+        row = db.execute("SELECT * FROM mr_backfills WHERE status='queued' ORDER BY id LIMIT 1")
+        request = row.fetchone()
+        if request is None:
+            return False
+        db.execute("UPDATE mr_backfills SET status='running' WHERE id=?", (request["id"],))
+        backfill = dict(request)
+    try:
+        repository = store.get_repository(backfill["repository_id"])
+        if repository is None:
+            raise ValueError("项目已删除")
+        token = SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
+        client = GitLabClient(repository["gitlab_url"], token)
+        iids = client.list_merged_requests(repository["project_id"],
+                                           datetime.fromisoformat(backfill["since"]),
+                                           datetime.fromisoformat(backfill["until"]))
+        enqueued = sum(store.enqueue_mr(repository["id"], iid) for iid in iids)
+        with store.connection() as db:
+            db.execute("""UPDATE mr_backfills SET status='done', scanned=?, enqueued=?,
+                       finished_at=CURRENT_TIMESTAMP WHERE id=?""",
+                       (len(iids), enqueued, backfill["id"]))
+    except Exception as error:
+        # GitLab 异常可能携带请求地址或代理细节，数据库仅记录异常类别。
+        LOGGER.warning("补审申请 %s 失败：%s", backfill["id"], type(error).__name__)
+        with store.connection() as db:
+            db.execute("""UPDATE mr_backfills SET status='failed', error=?,
+                       finished_at=CURRENT_TIMESTAMP WHERE id=?""",
+                       (f"补审失败：{type(error).__name__}", backfill["id"]))
+    return True
 
 
 def main() -> None:

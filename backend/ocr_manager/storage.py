@@ -14,11 +14,12 @@ from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.config_history import history_migration
+from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -286,6 +287,7 @@ class Store:
                 (20, ATTEMPT_MIGRATION),
                 (21, ALERT_MIGRATION),
                 (22, LIMITS_MIGRATION),
+                (23, EVENT_SEARCH_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1484,6 +1486,7 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            db.execute("""UPDATE mr_backfills SET status='queued' WHERE status='running'""")
             db.execute(
                 """UPDATE rule_previews SET status='failed',
                 error='Worker 中断，预览结果未确认', finished_at=CURRENT_TIMESTAMP
