@@ -1,0 +1,80 @@
+"""装配运维管理接口；继承管理鉴权，不执行评审或外部网络操作。"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import Any, Literal
+
+from cryptography.fernet import InvalidToken
+from fastapi import FastAPI, HTTPException, Query
+from starlette.responses import Response
+
+from ocr_manager.config import Settings
+from ocr_manager.secrets import SecretBox
+from ocr_manager.storage import Store
+from ocr_manager.tasks import report_projection, search_jobs
+
+
+def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
+    """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
+
+    @app.get("/api/task-search", dependencies=[admin])
+    def task_search(
+        page: int = Query(1, ge=1, le=1000000),
+        page_size: int = Query(25, ge=1, le=100),
+        repository_id: int | None = Query(None, gt=0),
+        status: Literal["queued", "running", "complete", "partial", "failed", "skipped"]
+        | None = None,
+        target_branch: str | None = Query(None, max_length=200),
+        mr_iid: int | None = Query(None, gt=0),
+        sha: str | None = Query(None, pattern=r"^[0-9a-fA-F]{4,40}$"),
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> dict[str, Any]:
+        """时间按 UTC 比较；无时区输入默认 UTC，非法范围明确拒绝。"""
+
+        def utc(value: datetime | None) -> str | None:
+            if value is None:
+                return None
+            return value.replace(tzinfo=value.tzinfo or UTC).astimezone(
+                UTC
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
+        start, end = utc(since), utc(until)
+        if start and end and start > end:
+            raise HTTPException(422, "起始时间不能晚于结束时间")
+        return search_jobs(store, {
+            "repository_id": repository_id, "status": status, "target_branch": target_branch,
+            "mr_iid": mr_iid, "sha": sha.lower() if sha else None, "since": start, "until": end,
+        }, page, page_size)
+
+    @app.get("/api/jobs/{job_id}/report", dependencies=[admin])
+    def download_report(job_id: int) -> Response:
+        """下载白名单报告；额外移除当前已知凭据，绝不返回原始 thinking。"""
+
+        job = store.get_job(job_id)
+        if job is None:
+            raise HTTPException(404, "任务不存在")
+        content = json.dumps(report_projection(job), ensure_ascii=False, indent=2)
+        box = SecretBox(settings.master_key)
+        secret_values = [settings.master_key, settings.admin_token]
+        repository = store.get_repository(job["repository_id"]) or {}
+        target = store.get_notification_target(repository.get("feishu_target_id", 0)) or {}
+        for row, keys in (
+            (repository, ("gitlab_token_ciphertext", "webhook_secret", "feishu_webhook")),
+            (target, ("webhook_ciphertext", "signing_secret_ciphertext")),
+            *((profile, ("api_key_ciphertext",)) for profile in store.list_model_profiles()),
+        ):
+            for key in keys:
+                if row.get(key):
+                    try:
+                        secret_values.append(box.decrypt(row[key]))
+                    except InvalidToken:
+                        pass  # 已失效密文不会作为明文出现在报告中。
+        for secret in sorted(filter(None, secret_values), key=len, reverse=True):
+            content = content.replace(json.dumps(secret, ensure_ascii=False)[1:-1], "[REDACTED]")
+        return Response(content, media_type="application/json", headers={
+            "Content-Disposition": f'attachment; filename="review-{job_id}.json"',
+            "Cache-Control": "no-store",
+        })

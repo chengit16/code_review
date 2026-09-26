@@ -22,6 +22,7 @@ from starlette.staticfiles import StaticFiles
 
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.gitlab import project_web_url
+from ocr_manager.operations_api import register_operations
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.webhook import parse_merge_event, verify_webhook
@@ -367,6 +368,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="管理口令无效")
 
     admin = Depends(require_admin)
+    register_operations(app, store, config, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

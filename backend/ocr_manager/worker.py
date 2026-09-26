@@ -27,6 +27,7 @@ from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
+from ocr_manager.tasks import set_job_stage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -217,6 +218,7 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
 def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
     """在隔离目录评审指定 SHA，保存失败诊断后继续处理其他任务。"""
 
+    set_job_stage(store, job["id"], "configuration")
     repository = store.get_repository(job["repository_id"])
     if repository is None:
         store.finish_job(job["id"], "failed", None, None, "仓库配置已删除")
@@ -235,6 +237,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
     checkout = run_dir / "checkout"
     git: GitRepository | None = None
     try:
+        set_job_stage(store, job["id"], "git")
         if repository["gitlab_token_ciphertext"]:
             repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
                 repository["gitlab_token_ciphertext"]
@@ -244,10 +247,15 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         if not git.is_on_target(job["commit_sha"]):
             raise ValueError("待评审提交不再属于目标分支")
         git.checkout(job["commit_sha"], checkout)
+        with store.connection() as db:
+            db.execute("UPDATE review_jobs SET changed_files=? WHERE id=?",
+                       (json.dumps(git.changed_files(job["commit_sha"])), job["id"]))
         model_settings, _ = review_settings(store, settings)
+        set_job_stage(store, job["id"], "ocr_configuration")
         status, result = run_review(
             model_settings, checkout, run_dir, job["commit_sha"],
             store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
+            lambda stage: set_job_stage(store, job["id"], stage),
         )
         store.finish_job(job["id"], status, str(run_dir / "result.json"), result, None)
     except Exception as error:

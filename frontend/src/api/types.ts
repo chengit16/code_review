@@ -173,6 +173,17 @@ export interface ReviewJob {
   attempts: number;
   created_at: string;
   finished_at: string | null;
+  target_branch?: string;
+  repository_name?: string;
+  failure_stage?: string | null;
+}
+
+/** 服务端筛选后的任务总量与单页结果，不受旧版最近 200 条限制。 */
+export interface TaskPage {
+  items: ReviewJob[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 /** OCR 发现；行号为 0 时代表文件级问题。 */
@@ -220,12 +231,14 @@ export interface ReviewJobDetail extends ReviewJob {
     message?: string;
   } | null;
   result_path: string | null;
+  changed_files?: string | null;
   attempt_history: Array<{
     id: number;
     attempt_number: number;
     status: string;
     error: string | null;
     finished_at: string;
+    failure_stage?: string | null;
   }>;
   delivery: {
     id: number;

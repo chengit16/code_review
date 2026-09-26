@@ -10,7 +10,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 14
+from ocr_manager.operation_migrations import TASK_MIGRATION
+
+SCHEMA_VERSION = 15
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -270,6 +272,7 @@ class Store:
                 (12, SCHEMA_V12),
                 (13, SCHEMA_V13),
                 (14, SCHEMA_V14),
+                (15, TASK_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -837,8 +840,9 @@ class Store:
                     db.execute(
                         """INSERT OR IGNORE INTO review_jobs
                         (repository_id, event_id, mr_iid, commit_sha, ordinal,
-                         config_hash, rule_digest)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                         config_hash, rule_digest, target_branch)
+                        VALUES (?, ?, ?, ?, ?, ?, ?,
+                          (SELECT target_branch FROM repositories WHERE id=?))""",
                         (
                             event["repository_id"],
                             event_id,
@@ -847,6 +851,7 @@ class Store:
                             ordinal,
                             snapshot_hash,
                             rule_digest,
+                            event["repository_id"],
                         ),
                     )
             db.execute(
@@ -1000,7 +1005,9 @@ class Store:
             ).fetchone()
             if row:
                 db.execute(
-                    "UPDATE review_jobs SET status='running', attempts=attempts+1 WHERE id=?",
+                    """UPDATE review_jobs SET status='running', attempts=attempts+1,
+                    started_at=CURRENT_TIMESTAMP, finished_at=NULL,
+                    failure_stage='configuration', error=NULL WHERE id=?""",
                     (row["id"],),
                 )
             return dict(row) if row else None
@@ -1052,19 +1059,23 @@ class Store:
         )
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts FROM review_jobs WHERE id=?", (job_id,)
+                "SELECT attempts, retry_start_attempts, failure_stage FROM review_jobs WHERE id=?",
+                (job_id,),
             ).fetchone()
             if job is None:
                 # 项目删除会级联移除任务，在途 OCR 完成后无需恢复已删除的业务记录。
                 return
             db.execute(
                 """UPDATE review_jobs SET status=?, result_path=?, result_json=?, error=?,
-                finished_at=CURRENT_TIMESTAMP WHERE id=?""",
+                finished_at=CURRENT_TIMESTAMP,
+                failure_stage=CASE WHEN ? IN ('complete','skipped') THEN NULL
+                  ELSE failure_stage END WHERE id=?""",
                 (
                     status,
                     result_path,
                     json.dumps(projection, ensure_ascii=False) if projection is not None else None,
                     error,
+                    status,
                     job_id,
                 ),
             )
@@ -1073,8 +1084,10 @@ class Store:
             )
             db.execute(
                 """INSERT INTO review_attempts
-                (job_id, attempt_number, status, result_path, error) VALUES (?, ?, ?, ?, ?)""",
-                (job_id, job["attempts"], status, result_path, error),
+                (job_id, attempt_number, status, result_path, error, failure_stage)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (job_id, job["attempts"], status, result_path, error,
+                 job["failure_stage"] if status in {"failed", "partial"} else None),
             )
 
     def defer_job(self, job_id: int, error: str) -> None:
@@ -1082,7 +1095,8 @@ class Store:
 
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts FROM review_jobs WHERE id=?", (job_id,)
+                "SELECT attempts, retry_start_attempts, failure_stage FROM review_jobs WHERE id=?",
+                (job_id,),
             ).fetchone()
             if job is None:
                 return
@@ -1098,8 +1112,9 @@ class Store:
             )
             db.execute(
                 """INSERT INTO review_attempts
-                (job_id, attempt_number, status, error) VALUES (?, ?, 'failed', ?)""",
-                (job_id, attempts, error[:500]),
+                (job_id, attempt_number, status, error, failure_stage)
+                VALUES (?, ?, 'failed', ?, ?)""",
+                (job_id, attempts, error[:500], job["failure_stage"]),
             )
             if final:
                 db.execute(
@@ -1194,8 +1209,8 @@ class Store:
                 cursor = db.execute(
                     """INSERT OR IGNORE INTO review_jobs
                     (repository_id, event_id, mr_iid, commit_sha, ordinal,
-                     config_hash, rule_digest)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                     config_hash, rule_digest, target_branch)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         old["repository_id"],
                         old["event_id"],
@@ -1204,12 +1219,14 @@ class Store:
                         old["ordinal"],
                         config_hash,
                         old["rule_digest"],
+                        old["target_branch"],
                     ),
                 )
                 return cursor.lastrowid if cursor.rowcount else None
             cursor = db.execute(
                 """UPDATE review_jobs SET status='queued', error=NULL,
                 retry_start_attempts=attempts,
+                finished_at=NULL, failure_stage=NULL,
                 next_run_at=CURRENT_TIMESTAMP WHERE id=?
                 AND status IN ('complete','partial','failed','skipped')""",
                 (job_id,),

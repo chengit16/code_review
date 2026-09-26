@@ -8,6 +8,7 @@ import re
 import signal
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -267,6 +268,7 @@ def check_model_connection(settings: Settings, run_dir: Path) -> None:
 def run_review(
     settings: Settings, checkout: Path, run_dir: Path, sha: str,
     global_rule: str | None = None, project_rule: str | None = None,
+    on_stage: Callable[[str], None] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """保存 preview、JSON 与诊断输出；全程不经过 shell。"""
 
@@ -305,6 +307,8 @@ def run_review(
         ("preview", [*base, "--preview", "--output", str(run_dir / "preview.json")]),
         ("result", [*base, "--audience", "agent", "--output", str(run_dir / "result.json")]),
     ):
+        if on_stage:
+            on_stage("preview" if name == "preview" else "review")
         # preview 与正式评审共用一个截止时间，避免两步各占用整段运行预算。
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -330,6 +334,8 @@ def run_review(
                 )
                 return "skipped", payload
         if name == "result":
+            if on_stage:
+                on_stage("validation")
             path = run_dir / "result.json"
             if not path.exists():
                 raise RuntimeError("OCR 未生成 JSON 结果")

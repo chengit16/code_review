@@ -183,6 +183,20 @@ class GitRepository:
         target.parent.mkdir(parents=True, exist_ok=True)
         self._git("worktree", "add", "--detach", str(target), sha)
 
+    def changed_files(self, sha: str) -> list[dict[str, str | int | None]]:
+        """仅取路径及增删行数；合并提交以第一父提交为基准，二进制数量为空。"""
+
+        output = self._git("show", "--format=", "--numstat", "--no-renames",
+                           "--first-parent", "-z", self._commit_sha(sha), "--")
+        files: list[dict[str, str | int | None]] = []
+        for entry in output.split("\0"):
+            if not entry:
+                continue
+            added, deleted, path = entry.split("\t", 2)
+            files.append({"path": path, "added": int(added) if added.isdigit() else None,
+                          "deleted": int(deleted) if deleted.isdigit() else None})
+        return files
+
     def remove_checkout(self, target: Path) -> None:
         """评审结束后释放 worktree，原始结果工件仍保留。"""
 

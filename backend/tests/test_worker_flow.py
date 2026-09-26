@@ -90,6 +90,9 @@ def test_merged_mr_runs_review_and_notification(
         def checkout(self, _sha: str, target: Path) -> None:
             target.mkdir(parents=True)
 
+        def changed_files(self, _sha: str) -> list[dict[str, str | int | None]]:
+            return [{"path": "app.py", "added": 2, "deleted": 1}]
+
         def remove_checkout(self, _target: Path) -> None:
             pass
 
