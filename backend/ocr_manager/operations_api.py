@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -11,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Query
 from starlette.responses import Response
 
 from ocr_manager.config import Settings
+from ocr_manager.config_history import list_config_history, restore_config
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import report_projection, search_jobs
@@ -18,6 +20,35 @@ from ocr_manager.tasks import report_projection, search_jobs
 
 def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
+
+    @app.get("/api/config-history/{kind}", dependencies=[admin])
+    def config_history(
+        kind: Literal["repository", "notification_target", "model_profile"],
+        object_id: int | None = Query(None, gt=0),
+    ) -> list[dict[str, Any]]:
+        """查看对象配置差异；共享口令只能标识共享管理会话。"""
+
+        return list_config_history(store, kind, object_id)
+
+    @app.post("/api/config-history/{kind}/{object_id}/{revision_id}/restore", dependencies=[admin])
+    def restore_configuration(
+        kind: Literal["repository", "notification_target", "model_profile"],
+        object_id: int, revision_id: int,
+    ) -> dict[str, str]:
+        """恢复历史内容；密文失效或当前队列不允许恢复时返回冲突。"""
+
+        try:
+            if not restore_config(
+                store, SecretBox(settings.master_key), kind, object_id, revision_id,
+            ):
+                raise HTTPException(404, "配置对象已删除")
+        except InvalidToken as error:
+            raise HTTPException(409, "历史凭据无法解密") from error
+        except (ValueError, sqlite3.IntegrityError) as error:
+            raise HTTPException(
+                409, "版本恢复被拒绝，请核对关联配置、项目身份及待处理队列",
+            ) from error
+        return {"status": "restored"}
 
     @app.get("/api/task-search", dependencies=[admin])
     def task_search(

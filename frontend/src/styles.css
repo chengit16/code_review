@@ -38,6 +38,8 @@ a { color: inherit; text-decoration: none; }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; font-size: 13px; }
 .icon-button:disabled { opacity: .5; cursor: not-allowed; }
 td.file-path { white-space: normal; overflow-wrap: anywhere; }
+.revision-changes { white-space: normal; min-width: 180px; max-width: 500px; overflow-wrap: anywhere; }
+.revision-changes summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 @media (max-width: 1100px) { .task-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .task-filters { grid-template-columns: minmax(0, 1fr); } .page-actions { flex-wrap: wrap; } }
 .page { max-width: 1500px; min-height: 100dvh; margin: 0 auto; padding: 32px 38px 72px; }

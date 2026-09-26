@@ -1,11 +1,12 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Activity, Bot, GitMerge, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { AccessScreen } from "./AccessScreen";
+import { ConfigHistoryPage } from "../pages/ConfigHistoryPage";
 import { EventsPage } from "../pages/EventsPage";
 import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
@@ -28,6 +29,7 @@ const navigation = [
     { to: "/feishu", label: "飞书配置", icon: MessageSquare },
     { to: "/settings", label: "Agent 模型", icon: Bot },
     { to: "/review-rules", label: "审核规则", icon: ListChecks },
+    { to: "/config-history", label: "配置历史", icon: History },
   ] },
 ];
 
@@ -108,6 +110,7 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
             <Route path="/jobs/:id" element={<JobDetailPage token={token} />} />
             <Route path="/settings" element={<SettingsPage token={token} />} />
             <Route path="/review-rules" element={<ReviewRulesPage token={token} />} />
+            <Route path="/config-history" element={<ConfigHistoryPage token={token} />} />
           </Routes>
         </main>
     </div>

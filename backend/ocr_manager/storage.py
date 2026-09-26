@@ -10,9 +10,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import TASK_MIGRATION
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -273,6 +274,7 @@ class Store:
                 (13, SCHEMA_V13),
                 (14, SCHEMA_V14),
                 (15, TASK_MIGRATION),
+                (16, history_migration()),
             )
             for target_version, script in migrations:
                 if version >= target_version:

@@ -342,7 +342,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 object_id = next(
                     (
                         params[name]
-                        for name in ("repository_id", "target_id", "event_id", "job_id")
+                        for name in (
+                            "repository_id", "target_id", "event_id", "job_id",
+                            "profile_id", "object_id",
+                        )
                         if name in params
                     ),
                     None,
