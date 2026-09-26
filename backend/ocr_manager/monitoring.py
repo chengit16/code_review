@@ -38,6 +38,7 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
         events = [dict(row) for row in db.execute(
             "SELECT status, COUNT(*) AS count FROM merge_events GROUP BY status"
         )]
+        orphan_count = db.execute("SELECT COUNT(*) FROM orphan_artifacts").fetchone()[0]
     disk = shutil.disk_usage(data_dir)
     snapshots = sorted(backup_dir.glob("app-*.db"), key=lambda path: path.stat().st_mtime,
                        reverse=True) if backup_dir.is_dir() else []
@@ -74,7 +75,7 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
             "deliveries": delivery_map, "retry_count": retries,
             "average_review_seconds": round(durations["average_seconds"] or 0),
             "review_count_7d": durations["count"], "oldest_pending_at": oldest,
-            "disk_free_bytes": disk.free, "backup": {
+            "disk_free_bytes": disk.free, "orphan_artifacts": orphan_count, "backup": {
                 "last_at": datetime.fromtimestamp(latest.stat().st_mtime, UTC).isoformat()
                 if latest else None, "healthy": backup_ok, "age_seconds": age,
             }, "alerts": alerts}
@@ -126,3 +127,25 @@ def prune_artifacts(store: Store, data_dir: Path, days: int) -> dict[str, int]:
                 db.execute("UPDATE review_jobs SET result_path=NULL WHERE id=?", (job_id,))
             removed.append(size)
     return {"count": len(removed), "bytes": sum(removed)}
+
+
+def prune_orphan_artifacts(store: Store, data_dir: Path) -> dict[str, int]:
+    """项目删除后逐个取得任务锁清理；运行中任务留待下一次扫描。"""
+
+    with store.connection() as db:
+        ids = [row[0] for row in db.execute("SELECT job_id FROM orphan_artifacts ORDER BY job_id")]
+    removed = 0
+    for job_id in ids:
+        with artifact_lock(data_dir, job_id) as acquired:
+            if not acquired:
+                continue
+            with store.connection() as db:
+                if db.execute("SELECT 1 FROM review_jobs WHERE id=?", (job_id,)).fetchone():
+                    continue
+            path = data_dir / "runs" / str(job_id)
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+                removed += 1
+            with store.connection() as db:
+                db.execute("DELETE FROM orphan_artifacts WHERE job_id=?", (job_id,))
+    return {"count": removed}

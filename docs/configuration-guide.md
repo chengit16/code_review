@@ -59,3 +59,12 @@ GitLab 测试投递后，在 **GitLab 事件** 页下方查看“Webhook 投递�
 开发模式 `OCR_APP_DEV_MODE=1` 仅适用于可信本机；正式环境必须设置 `OCR_APP_ADMIN_TOKEN`，并限制管理页网络访问。`OCR_APP_MASTER_KEY`、数据库和备份都应按敏感文件保护。不要把 GitLab Token、Webhook Secret、飞书 URL、签名密钥或模型 API Key 写入 Git、截图、Issue 或日志。
 
 飞书手册的 `service.env`、`projects.yaml` 和 `CODEX_*` 首次导入命令属于另一套实现；本项目当前通过管理台和 `OCR_APP_*` 进程配置接入，不会读取这些文件。运行服务和 Worker 的步骤见[部署说明](./deployment.md)。
+## 6. 备份恢复与保留
+
+每日备份将 `app.db` 与包含主密钥的 `private.json` 成对保存，默认保留 90 天且至少保留最近两份。可以在备份命令中通过 `--retain-days 180` 调整期限。恢复命令仅写入一个**不存在的新目录**，不会覆盖正在运行的服务：
+
+```bash
+.venv/bin/python -m ocr_manager.backup --restore-from /path/to/backups/app-YYYYMMDD-HHMMSS.db --restore-to /path/to/restore-data
+```
+
+先核对新目录中的数据库与 `private.json`，停止 API、Worker 和 monitor 后，再将服务配置指向恢复目录。恢复目录与私有配置文件须仅当前用户可读。已删除项目的工件目录由 monitor 在工件锁释放后自动清理，也可以在“运行监控”页面手动清理。

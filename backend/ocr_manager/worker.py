@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 from cryptography.fernet import InvalidToken
 
+from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_history import save_snapshot
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.checks import run_connection_check
@@ -417,7 +418,8 @@ def run_once(
         return True, last_repository_id
     job = store.next_job(last_repository_id)
     if job:
-        review_job(store, settings, job)
+        with artifact_lock(settings.data_dir, job["id"], blocking=True):
+            review_job(store, settings, job)
         return True, int(job["repository_id"])
     return False, last_repository_id
 

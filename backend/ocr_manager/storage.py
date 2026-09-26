@@ -15,11 +15,12 @@ from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
+from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -288,6 +289,7 @@ class Store:
                 (21, ALERT_MIGRATION),
                 (22, LIMITS_MIGRATION),
                 (23, EVENT_SEARCH_MIGRATION),
+                (24, MAINTENANCE_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -700,6 +702,8 @@ class Store:
         """删除项目及其关联事件、评审、通知和连接测试记录。"""
 
         with self.connection() as db:
+            db.execute("""INSERT OR IGNORE INTO orphan_artifacts(job_id)
+                       SELECT id FROM review_jobs WHERE repository_id=?""", (repository_id,))
             db.execute(
                 """DELETE FROM review_feedback WHERE job_id IN
                 (SELECT id FROM review_jobs WHERE repository_id=?)""", (repository_id,)
@@ -950,15 +954,18 @@ class Store:
                 for ordinal, commit_sha in enumerate(commits):
                     # 每个提交可能携带不同版本的规则文件，事务内固化各自的评审配置。
                     snapshot_hash, rule_digest = snapshots[commit_sha]
+                    # 独立序列表永不随项目删除回退，工件路径不再被新任务复用。
+                    allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
                     db.execute(
                         """INSERT OR IGNORE INTO review_jobs
-                        (repository_id, event_id, mr_iid, commit_sha, ordinal,
+                        (id, repository_id, event_id, mr_iid, commit_sha, ordinal,
                          config_hash, rule_digest, target_branch, notification_min_severity)
-                        VALUES (?, ?, ?, ?, ?, ?, ?,
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?,
                           (SELECT target_branch FROM repositories WHERE id=?),
                           COALESCE((SELECT minimum_severity FROM project_policies
                             WHERE repository_id=?), 'medium'))""",
                         (
+                            allocated,
                             event["repository_id"],
                             event_id,
                             event["mr_iid"],
@@ -1378,14 +1385,16 @@ class Store:
             ):
                 return None
             if config_hash and config_hash != old["config_hash"]:
+                allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
                 cursor = db.execute(
                     """INSERT OR IGNORE INTO review_jobs
-                    (repository_id, event_id, mr_iid, commit_sha, ordinal,
+                    (id, repository_id, event_id, mr_iid, commit_sha, ordinal,
                      config_hash, rule_digest, target_branch, notification_min_severity)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                       (SELECT minimum_severity FROM project_policies WHERE repository_id=?),
                       'medium'))""",
                     (
+                        allocated,
                         old["repository_id"],
                         old["event_id"],
                         old["mr_iid"],

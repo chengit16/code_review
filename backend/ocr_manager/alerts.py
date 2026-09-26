@@ -12,7 +12,7 @@ from cryptography.fernet import InvalidToken
 
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.feishu import FeishuDeliveryError, post_message
-from ocr_manager.monitoring import operations_snapshot
+from ocr_manager.monitoring import operations_snapshot, prune_orphan_artifacts
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 
@@ -111,6 +111,7 @@ def main() -> None:
         with store.connection() as db:
             db.execute("UPDATE alert_deliveries SET status='pending' WHERE status='sending'")
         while True:
+            prune_orphan_artifacts(store, settings.data_dir)
             with store.connection() as db:
                 config = dict(db.execute("SELECT * FROM alert_config WHERE id=1").fetchone())
             if config["enabled"]:

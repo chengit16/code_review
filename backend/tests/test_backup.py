@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from ocr_manager.backup import backup_database, main
+from ocr_manager.backup import backup_database, main, prune_backups, restore_backup
 from ocr_manager.storage import SCHEMA_VERSION, Store
 
 
@@ -84,3 +84,28 @@ def test_backup_rejects_insecure_private_config_before_database_copy(
     with pytest.raises(RuntimeError, match="0600"):
         main()
     assert not output_dir.exists()
+
+
+def test_restore_to_new_directory_and_retention(tmp_path: Path) -> None:
+    """配对恢复可再次迁移，历史副本保留最近两份且不覆盖现有目录。"""
+
+    source = tmp_path / "app.db"
+    Store(source).migrate()
+    backups = tmp_path / "backups"
+    snapshots = []
+    for _ in range(3):
+        snapshot = backup_database(source, backups)
+        private = snapshot.with_suffix(".private.json")
+        private.write_text('{"OCR_APP_MASTER_KEY":"synthetic-key"}', encoding="utf-8")
+        os.chmod(private, 0o600)
+        snapshots.append(snapshot)
+    restored = restore_backup(snapshots[-1], tmp_path / "restored")
+    assert restored.joinpath("app.db").is_file()
+    assert restored.joinpath("private.json").stat().st_mode & 0o777 == 0o600
+    with pytest.raises(FileExistsError):
+        restore_backup(snapshots[-1], restored)
+    old = 100 * 86400
+    os.utime(snapshots[0], (old, old))
+    os.utime(snapshots[0].with_suffix(".private.json"), (old, old))
+    assert prune_backups(backups, 7) == 1
+    assert not snapshots[0].exists()

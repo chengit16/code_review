@@ -14,7 +14,12 @@ from starlette.responses import Response
 from ocr_manager.attempt_history import attempt_job, compare_results
 from ocr_manager.config import Settings
 from ocr_manager.config_history import list_config_history, restore_config
-from ocr_manager.monitoring import eligible_artifacts, operations_snapshot, prune_artifacts
+from ocr_manager.monitoring import (
+    eligible_artifacts,
+    operations_snapshot,
+    prune_artifacts,
+    prune_orphan_artifacts,
+)
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import report_projection, search_jobs
@@ -48,6 +53,12 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         """人工确认后清理；每日备份及数据库历史不由此接口删除。"""
 
         return prune_artifacts(store, settings.data_dir, days)
+
+    @app.post("/api/maintenance/orphans/prune", dependencies=[admin])
+    def prune_orphans() -> dict[str, int]:
+        """只移除已删除项目的历史目录，当前任务和符号链接都不触碰。"""
+
+        return prune_orphan_artifacts(store, settings.data_dir)
 
     @app.get("/api/repository-readiness", dependencies=[admin])
     def repository_readiness() -> list[dict[str, Any]]:
