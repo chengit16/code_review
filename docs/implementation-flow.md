@@ -6,7 +6,7 @@
 
 ## 1. 目标与边界
 
-系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并或默认分支快进 Push 后，通过项目 webhook 通知平台；平台确认提交范围，按提交 SHA 调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面分别管理 Agent 模型、项目、GitLab Webhook、飞书配置和评审任务。第一版不定时轮询 Git 仓库。
+系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并或默认分支快进 Push 后，通过项目 webhook 通知平台；平台确认提交范围，按提交 SHA 调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面管理 Agent 模型、项目及其 GitLab Webhook、飞书配置和评审任务。第一版不定时轮询 Git 仓库。
 
 第一版按以下约束实施：
 
@@ -94,7 +94,7 @@ webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-K
 
 1. 管理员填写项目数字 ID、命名空间、仓库名称、无凭据 HTTPS Clone URL、目标分支、项目访问令牌、MR 与默认分支 Push 开关，并可选择已保存的飞书通知配置。新项目使用每仓库独立 GitLab Token；部署环境不再提供全局项目令牌。
 2. 后端验证 Clone URL 与 GitLab 实例同源、命名空间一致并加密保存令牌。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。HTTPS Git 通过临时 `GIT_ASKPASS` 使用令牌；命令参数和 Clone URL 不包含凭据。
-3. 独立的 GitLab Webhook 页面展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；GitLab 事件页提供按 MR IID 手动补触发入口。
+3. 项目配置页展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；GitLab 事件页提供按 MR IID 手动补触发入口。
 4. 管理员可以对某个已合并 MR 手动试评审，核对提交范围、模型结果与飞书卡片。
 
 每个仓库的规则优先放在该仓库版本化的 `.opencodereview/rule.json` 中。页面展示规则文件是否存在及最近命中的预览结果；第一版不在页面中提供复杂的规则编辑器。
@@ -183,8 +183,7 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 | 页面 | 必要信息 | 主要操作 |
 | --- | --- | --- |
 | 概览 | 已接入仓库数、事件与任务积压、各仓库排队数、最近投递与评审失败、模型和飞书连接状态 | 进入异常事件、任务或仓库。 |
-| 项目配置 | GitLab 项目 ID、命名空间、Clone URL、目标分支、飞书关联、启停状态 | 添加、编辑、删除、测试 Git 和 GitLab API。 |
-| GitLab Webhook | 统一回调 URL、项目专属 Secret、事件开关、最近验证时间 | 查看和复制 Secret、轮换令牌、验证测试事件。 |
+| 项目配置 | GitLab 项目 ID、命名空间、Clone URL、目标分支、飞书关联、Webhook 回调与 Secret、事件开关、启停状态 | 添加、编辑、删除、测试 Git 和 GitLab API，查看或轮换 Webhook Secret。 |
 | 飞书配置 | 通道名称、签名状态和关联项目 | 添加、编辑、删除并发送测试消息。 |
 | Agent 模型 | OCR provider、模型、Base URL、启用状态 | 添加、编辑、启用、删除和测试模型。 |
 | 合并事件 | MR、合并方式、接收时间、处理状态、关联任务 | 筛选、查看失败原因、按 MR 补触发。 |
@@ -193,7 +192,7 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 
 API 由管理服务提供，前端只访问本服务。配置资源使用 `/api/repositories`、`/api/model-profiles`、`/api/notification-targets`，业务记录使用 `/api/events` 和 `/api/jobs`；新项目的 GitLab 回调统一使用 `POST /api/webhooks/gitlab`。执行型管理接口提供按 MR 补触发、手动重审、重发通知和连接测试。所有修改配置及触发任务的动作写入审计日志，记录时间、动作、对象和结果，不记录密钥。
 
-第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。模型 API key、GitLab Token 与飞书 Hook 只单向更新；Webhook Secret 可由管理员在独立 Webhook 页主动查看和复制，列表接口不批量返回明文。
+第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。模型 API key、GitLab Token 与飞书 Hook 只单向更新；Webhook Secret 可由管理员在项目配置页主动查看和复制，列表接口不批量返回明文。
 
 ## 6. 失败恢复与运维
 

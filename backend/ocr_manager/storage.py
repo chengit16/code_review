@@ -329,11 +329,15 @@ class Store:
             return [dict(row) for row in db.execute("SELECT * FROM repositories ORDER BY id")]
 
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
-        """仅允许在没有业务历史时纠正项目 ID，避免旧事件指向另一项目。"""
+        """项目身份有历史后冻结；来源变化必须等待当前事件和评审结束。"""
 
         allowed = {
             "name",
+            "gitlab_url",
             "project_id",
+            "remote_url",
+            "path_with_namespace",
+            "target_branch",
             "enabled",
             "auth_kind",
             "webhook_secret",
@@ -348,20 +352,47 @@ class Store:
             raise ValueError("仓库更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
         with self.connection() as db:
-            if "project_id" in values:
-                # 先取得写锁，防止检查业务历史与更新 ID 之间插入 Webhook 事件。
+            source_fields = {
+                "gitlab_url",
+                "project_id",
+                "remote_url",
+                "path_with_namespace",
+                "target_branch",
+            }
+            if source_fields & values.keys():
+                # 先取得写锁，防止检查队列状态与更新来源之间插入 Webhook 事件。
                 db.execute("BEGIN IMMEDIATE")
                 current = db.execute(
-                    "SELECT project_id, last_webhook_at FROM repositories WHERE id=?",
+                    """SELECT gitlab_url, project_id, remote_url, path_with_namespace,
+                    target_branch, last_webhook_at FROM repositories WHERE id=?""",
                     (repository_id,),
                 ).fetchone()
-                if current and values["project_id"] != current["project_id"]:
-                    has_event = db.execute(
-                        "SELECT 1 FROM merge_events WHERE repository_id=? LIMIT 1",
-                        (repository_id,),
-                    ).fetchone()
-                    if current["last_webhook_at"] or has_event:
-                        raise ValueError("已有 Webhook 投递或评审事件，不能修改项目 ID")
+                if current:
+                    changed = {
+                        key for key in source_fields & values.keys() if values[key] != current[key]
+                    }
+                    if changed & {"gitlab_url", "project_id"}:
+                        has_event = db.execute(
+                            "SELECT 1 FROM merge_events WHERE repository_id=? LIMIT 1",
+                            (repository_id,),
+                        ).fetchone()
+                        if current["last_webhook_at"] or has_event:
+                            raise ValueError(
+                                "已有 Webhook 投递或评审事件，不能修改 GitLab 项目身份"
+                            )
+                    if changed:
+                        active_event = db.execute(
+                            """SELECT 1 FROM merge_events WHERE repository_id=?
+                            AND status IN ('queued','running') LIMIT 1""",
+                            (repository_id,),
+                        ).fetchone()
+                        active_job = db.execute(
+                            """SELECT 1 FROM review_jobs WHERE repository_id=?
+                            AND status IN ('queued','running') LIMIT 1""",
+                            (repository_id,),
+                        ).fetchone()
+                        if active_event or active_job:
+                            raise ValueError("有待处理事件或评审任务，请完成后再修改仓库来源或分支")
             cursor = db.execute(
                 f"UPDATE repositories SET {assignments} WHERE id=?",
                 (*values.values(), repository_id),

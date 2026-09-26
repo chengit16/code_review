@@ -51,10 +51,14 @@ class RepositoryCreate(BaseModel):
 
 
 class RepositoryUpdate(BaseModel):
-    """接入设置；项目数字 ID 只允许在业务投递前纠正，remote 保持不可变。"""
+    """接入设置；项目身份只允许在业务投递前纠正。"""
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    gitlab_url: str | None = None
     project_id: int | None = Field(default=None, gt=0)
+    remote_url: str | None = None
+    path_with_namespace: str | None = None
+    target_branch: str | None = Field(default=None, min_length=1, max_length=200)
     enabled: bool | None = None
     auth_kind: Literal["signing", "secret"] | None = None
     webhook_token: str | None = Field(default=None, min_length=16)
@@ -170,6 +174,49 @@ def validate_remote(gitlab_url: str, remote_url: str) -> bool:
         and not remote.query
         and not remote.fragment
     )
+
+
+def validate_repository_source(
+    gitlab_url: str,
+    remote_url: str,
+    path_with_namespace: str | None,
+    target_branch: str,
+    has_gitlab_token: bool,
+) -> tuple[str, str]:
+    """新增与修改共用来源校验，避免编辑绕过同源、分支和凭据约束。"""
+
+    gitlab = urlparse(gitlab_url)
+    if (
+        gitlab.scheme != "https"
+        or not gitlab.hostname
+        or gitlab.username
+        or gitlab.password
+        or gitlab.query
+        or gitlab.fragment
+    ):
+        raise HTTPException(status_code=422, detail="GitLab 地址必须是 HTTPS 主机")
+    if not validate_remote(gitlab_url, remote_url):
+        raise HTTPException(
+            status_code=422, detail="Git 地址必须是同一 GitLab 主机的无凭据 HTTPS 或 SSH 地址"
+        )
+    remote_path = (
+        urlparse(remote_url).path.lstrip("/")
+        if remote_url.startswith("https://")
+        else remote_url.split(":", 1)[-1].lstrip("/")
+    ).removesuffix(".git")
+    if path_with_namespace and path_with_namespace != remote_path:
+        raise HTTPException(status_code=422, detail="仓库路径与 Clone URL 不一致")
+    if remote_url.startswith("https://") and not has_gitlab_token:
+        raise HTTPException(status_code=422, detail="HTTPS 仓库必须填写 GitLab Token")
+    if (
+        not re.fullmatch(r"[a-zA-Z0-9._/-]+", target_branch)
+        or target_branch.startswith(("-", "/", "."))
+        or target_branch.endswith(("/", "."))
+        or ".." in target_branch
+        or "//" in target_branch
+    ):
+        raise HTTPException(status_code=422, detail="目标分支名称无效")
+    return gitlab_url.rstrip("/"), remote_path
 
 
 def validate_feishu_webhook(url: str) -> bool:
@@ -409,38 +456,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def create_repository(payload: RepositoryCreate) -> dict[str, Any]:
         """接入单个 GitLab 项目并加密 webhook 与飞书凭据。"""
 
-        gitlab = urlparse(payload.gitlab_url)
-        if (
-            gitlab.scheme != "https"
-            or not gitlab.hostname
-            or gitlab.username
-            or gitlab.password
-            or gitlab.query
-            or gitlab.fragment
-        ):
-            raise HTTPException(status_code=422, detail="GitLab 地址必须是 HTTPS 主机")
-        if not validate_remote(payload.gitlab_url, payload.remote_url):
-            raise HTTPException(
-                status_code=422, detail="Git 地址必须是同一 GitLab 主机的无凭据 HTTPS 或 SSH 地址"
-            )
-        remote_path = (
-            urlparse(payload.remote_url).path.lstrip("/")
-            if payload.remote_url.startswith("https://")
-            else payload.remote_url.split(":", 1)[-1].lstrip("/")
-        ).removesuffix(".git")
-        if payload.path_with_namespace and payload.path_with_namespace != remote_path:
-            raise HTTPException(status_code=422, detail="仓库路径与 Clone URL 不一致")
-        if payload.remote_url.startswith("https://") and not payload.gitlab_token:
-            raise HTTPException(status_code=422, detail="HTTPS 仓库必须填写 GitLab Token")
-        branch = payload.target_branch
-        if (
-            not re.fullmatch(r"[a-zA-Z0-9._/-]+", branch)
-            or branch.startswith(("-", "/", "."))
-            or branch.endswith(("/", "."))
-            or ".." in branch
-            or "//" in branch
-        ):
-            raise HTTPException(status_code=422, detail="目标分支名称无效")
+        gitlab_url, remote_path = validate_repository_source(
+            payload.gitlab_url,
+            payload.remote_url,
+            payload.path_with_namespace,
+            payload.target_branch,
+            bool(payload.gitlab_token),
+        )
         if payload.feishu_webhook and not validate_feishu_webhook(payload.feishu_webhook):
             raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
         if (
@@ -457,7 +479,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Secret token 由服务端生成，避免浏览器随机数兼容差异和弱口令。
         webhook_token = payload.webhook_token or token_urlsafe(32)
         values = payload.model_dump(exclude={"webhook_token", "gitlab_token"})
-        values["gitlab_url"] = payload.gitlab_url.rstrip("/")
+        values["gitlab_url"] = gitlab_url
         values["path_with_namespace"] = remote_path
         values["gitlab_token_ciphertext"] = (
             secrets.encrypt(payload.gitlab_token) if payload.gitlab_token else ""
@@ -476,7 +498,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.patch("/api/repositories/{repository_id}", dependencies=[admin])
     def update_repository(repository_id: int, payload: RepositoryUpdate) -> dict[str, Any]:
-        """暂停接收、维护 webhook 元数据或单向轮换项目凭据。"""
+        """校验修改后的仓库来源，并在保留业务历史的前提下更新接入设置。"""
 
         current = store.get_repository(repository_id)
         if current is None:
@@ -485,6 +507,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         gitlab_token = values.pop("gitlab_token", None)
         if gitlab_token:
             values["gitlab_token_ciphertext"] = secrets.encrypt(gitlab_token)
+        source_fields = {"gitlab_url", "remote_url", "path_with_namespace", "target_branch"}
+        if source_fields & payload.model_fields_set:
+            gitlab_url, remote_path = validate_repository_source(
+                values.get("gitlab_url", current["gitlab_url"]),
+                values.get("remote_url", current["remote_url"]),
+                values.get("path_with_namespace", current["path_with_namespace"]),
+                values.get("target_branch", current["target_branch"]),
+                bool(gitlab_token or current["gitlab_token_ciphertext"]),
+            )
+            if "gitlab_url" in values:
+                values["gitlab_url"] = gitlab_url
+            values["path_with_namespace"] = remote_path
         if "feishu_target_id" in payload.model_fields_set:
             values["feishu_target_id"] = payload.feishu_target_id
             values["feishu_webhook"] = ""
@@ -500,7 +534,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth_kind = values.get("auth_kind", current["auth_kind"])
         token = values.pop("webhook_token", None)
         if auth_kind != current["auth_kind"] and not token:
-            raise HTTPException(status_code=422, detail="切换鉴权方式时必须同时更新令牌")
+            if auth_kind == "signing":
+                raise HTTPException(status_code=422, detail="切换 Signing token 时必须填写新令牌")
+            # 从 Signing 切回 Secret 时由服务端生成，避免要求管理员自造密钥。
+            token = token_urlsafe(32)
         if token:
             if auth_kind == "signing" and not token.startswith("whsec_"):
                 raise HTTPException(status_code=422, detail="Signing token 格式无效")

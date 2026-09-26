@@ -1,9 +1,9 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, Webhook, X } from "lucide-react";
+import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { AccessScreen } from "./AccessScreen";
 import { EventsPage } from "../pages/EventsPage";
@@ -11,7 +11,6 @@ import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
-import { WebhooksPage } from "../pages/WebhooksPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
 import { apiRequest } from "../api/client";
@@ -25,7 +24,6 @@ const navigation = [
   ] },
   { heading: "接入配置", links: [
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
-    { to: "/webhooks", label: "GitLab Webhook", icon: Webhook },
     { to: "/feishu", label: "飞书配置", icon: MessageSquare },
     { to: "/settings", label: "Agent 模型", icon: Bot },
   ] },
@@ -101,7 +99,7 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
           <Routes>
             <Route path="/" element={<OverviewPage token={token} />} />
             <Route path="/repositories" element={<RepositoriesPage token={token} />} />
-            <Route path="/webhooks" element={<WebhooksPage token={token} />} />
+            <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
             <Route path="/feishu" element={<FeishuHooksPage token={token} />} />
             <Route path="/events" element={<EventsPage token={token} />} />
             <Route path="/jobs" element={<JobsPage token={token} />} />

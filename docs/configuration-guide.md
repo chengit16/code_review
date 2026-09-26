@@ -28,16 +28,16 @@
 | Clone URL | GitLab 的无用户名、密码和 Token 的 HTTPS 地址，例如 `https://gitlab.example.com/team/order-service.git`。 |
 | 目标分支 | GitLab 默认分支，例如 `main`。 |
 | GitLab Token | 上一步创建的项目或群组访问令牌。每仓库建议独立。 |
-| Webhook Secret | 保存仓库时由服务端自动生成，随后在 GitLab Webhook 页面查看。 |
+| Webhook Secret | 保存仓库时由服务端自动生成，随后在项目配置列表查看。 |
 | 飞书配置 | 选择第 2 步创建的通知通道。 |
 | Merge Request 审核 | 需要审查已合并 MR 时开启。 |
 | 默认分支 Push 审核 | 需要审查直接推送到默认分支的提交时开启。 |
 
-保存后立即加入运行时配置；飞书配置可暂不关联，之后在仓库编辑窗口关联。仓库编辑窗口提供 Git 和 GitLab API 连接测试。若项目数字 ID 录错，在收到合法 Webhook 或产生评审事件之前可直接编辑修正；已有业务历史时不能重新绑定项目。HTTPS Git 拉取通过临时 `GIT_ASKPASS` 读取项目令牌；令牌不写入 Clone URL、Git 命令参数或本地 Git 配置。旧数据库中的 SSH 项目可读取历史记录，但继续运行前需要在项目编辑窗口补录独立 GitLab Token；管理台新建项目只使用上述字段。
+保存后立即加入运行时配置；飞书配置可暂不关联，之后在仓库编辑窗口关联。编辑窗口预填仓库名称、GitLab 地址、数字 ID、仓库路径、Clone URL、目标分支、飞书关联和事件开关，并提供 Git 与 GitLab API 连接测试。GitLab Token 和 Webhook Token 不在编辑表单回填明文，前者可单向替换，后者可按需查看、复制或轮换。项目数字 ID 或 GitLab 地址录错时，可在收到合法 Webhook 或产生评审事件之前直接修正；有待处理事件或评审任务时，暂不允许修改仓库来源或分支。HTTPS Git 拉取通过临时 `GIT_ASKPASS` 读取项目令牌；令牌不写入 Clone URL、Git 命令参数或本地 Git 配置。旧数据库中的 SSH 项目可读取历史记录，但继续运行前需要在项目编辑窗口补录独立 GitLab Token；管理台新建项目只使用上述字段。
 
 ## 4. 配置 GitLab Webhook
 
-在 **GitLab Webhook** 页面复制统一回调地址和该仓库的 Webhook Secret。进入对应 GitLab 项目的 **Settings / Webhooks**：
+在 **项目配置** 页面复制统一回调地址，并从对应仓库行查看或复制 Webhook Secret。进入对应 GitLab 项目的 **Settings / Webhooks**：
 
 1. URL 填写管理台给出的 HTTPS 回调地址，路径为 `/api/webhooks/gitlab`。
 2. Secret token 填写该仓库的 Webhook Secret。列表默认遮罩，可按需查看和复制。重新生成后必须同步更新 GitLab。
@@ -48,7 +48,7 @@ GitLab 必须能访问回调地址。`127.0.0.1` 只适合本机开发，正式�
 
 ## 5. 验收与安全
 
-在 GitLab 项目的 Webhooks 页面发送测试事件，确认管理台的 GitLab Webhook 页面最近验证时间更新；随后合并测试 MR 或向默认分支推送测试提交。到 **GitLab 事件** 和 **评审任务** 查看逐提交状态，确认飞书群收到通知。当前 OCR 工作流不向 GitLab MR 写 note；MR 结果可在管理台和飞书查看，Push 结果只发送飞书通知。
+在 GitLab 项目的 Webhooks 页面发送测试事件，确认管理台的项目配置列表最近验证时间更新；随后合并测试 MR 或向默认分支推送测试提交。到 **GitLab 事件** 和 **评审任务** 查看逐提交状态，确认飞书群收到通知。当前 OCR 工作流不向 GitLab MR 写 note；MR 结果可在管理台和飞书查看，Push 结果只发送飞书通知。
 
 开发模式 `OCR_APP_DEV_MODE=1` 仅适用于可信本机；正式环境必须设置 `OCR_APP_ADMIN_TOKEN`，并限制管理页网络访问。`OCR_APP_MASTER_KEY`、数据库和备份都应按敏感文件保护。不要把 GitLab Token、Webhook Secret、飞书 URL、签名密钥或模型 API Key 写入 Git、截图、Issue 或日志。
 

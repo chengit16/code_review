@@ -150,6 +150,121 @@ def test_project_id_is_frozen_after_authenticated_webhook(client: TestClient) ->
     assert rejected.status_code == 409
 
 
+def test_repository_source_can_be_corrected_without_recreating_credentials(
+    client: TestClient, settings: Settings
+) -> None:
+    """修改 Clone URL、命名空间和分支时，保留项目令牌、飞书关联及 Webhook Secret。"""
+
+    repository_id, webhook_secret = configured_repository(client)
+    corrected = client.patch(
+        f"/api/repositories/{repository_id}",
+        headers=ADMIN,
+        json={
+            "name": "订单服务新名称",
+            "gitlab_url": "https://gitlab.example.test",
+            "remote_url": "https://gitlab.example.test/team/order-renamed.git",
+            "path_with_namespace": "team/order-renamed",
+            "target_branch": "release",
+        },
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["remote_url"].endswith("/team/order-renamed.git")
+    assert corrected.json()["path_with_namespace"] == "team/order-renamed"
+    assert corrected.json()["target_branch"] == "release"
+    assert corrected.json()["has_gitlab_token"] is True
+    assert corrected.json()["feishu_target_id"] is not None
+    assert (
+        client.get(f"/api/repositories/{repository_id}/webhook-token", headers=ADMIN).json()[
+            "webhook_token"
+        ]
+        == webhook_secret
+    )
+    stored = Store(settings.data_dir / "app.db").get_repository(repository_id)
+    assert stored is not None
+    assert (
+        SecretBox(settings.master_key).decrypt(stored["gitlab_token_ciphertext"])
+        == "private-project-token"
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"remote_url": "https://oauth2:secret@gitlab.example.test/team/order.git"},
+        {
+            "remote_url": "https://gitlab.example.test/other/repo.git",
+            "path_with_namespace": "team/order",
+        },
+        {"remote_url": "https://different.example.test/team/order.git"},
+        {"target_branch": "../main"},
+        {"gitlab_url": "http://gitlab.example.test"},
+    ],
+)
+def test_repository_edit_reuses_source_validation(
+    client: TestClient, change: dict[str, str]
+) -> None:
+    """编辑入口不能绕过新增时的凭据、同源路径和分支限制。"""
+
+    repository_id, _secret = configured_repository(client)
+    rejected = client.patch(f"/api/repositories/{repository_id}", headers=ADMIN, json=change)
+    assert rejected.status_code == 422
+    listed = client.get("/api/repositories", headers=ADMIN).json()[0]
+    assert listed["remote_url"] == "https://gitlab.example.test/team/order.git"
+    assert listed["target_branch"] == "main"
+
+
+def test_repository_source_waits_for_active_event_and_freezes_project_identity(
+    client: TestClient, settings: Settings
+) -> None:
+    """旧事件只属于原项目；活动队列也不能在来源改动中途切换分支。"""
+
+    repository_id, _secret = configured_repository(client)
+    store = Store(settings.data_dir / "app.db")
+    assert store.enqueue_mr(repository_id, 7)
+    active = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"target_branch": "release"}
+    )
+    assert active.status_code == 409
+    event = store.next_event()
+    assert event is not None
+    store.finish_event(event["id"], [], {}, None)
+    corrected = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"target_branch": "release"}
+    )
+    assert corrected.status_code == 200
+    rejected = client.patch(
+        f"/api/repositories/{repository_id}",
+        headers=ADMIN,
+        json={
+            "gitlab_url": "https://other.example.test",
+            "remote_url": "https://other.example.test/team/order.git",
+            "path_with_namespace": "team/order",
+        },
+    )
+    assert rejected.status_code == 409
+
+
+def test_switching_back_to_webhook_secret_generates_new_token(client: TestClient) -> None:
+    """改回 Secret token 时由服务端生成新值，旧令牌不再通过鉴权。"""
+
+    repository_id, original = configured_repository(client)
+    signing = client.patch(
+        f"/api/repositories/{repository_id}",
+        headers=ADMIN,
+        json={"auth_kind": "signing", "webhook_token": "whsec_example-signature"},
+    )
+    assert signing.status_code == 200
+    secret = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"auth_kind": "secret"}
+    )
+    assert secret.status_code == 200
+    regenerated = client.get(
+        f"/api/repositories/{repository_id}/webhook-token", headers=ADMIN
+    ).json()["webhook_token"]
+    assert regenerated != original
+    assert regenerated != "whsec_example-signature"
+
+
 def test_https_repository_rejects_embedded_credentials_and_path_mismatch(
     client: TestClient,
 ) -> None:

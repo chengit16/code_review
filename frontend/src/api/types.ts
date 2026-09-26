@@ -50,10 +50,14 @@ export interface WebhookTokenResponse {
   webhook_token: string;
 }
 
-/** 仓库可变设置；项目数字 ID 仅在没有业务投递时可纠正，Git remote 不可变。 */
+/** 仓库可变设置；项目身份有业务历史后冻结，来源修改须等待队列完成。 */
 export interface RepositoryUpdateInput {
   name?: string;
+  gitlab_url?: string;
   project_id?: number;
+  remote_url?: string;
+  path_with_namespace?: string;
+  target_branch?: string;
   enabled?: boolean;
   auth_kind?: "signing" | "secret";
   webhook_token?: string;

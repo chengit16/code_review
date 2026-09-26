@@ -33,8 +33,9 @@
 - 增加 `OCR_APP_DEV_MODE=1` 本地开发模式：管理 API 暂时不要求管理员口令，前端会直接进入管理台；生产模式仍要求 `OCR_APP_ADMIN_TOKEN`，开发模式不影响 Fernet 主密钥和 webhook 鉴权。
 - 本机固定使用 `127.0.0.1:8781`，用户配置与主密钥保存在忽略目录 `.local-data/local/`。开发模式页面返回 HTTP 200，`/api/health` 返回 `status=ok`、`worker=running`；匹配项目但缺少 Secret 的 GitLab Webhook 请求返回 401。
 - 仓库数字项目 ID 可在收到合法 Webhook 或创建评审事件前于编辑窗口纠正；身份变更在 SQLite 写事务中校验，避免并发投递时改写历史事件归属。
+- 项目配置与 GitLab Webhook 已合并为同一页面：列表内查看或复制项目专属 Token，页内复制统一回调地址；编辑窗口预填仓库来源、分支、飞书关联与事件开关，并支持修改 Clone URL、路径及目标分支。有业务历史后 GitLab 项目身份保持冻结，来源变更须等待事件与评审队列完成。
 - 2026-09-26 使用已保存配置联调：`App` 项目的完整 Git 克隆与目标分支拉取通过，已启用的 Agent 模型连接测试通过，飞书机器人连接测试消息发送成功。更新 GitLab Token 后发现项目数字 ID 误填为 331；按仓库路径查得真实 ID 为 311，修正后 GitLab API 项目、分支和路径校验通过。正式评审仍待真实入站事件验收。
-- 本地检查通过：`uv run pytest -q`（88 项）、`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。本机 `launchd` 试运行停在 Python 解释器加载阶段，已移除未运行的服务清单；当前 API 与 Worker 以前台进程运行，重启系统后须按部署文档重新启动。
+- 本地检查通过：`uv run pytest -q`（104 项）、`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。项目配置合并后已在桌面和窄屏核对编辑预填、保存按钮与列表布局，旧 `/webhooks` 地址可跳转到项目配置；固定端口 `8781` 的 API 已重启并加载仓库编辑字段。本机 `launchd` 试运行停在 Python 解释器加载阶段，已移除未运行的服务清单；当前 API 与 Worker 以前台进程运行，重启系统后须按部署文档重新启动。
 
 ## 待完成
 
