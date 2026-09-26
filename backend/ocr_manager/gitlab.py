@@ -107,6 +107,61 @@ class GitLabClient:
                     return result
             raise ValueError("补审范围超过 100 页，请缩小时间区间")
 
+    def list_merge_request_diffs(self, project_id: int, mr_iid: int) -> list[dict[str, Any]]:
+        """取得完整 MR diff；超过 100 页或响应不完整时拒绝猜测行位置。"""
+
+        url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests/{mr_iid}/diffs"
+        result: list[dict[str, Any]] = []
+        with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
+            for page in range(1, 101):
+                response = client.get(url, params={"per_page": 100, "page": page})
+                response.raise_for_status()
+                rows = response.json()
+                if not isinstance(rows, list):
+                    raise ValueError("GitLab MR diff 响应无效")
+                if any(not isinstance(row, dict) or not isinstance(row.get("diff"), str)
+                       or not isinstance(row.get("new_path"), str) for row in rows):
+                    raise ValueError("GitLab MR diff 缺少路径或内容")
+                result.extend(rows)
+                next_page = response.headers.get("x-next-page", "")
+                if not next_page:
+                    return result
+            raise ValueError("GitLab MR diff 超过 100 页")
+
+    def post_inline_discussion(
+        self, project_id: int, mr_iid: int, body: str,
+        position: dict[str, str], marker: str,
+    ) -> str:
+        """发送前按隐藏标记查重；响应丢失后的重试不会重复发相同评论。"""
+
+        url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests/{mr_iid}/discussions"
+        with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
+            for page in range(1, 101):
+                existing = client.get(url, params={"per_page": 100, "page": page})
+                existing.raise_for_status()
+                rows = existing.json()
+                if not isinstance(rows, list):
+                    raise ValueError("GitLab discussion 列表无效")
+                for row in rows:
+                    if isinstance(row, dict) and any(
+                        isinstance(note, dict) and marker in str(note.get("body", ""))
+                        for note in row.get("notes", [])
+                    ):
+                        return str(row.get("id", ""))
+                next_page = existing.headers.get("x-next-page", "")
+                if not next_page:
+                    break
+            else:
+                raise ValueError("GitLab discussion 超过 100 页，无法确认幂等")
+            posted = client.post(url, data={"body": f"{body}\n\n{marker}",
+                                            **{f"position[{key}]": value
+                                               for key, value in position.items()}})
+            posted.raise_for_status()
+            data = posted.json()
+        if not isinstance(data, dict) or not isinstance(data.get("id"), str):
+            raise ValueError("GitLab discussion 创建响应无效")
+        return str(data["id"])
+
 
 def project_web_url(gitlab_url: str, remote_url: str) -> str:
     """从已验证的 SSH remote 生成 GitLab 项目页面地址，供评审链接使用。"""

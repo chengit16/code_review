@@ -11,6 +11,7 @@ import { TaskStop } from "./TaskControls";
 import { AttemptReports } from "./AttemptReports";
 import { FindingsPanel } from "./FindingsPanel";
 import { CoverageReasons } from "./CoverageReasons";
+import { GitLabPublications } from "./GitLabPublications";
 import type { ReviewJobDetail } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
@@ -55,6 +56,7 @@ export function JobDetailPage({ token }: { /** 内存中的管理口令。 */ to
     <CoverageReasons job={job} />
     <FindingsPanel comments={comments} feedback={job.feedback} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />
     <section className="section"><div className="section-head"><h2>飞书通知</h2></div><div className="detail-line"><Status value={job.delivery?.status ?? "未创建"} /><span>尝试 {job.delivery?.attempts ?? 0} 次</span><span>{job.delivery?.sent_at ? formatTime(job.delivery.sent_at) : ""}</span></div>{job.delivery?.error && <p className="form-error">{job.delivery.error}</p>}</section>
+    <GitLabPublications token={token} job={job} />
     <section className="section"><div className="section-head"><h2>执行记录</h2></div><div className="table-scroll"><table><thead><tr><th>次数</th><th>状态</th><th>结束时间</th><th>诊断</th></tr></thead><tbody>{job.attempt_history.map((attempt) => <tr key={attempt.id}><td>#{attempt.attempt_number}</td><td><Status value={attempt.status} /></td><td>{formatTime(attempt.finished_at)}</td><td className="diagnostic" title={attempt.error ?? ""}>{attempt.error ?? "—"}</td></tr>)}{job.attempt_history.length === 0 && <tr><td colSpan={4} className="empty-row">暂无执行记录</td></tr>}</tbody></table></div></section>
   </>}</div>;
 }

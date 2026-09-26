@@ -15,6 +15,7 @@ import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 import { WebhookTokenCell } from "./WebhookTokenCell";
 import { ProjectReviewLimits } from "./ProjectReviewLimits";
+import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
 
@@ -207,6 +208,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     </form>
     <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} />
     <ProjectReviewLimits token={token} repositoryId={editing.id} />
+    <GitLabPublicationSetting token={token} repositoryId={editing.id} />
   </Modal>}
   </div>;
 }

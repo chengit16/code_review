@@ -26,6 +26,7 @@ from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
 from ocr_manager.operations_api import register_operations
 from ocr_manager.project_limits_api import register_project_limits
+from ocr_manager.publications import register_publications
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import register_task_control
@@ -396,6 +397,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_alerts(app, store, admin)
     register_project_limits(app, store, admin)
     register_event_search(app, store, admin)
+    register_publications(app, store, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

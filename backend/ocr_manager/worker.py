@@ -29,6 +29,7 @@ from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.project_limits import apply_limits, get_limits
+from ocr_manager.publications import next_publication, publish_one
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import cancellation_requested
@@ -407,6 +408,10 @@ def run_once(
     delivery = store.next_delivery()
     if delivery:
         deliver_notification(store, settings, delivery)
+        return True, last_repository_id
+    publication = next_publication(store)
+    if publication:
+        publish_one(store, settings, publication)
         return True, last_repository_id
     check = store.next_connection_check()
     if check:

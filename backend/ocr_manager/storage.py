@@ -18,9 +18,10 @@ from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
+from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -290,6 +291,7 @@ class Store:
                 (22, LIMITS_MIGRATION),
                 (23, EVENT_SEARCH_MIGRATION),
                 (24, MAINTENANCE_MIGRATION),
+                (25, PUBLICATION_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1229,6 +1231,18 @@ class Store:
                 db.execute(
                     "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
                 )
+            if status in {"complete", "partial"} and projection:
+                enabled = db.execute("""SELECT enabled FROM gitlab_publication_settings
+                    WHERE repository_id=(SELECT repository_id FROM review_jobs WHERE id=?)""",
+                    (job_id,)).fetchone()
+                mr = db.execute("SELECT mr_iid FROM review_jobs WHERE id=?", (job_id,)).fetchone()
+                if enabled and enabled["enabled"] and mr and mr["mr_iid"] > 0:
+                    comments = projection.get("comments")
+                    findings = comments if isinstance(comments, list) else []
+                    for index, _comment in enumerate(findings):
+                        db.execute("""INSERT OR IGNORE INTO gitlab_publications
+                            (job_id,attempt_number,comment_index) VALUES(?,?,?)""",
+                            (job_id, job["attempts"], index))
             usage = projection.get("usage") if projection else None
             db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
                        (json.dumps(usage) if usage else None, job_id))
@@ -1364,6 +1378,9 @@ class Store:
                 (job_id,),
             ).fetchone()
             result["delivery"] = dict(delivery) if delivery else None
+            result["publications"] = [dict(item) for item in db.execute(
+                "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
+                (job_id,))]
             return result
 
     def retry_job(self, job_id: int, config_hash: str | None = None) -> int | None:
@@ -1495,6 +1512,7 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            db.execute("UPDATE gitlab_publications SET status='pending' WHERE status='sending'")
             db.execute("""UPDATE mr_backfills SET status='queued' WHERE status='running'""")
             db.execute(
                 """UPDATE rule_previews SET status='failed',

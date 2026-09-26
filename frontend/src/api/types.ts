@@ -224,6 +224,8 @@ export interface ReviewPreview {
 
 /** 评审详情包含 OCR 的机器可读发现与覆盖情况。 */
 export interface ReviewJobDetail extends ReviewJob {
+  /** 与飞书通知相互独立的 MR 行内发布记录。 */
+  publications?: Array<{ id: number; comment_index: number; attempt_number: number; status: string; attempts: number; error: string | null; discussion_id: string | null }>;
   /** Worker 确认停止前保持 running 状态。 */
   cancel_requested?: number;
   mr_url?: string;
