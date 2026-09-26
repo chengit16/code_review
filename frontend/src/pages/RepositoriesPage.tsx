@@ -1,7 +1,7 @@
 /** @description GitLab 项目配置；飞书 Hook 和 Agent 模型由独立配置入口维护。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Plus, Settings2, Trash2, X } from "lucide-react";
+import { Plus, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -29,16 +29,10 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   const [form, setForm] = useState<RepositoryInput>(initial);
   const [editing, setEditing] = useState<Repository | null>(null);
   const [editForm, setEditForm] = useState<RepositoryUpdateInput>({});
-  const [triggerRepository, setTriggerRepository] = useState("");
-  const [mrIid, setMrIid] = useState("");
   const [feedback, setFeedback] = useState("");
   const mutation = useMutation({
     mutationFn: (input: RepositoryInput) => apiRequest<Repository>(token, "/api/repositories", { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => { setForm(initial); setOpen(false); void queryClient.invalidateQueries({ queryKey: ["repositories"] }); },
-  });
-  const trigger = useMutation({
-    mutationFn: () => apiRequest<{ status: string }>(token, `/api/repositories/${triggerRepository}/mrs/${mrIid}/enqueue`, { method: "POST" }),
-    onSuccess: () => { setMrIid(""); void queryClient.invalidateQueries({ queryKey: ["events"] }); },
   });
   const update = useMutation({
     mutationFn: ({ id, input }: { id: number; input: RepositoryUpdateInput }) => apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
@@ -106,15 +100,6 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   </section>}
       {feedback && <p className="form-success" role="status">{feedback}</p>}
       {(toggle.error || remove.error) && <p className="form-error" role="alert">{(toggle.error || remove.error)?.message}</p>}
-  {!!query.data?.length && <section className="section"><div className="section-head"><h2>按 MR 补触发</h2></div>
-    <form className="inline-form" onSubmit={(event) => { event.preventDefault(); trigger.mutate(); }}>
-      <SelectField label="仓库" name="repository" value={triggerRepository} onValueChange={setTriggerRepository} placeholder="选择仓库" required options={query.data.map((repo) => ({ value: String(repo.id), label: repo.name }))} />
-      <label>MR IID<input type="number" min="1" value={mrIid} onChange={(event) => setMrIid(event.target.value)} required /></label>
-      <button className="button button-secondary" type="submit" disabled={trigger.isPending}><Play size={16} />加入事件队列</button>
-    </form>
-    {trigger.error && <p className="form-error" role="alert">{trigger.error.message}</p>}
-    {trigger.isSuccess && !trigger.error && <p className="form-success" role="status">已加入事件队列</p>}
-  </section>}
   {open && <Modal titleId="add-repo-title" onClose={() => setOpen(false)}><div className="modal-heading"><h2 id="add-repo-title">添加 GitLab 仓库</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
     <form onSubmit={submit} className="form-grid">
       <label>仓库名称<input value={form.name} onChange={(e) => field("name", e.target.value)} required /></label>

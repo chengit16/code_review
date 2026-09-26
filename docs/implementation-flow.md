@@ -94,7 +94,7 @@ webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-K
 
 1. 管理员填写项目数字 ID、命名空间、仓库名称、无凭据 HTTPS Clone URL、目标分支、项目访问令牌、MR 与默认分支 Push 开关，并可选择已保存的飞书通知配置。新项目使用每仓库独立 GitLab Token；部署环境不再提供全局项目令牌。
 2. 后端验证 Clone URL 与 GitLab 实例同源、命名空间一致并加密保存令牌。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。HTTPS Git 通过临时 `GIT_ASKPASS` 使用令牌；命令参数和 Clone URL 不包含凭据。
-3. 独立的 GitLab Webhook 页面展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；项目页提供按 MR IID 手动补触发入口。
+3. 独立的 GitLab Webhook 页面展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；GitLab 事件页提供按 MR IID 手动补触发入口。
 4. 管理员可以对某个已合并 MR 手动试评审，核对提交范围、模型结果与飞书卡片。
 
 每个仓库的规则优先放在该仓库版本化的 `.opencodereview/rule.json` 中。页面展示规则文件是否存在及最近命中的预览结果；第一版不在页面中提供复杂的规则编辑器。

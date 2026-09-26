@@ -110,7 +110,6 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .select-scroll-button { display: grid; place-items: center; height: 29px; color: #526c5c; }
 .filter-bar .select-field { display: flex; align-items: center; gap: 10px; }
 .filter-bar .select-trigger { width: 160px; }
-.inline-form .select-field { min-width: 160px; }
 .copy-command { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: #126953; font-size: 13px; font-weight: 600; }
 .webhook-token { display: grid; gap: 4px; min-width: 140px; }
 .webhook-token-controls { display: inline-flex; align-items: center; gap: 5px; }
@@ -145,8 +144,6 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .form-grid .wide { grid-column: 1 / -1; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; }
 .form-success { color: #176749; font-size: 13px; }
-.inline-form { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
-.inline-form label { display: grid; gap: 7px; min-width: 160px; color: #425c4b; font-size: 13px; font-weight: 700; }
 .settings-section { max-width: 650px; }
 .settings-form { display: grid; gap: 15px; padding-top: 12px; }
 .settings-form label { display: grid; gap: 7px; color: #425c4b; font-size: 13px; font-weight: 700; }
