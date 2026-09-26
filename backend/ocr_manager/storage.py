@@ -22,9 +22,10 @@ from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRA
 from ocr_manager.premerge import PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
+from ocr_manager.review_issues import ISSUES_MIGRATION, backfill_existing_issues, capture_findings
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -298,6 +299,7 @@ class Store:
                 (26, PREMERGE_MIGRATION),
                 (27, AUTH_MIGRATION),
                 (28, PRICING_MIGRATION),
+                (29, ISSUES_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -307,6 +309,8 @@ class Store:
                 db.executescript(
                     f"BEGIN IMMEDIATE;\n{script}\nPRAGMA user_version={target_version};\nCOMMIT;"
                 )
+            # 升级后的旧结果只补建一次；标记和出现记录同事务提交，重启可安全重试。
+            backfill_existing_issues(db)
 
     def enqueue_connection_check(self, kind: str, repository_id: int | None) -> int | None:
         """诊断请求先持久化；同一目标只允许一个未完成检查。"""
@@ -1219,8 +1223,8 @@ class Store:
         )
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested, "
-                "config_snapshot, changed_files, started_at "
+                "SELECT id, repository_id, mr_iid, commit_sha, attempts, retry_start_attempts, "
+                "failure_stage, cancel_requested, config_snapshot, changed_files, started_at "
                 "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
@@ -1248,13 +1252,14 @@ class Store:
                     "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
                 )
             if status in {"complete", "partial"} and projection:
+                comments = projection.get("comments")
+                findings = comments if isinstance(comments, list) else []
+                capture_findings(db, dict(job), findings)
                 enabled = db.execute("""SELECT enabled FROM gitlab_publication_settings
                     WHERE repository_id=(SELECT repository_id FROM review_jobs WHERE id=?)""",
                     (job_id,)).fetchone()
                 mr = db.execute("SELECT mr_iid FROM review_jobs WHERE id=?", (job_id,)).fetchone()
                 if enabled and enabled["enabled"] and mr and mr["mr_iid"] > 0:
-                    comments = projection.get("comments")
-                    findings = comments if isinstance(comments, list) else []
                     for index, _comment in enumerate(findings):
                         db.execute("""INSERT OR IGNORE INTO gitlab_publications
                             (job_id,attempt_number,comment_index) VALUES(?,?,?)""",
@@ -1397,6 +1402,12 @@ class Store:
             result["publications"] = [dict(item) for item in db.execute(
                 "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
                 (job_id,))]
+            result["issue_ids"] = {
+                int(row["comment_index"]): int(row["issue_id"])
+                for row in db.execute("""SELECT comment_index,issue_id
+                    FROM review_issue_occurrences WHERE job_id=? AND attempt_number=?""",
+                    (job_id, result["attempts"]))
+            }
             return result
 
     def retry_job(self, job_id: int, config_hash: str | None = None) -> int | None:

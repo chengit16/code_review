@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, GitMerge, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, Users, X } from "lucide-react";
+import { Activity, Bot, GitMerge, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import { OperationsPage } from "../pages/OperationsPage";
 import { PremergePage } from "../pages/PremergePage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
 import { ReviewRulesPage } from "../pages/ReviewRulesPage";
+import { ReviewIssuesPage } from "../pages/ReviewIssuesPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { UsersPage } from "../pages/UsersPage";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
@@ -26,6 +27,7 @@ const navigation = [
     { to: "/", label: "运行概览", icon: LayoutDashboard, end: true },
     { to: "/events", label: "GitLab 事件", icon: GitMerge },
     { to: "/jobs", label: "评审任务", icon: Activity },
+    { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
     { to: "/operations", label: "运行监控", icon: Activity },
   ] },
@@ -115,6 +117,7 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/feishu" element={role === "admin" ? <FeishuHooksPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/events" element={<EventsPage token={token} canEdit={role === "admin"} />} />
             <Route path="/jobs" element={<JobsPage token={token} canEdit={role === "admin"} />} />
+            <Route path="/issues" element={<ReviewIssuesPage token={token} canEdit={role === "admin"} />} />
             <Route path="/premerge" element={<PremergePage token={token} />} />
             <Route path="/jobs/:id" element={<JobDetailPage token={token} canEdit={role === "admin"} />} />
             <Route path="/operations" element={role === "admin" ? <OperationsPage token={token} /> : <Navigate to="/" replace />} />

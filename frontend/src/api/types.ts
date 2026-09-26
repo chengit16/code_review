@@ -245,6 +245,8 @@ export interface ReviewJobDetail extends ReviewJob {
   result_path: string | null;
   notification_min_severity: "critical" | "high" | "medium" | "low";
   feedback: Record<number, "helpful" | "false_positive" | "fixed">;
+  /** 当前尝试中每条发现关联的跨评审问题。 */
+  issue_ids: Record<number, number>;
   changed_files?: string | null;
   attempt_history: Array<{
     id: number;

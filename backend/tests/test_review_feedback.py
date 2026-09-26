@@ -210,6 +210,9 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
         db.execute("DROP TABLE gitlab_publication_settings")
         db.execute("DROP TABLE premerge_reviews")
         db.execute("DROP TABLE premerge_settings")
+        for table in ("review_issue_occurrences", "review_issue_events", "review_issues",
+                      "review_issue_backfill"):
+            db.execute(f"DROP TABLE {table}")
         db.execute("DROP TABLE management_sessions")
         db.execute("DROP TABLE management_users")
         db.execute("DROP TABLE management_auth_mode")

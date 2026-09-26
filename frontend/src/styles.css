@@ -282,6 +282,19 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .detail-links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 17px; font-size: 12px; color: #167461; }
 .detail-links a { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
 .detail-links a:hover { text-decoration: underline; }
+.finding-issue-link { display: inline-block; margin: 0 0 10px; color: #087660; font-size: 12px; font-weight: 700; }
+.finding-issue-link:hover, .text-link:hover { text-decoration: underline; }
+.issue-filters { flex-wrap: wrap; margin-bottom: 17px; }
+.issue-detail { margin-top: 20px; }
+.issue-detail-head { display: flex; flex-wrap: wrap; gap: 10px 24px; color: #52675a; font-size: 12px; font-weight: 700; }
+.issue-detail h3 { margin: 24px 0 10px; font-size: 14px; }
+.issue-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-top: 20px; padding-block: 17px; border-block: 1px solid #dce5df; }
+.issue-actions label { display: grid; gap: 5px; min-width: min(230px, 100%); font-size: 12px; color: #52675a; }
+.issue-actions input { width: 100%; min-height: 38px; }
+.issue-action-buttons { display: flex; flex-wrap: wrap; gap: 7px; }
+.issue-history { display: grid; gap: 12px; padding-left: 18px; color: #52675a; font-size: 12px; }
+.issue-history p { margin: 4px 0 0; color: #263332; }
+.text-link { padding: 0; border: 0; background: none; color: #087660; font: inherit; cursor: pointer; }
 .access-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #e9eeeb; }
 .access-form { width: min(390px, 100%); display: flex; flex-direction: column; align-items: stretch; padding: 35px; background: #fff; border: 1px solid #dce5dd; border-radius: 8px; box-shadow: 0 16px 45px rgba(32, 67, 50, .08); }
 .access-symbol { width: 49px; height: 49px; display: grid; place-items: center; color: #15745d; border: 1px solid #b5d1c3; border-radius: 7px; }
@@ -307,6 +320,10 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 }
 
 @media (max-width: 620px) {
+  .issue-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .issue-filters .select-trigger { width: 100%; }
+  .issue-actions, .issue-action-buttons { align-items: stretch; flex-direction: column; }
+  .issue-actions label, .issue-actions .button { width: 100%; }
   .attempt-filters, .finding-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; }
   .attempt-filters .select-field, .finding-filters .select-field { display: grid; gap: 6px; }
   .attempt-filters .select-trigger, .finding-filters .select-trigger { width: 100%; }
