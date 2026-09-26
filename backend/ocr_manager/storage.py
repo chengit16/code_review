@@ -17,13 +17,14 @@ from ocr_manager.auth import AUTH_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
+from ocr_manager.model_pricing import PRICING_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.premerge import PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -296,6 +297,7 @@ class Store:
                 (25, PUBLICATION_MIGRATION),
                 (26, PREMERGE_MIGRATION),
                 (27, AUTH_MIGRATION),
+                (28, PRICING_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1024,15 +1026,18 @@ class Store:
             return [dict(row) for row in db.execute("SELECT * FROM model_profiles ORDER BY id")]
 
     def add_model_profile(
-        self, name: str, provider: str, model: str, base_url: str, ciphertext: str
+        self, name: str, provider: str, model: str, base_url: str, ciphertext: str,
+        currency: str = "CNY", input_price: str | None = None,
+        output_price: str | None = None,
     ) -> int:
         """新增模型不影响运行任务；明确启用后才参与新任务快照。"""
 
         with self.connection() as db:
             cursor = db.execute(
-                """INSERT INTO model_profiles(name, provider, model, base_url, api_key_ciphertext)
-                VALUES (?, ?, ?, ?, ?)""",
-                (name, provider, model, base_url, ciphertext),
+                """INSERT INTO model_profiles(name, provider, model, base_url, api_key_ciphertext,
+                price_currency, input_price_per_million, output_price_per_million)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (name, provider, model, base_url, ciphertext, currency, input_price, output_price),
             )
             assert cursor.lastrowid is not None
             return cursor.lastrowid
@@ -1063,20 +1068,26 @@ class Store:
             )
             return True
 
-    def update_model_profile(self, profile_id: int, values: dict[str, str]) -> bool:
-        """修改启用模型前确认队列空闲；版本递增使旧评审快照失效。"""
+    def update_model_profile(self, profile_id: int, values: dict[str, str | None]) -> bool:
+        """单价变更不改变评审输入或版本；模型本身变更仍受在途队列保护。"""
 
-        allowed = {"name", "provider", "model", "base_url", "api_key_ciphertext"}
+        allowed = {"name", "provider", "model", "base_url", "api_key_ciphertext",
+                   "price_currency", "input_price_per_million", "output_price_per_million"}
         if not values or not values.keys() <= allowed:
             raise ValueError("模型更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
         with self.connection() as db:
             profile = db.execute(
-                "SELECT enabled FROM model_profiles WHERE id=?", (profile_id,)
+                "SELECT * FROM model_profiles WHERE id=?", (profile_id,)
             ).fetchone()
             if profile is None:
                 return False
-            if profile["enabled"]:
+            changes_review = any(
+                field not in {"price_currency", "input_price_per_million",
+                              "output_price_per_million"} and value != profile[field]
+                for field, value in values.items()
+            )
+            if changes_review and profile["enabled"]:
                 busy = db.execute(
                     """SELECT EXISTS(SELECT 1 FROM merge_events
                     WHERE status IN ('queued','running'))
@@ -1093,10 +1104,10 @@ class Store:
                 ON e.repository_id=p.repository_id
                 WHERE p.model_profile_id=? AND e.status IN ('queued','running'))""",
                 (profile_id, profile_id)).fetchone()[0]
-            if project_busy:
+            if changes_review and project_busy:
                 raise ValueError("项目队列运行期间不能修改其专属模型")
             db.execute(
-                f"UPDATE model_profiles SET {assignments}, version=version+1, "
+                f"UPDATE model_profiles SET {assignments}, version=version+{int(changes_review)}, "
                 "updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (*values.values(), profile_id),
             )

@@ -38,6 +38,40 @@ test("飞书删除立即更新列表", async ({ page }) => {
   await expect(page.getByRole("button", { name: "编辑 验收飞书" })).toHaveCount(0);
 });
 
+test("百练模型单价配置与评审详情用量", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "新增模型" }).click();
+  await page.getByLabel("配置名称").fill("百练验收模型");
+  await page.getByLabel("模型标识").fill("qwen-test");
+  await page.getByLabel("API Key").fill("synthetic-key");
+  await page.getByLabel("输入单价（每百万 Token）").fill("2");
+  await page.getByLabel("输出单价（每百万 Token）").fill("8");
+  await page.getByRole("button", { name: "保存模型" }).click();
+  const row = page.getByRole("row").filter({ hasText: "百练验收模型" });
+  await expect(row).toContainText("百练 / DashScope");
+  await expect(row).toContainText("¥2 输入 / 8 输出");
+  await page.goto("/jobs/1");
+  await expect(page.getByRole("heading", { name: "模型用量" })).toBeVisible();
+  await expect(page.getByText("500,000")).toBeVisible();
+  await expect(page.getByText("250,000")).toBeVisible();
+  await expect(page.getByText("¥3.0000")).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const reportControls = await page.locator(".attempt-filters").evaluate((section) =>
+    Array.from(section.querySelectorAll("button, input")).map((element) => {
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+    }),
+  );
+  for (const [index, first] of reportControls.entries()) {
+    for (const second of reportControls.slice(index + 1)) {
+      expect(first.right <= second.left || second.right <= first.left ||
+        first.bottom <= second.top || second.bottom <= first.top).toBe(true);
+    }
+  }
+  await page.screenshot({ path: "test-results/model-usage-mobile.png", fullPage: true });
+});
+
 test("部分结果、反馈与重审", async ({ page }) => {
   await page.goto("/jobs/1");
   await expect(page.getByText("部分完成").first()).toBeVisible();

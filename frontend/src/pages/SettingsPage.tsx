@@ -20,9 +20,12 @@ interface ModelForm {
   model: string;
   base_url: string;
   api_key: string;
+  price_currency: "CNY" | "USD";
+  input_price_per_million: string;
+  output_price_per_million: string;
 }
 
-const initial: ModelForm = { name: "", provider: "dashscope", model: "", base_url: "", api_key: "" };
+const initial: ModelForm = { name: "", provider: "dashscope", model: "", base_url: "", api_key: "", price_currency: "CNY", input_price_per_million: "", output_price_per_million: "" };
 
 export function SettingsPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
   const queryClient = useQueryClient();
@@ -36,7 +39,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
     void queryClient.invalidateQueries({ queryKey: ["model-profiles"] });
   };
   const create = useMutation({
-    mutationFn: (input: ModelForm) => apiRequest<ModelConfiguration>(token, "/api/model-profiles", { method: "POST", body: JSON.stringify(input) }),
+    mutationFn: (input: ModelForm) => apiRequest<ModelConfiguration>(token, "/api/model-profiles", { method: "POST", body: JSON.stringify({ ...input, input_price_per_million: input.input_price_per_million || null, output_price_per_million: input.output_price_per_million || null }) }),
     onSuccess: () => { setOpen(false); setForm(initial); setFeedback("模型已保存，请在列表中启用"); refresh(); },
   });
   const update = useMutation({
@@ -44,7 +47,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
       const payload: Partial<ModelForm> = { ...input };
       if (!payload.api_key) delete payload.api_key;
       return apiRequest<ModelConfiguration>(token, `/api/model-profiles/${id}`, {
-        method: "PATCH", body: JSON.stringify(payload),
+        method: "PATCH", body: JSON.stringify({ ...payload, input_price_per_million: input.input_price_per_million || null, output_price_per_million: input.output_price_per_million || null }),
       });
     },
     onSuccess: () => { setOpen(false); setEditing(null); setForm(initial); setFeedback("模型配置已更新"); refresh(); },
@@ -64,7 +67,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
   }
   function beginEdit(profile: ModelConfiguration) {
     setEditing(profile);
-    setForm({ name: profile.name, provider: profile.provider, model: profile.model, base_url: profile.base_url, api_key: "" });
+    setForm({ name: profile.name, provider: profile.provider, model: profile.model, base_url: profile.base_url, api_key: "", price_currency: profile.price_currency, input_price_per_million: profile.input_price_per_million ?? "", output_price_per_million: profile.output_price_per_million ?? "" });
     create.reset();
     update.reset();
     setOpen(true);
@@ -76,13 +79,13 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
     {!profiles.isLoading && !profiles.error && <section className="section">
-      <div className="table-scroll responsive-table"><table><thead><tr><th>配置名称</th><th>Provider</th><th>模型标识</th><th>Base URL</th><th>状态</th><th aria-label="操作" /></tr></thead><tbody>
-        {profiles.data?.map((profile) => <tr key={profile.id}><td data-label="配置名称"><strong>{profile.name}</strong></td><td data-label="Provider">{profile.provider}</td><td data-label="模型标识" className="mono">{profile.model}</td><td data-label="Base URL" className="mono">{profile.base_url || "内置端点"}</td><td data-label="状态">{profile.enabled ? "已启用" : "未启用"}</td><td data-label="操作"><div className="row-actions">
+      <div className="table-scroll responsive-table"><table><thead><tr><th>配置名称</th><th>Provider</th><th>模型标识</th><th>Base URL</th><th>单价 / 百万 Token</th><th>状态</th><th aria-label="操作" /></tr></thead><tbody>
+        {profiles.data?.map((profile) => <tr key={profile.id}><td data-label="配置名称"><strong>{profile.name}</strong></td><td data-label="Provider">{profile.provider === "dashscope" ? "百练 / DashScope" : profile.provider}</td><td data-label="模型标识" className="mono">{profile.model}</td><td data-label="Base URL" className="mono">{profile.base_url || "内置端点"}</td><td data-label="单价 / 百万 Token">{profile.input_price_per_million != null && profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million} 输入 / ${profile.output_price_per_million} 输出` : "未配置"}</td><td data-label="状态">{profile.enabled ? "已启用" : "未启用"}</td><td data-label="操作"><div className="row-actions">
           {!profile.enabled && <button className="icon-button" type="button" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}><Check size={16} /></button>}
           <button className="icon-button" type="button" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}><Settings2 size={16} /></button>
           <button className="icon-button icon-button-danger" type="button" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}><Trash2 size={16} /></button>
         </div></td></tr>)}
-        {profiles.data?.length === 0 && <tr><td colSpan={6} className="empty-row">尚无模型配置</td></tr>}
+        {profiles.data?.length === 0 && <tr><td colSpan={7} className="empty-row">尚无模型配置</td></tr>}
       </tbody></table></div>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </section>}
@@ -91,10 +94,15 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
-        <SelectField label="Provider" value={form.provider} onValueChange={(value) => setForm((current) => ({ ...current, provider: value }))} options={[{ value: "dashscope", label: "DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
+        <SelectField label="Provider" value={form.provider} onValueChange={(value) => setForm((current) => ({ ...current, provider: value }))} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
+        {form.provider === "dashscope" && <p className="form-note">百练模型使用 DashScope API Key 和模型标识；Base URL 留空即可使用内置端点。</p>}
         <label>模型标识<input value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} required /></label>
         <label>Base URL<input type="url" value={form.base_url} onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))} placeholder="内置 Provider 可留空" /></label>
         <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))} placeholder={editing ? "留空则保留现有密钥" : ""} required={!editing} /></label>
+        <SelectField label="计费币种" value={form.price_currency} onValueChange={(value) => setForm((current) => ({ ...current, price_currency: value === "USD" ? "USD" : "CNY" }))} options={[{ value: "CNY", label: "人民币 CNY" }, { value: "USD", label: "美元 USD" }]} />
+        <label>输入单价（每百万 Token）<input type="number" min="0" max="99999999" step="0.000001" value={form.input_price_per_million} onChange={(event) => setForm((current) => ({ ...current, input_price_per_million: event.target.value }))} placeholder="可选" required={Boolean(form.output_price_per_million)} /></label>
+        <label>输出单价（每百万 Token）<input type="number" min="0" max="99999999" step="0.000001" value={form.output_price_per_million} onChange={(event) => setForm((current) => ({ ...current, output_price_per_million: event.target.value }))} placeholder="可选" required={Boolean(form.input_price_per_million)} /></label>
+        <p className="form-note">单价请按百练当前模型计费页填写，留空则只显示 Token 用量。已有任务的预估费用不会随之后的单价修改变化。</p>
         {(create.error || update.error) && <p className="form-error" role="alert">{(create.error || update.error)?.message}</p>}
         <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
       </form>

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from ocr_manager.model_pricing import PRICE_FIELDS
 from ocr_manager.secrets import SecretBox
 
 if TYPE_CHECKING:
@@ -75,7 +76,8 @@ def list_config_history(store: Store, kind: str, object_id: int | None) -> list[
         before = json.loads(row["before_json"] or "{}")
         after = json.loads(row["after_json"] or "{}")
         changes = []
-        for field in CONFIG_FIELDS[kind][1]:
+        fields = CONFIG_FIELDS[kind][1] + (PRICE_FIELDS if kind == "model_profile" else ())
+        for field in fields:
             if before.get(field) == after.get(field):
                 continue
             changes.append({"field": field, "secret": field in SECRET_FIELDS,
@@ -116,4 +118,7 @@ def restore_config(
     if kind == "notification_target":
         return store.update_notification_target(object_id, values)
     values.pop("enabled", None)
+    # 旧版本创建于单价字段引入之前，恢复它应清除后续填入的单价。
+    for field in PRICE_FIELDS:
+        values.setdefault(field, "CNY" if field == "price_currency" else None)
     return store.update_model_profile(object_id, values)

@@ -27,6 +27,7 @@ from ocr_manager.config import Settings, load_settings
 from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
+from ocr_manager.model_pricing import pricing_snapshot
 from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.premerge import (
     SHA,
@@ -114,6 +115,9 @@ def configuration_snapshot(
     """按模型、OCR 安装文件及该提交规则记录配置事实，始终排除密钥。"""
 
     model_settings, model_version = review_settings(store, settings, repository_id)
+    profile_id = get_limits(store, repository_id)["model_profile_id"]
+    profile = (next((item for item in store.list_model_profiles() if item["id"] == profile_id),
+                    None) if profile_id else store.get_model_profile())
     command = shutil.which(settings.ocr_command)
     command_fingerprint: dict[str, Any] = {"name": settings.ocr_command}
     if command:
@@ -138,7 +142,8 @@ def configuration_snapshot(
             "timeout_seconds": model_settings.ocr_timeout_seconds,
             "max_files": model_settings.ocr_max_files,
             "max_tokens_budget": model_settings.ocr_max_tokens_budget,
-            "model_profile_id": get_limits(store, repository_id)["model_profile_id"],
+            "model_profile_id": profile_id,
+            "pricing": pricing_snapshot(profile),
             "rule_digest": rule_digest,
             "global_rule": store.get_review_rule(None),
             "project_rule": (
@@ -155,8 +160,14 @@ def config_hash(
 ) -> str:
     """对安全配置事实建立稳定摘要，仍作为任务去重与执行校验依据。"""
 
-    snapshot = configuration_snapshot(store, settings, rule_digest, repository_id)
-    return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+    return snapshot_hash(configuration_snapshot(store, settings, rule_digest, repository_id))
+
+
+def snapshot_hash(snapshot: dict[str, Any]) -> str:
+    """价格只影响费用展示，不改变 OCR 评审输入，也不生成重复评审任务。"""
+
+    review_input = {key: value for key, value in snapshot.items() if key != "pricing"}
+    return hashlib.sha256(json.dumps(review_input, sort_keys=True).encode()).hexdigest()
 
 
 def is_temporary(error: Exception) -> bool:
@@ -254,7 +265,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         return
     try:
         snapshot = configuration_snapshot(store, settings, job["rule_digest"], job["repository_id"])
-        current_hash = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+        current_hash = snapshot_hash(snapshot)
     except Exception:
         # 凭据不可解时不能退回旧环境变量继续评审，也不把密钥异常持久化。
         store.finish_job(job["id"], "failed", None, None, "评审配置无法读取")

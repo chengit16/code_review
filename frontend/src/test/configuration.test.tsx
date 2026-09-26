@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { apiRequest } from "../api/client";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
 import { FindingsPanel } from "../pages/FindingsPanel";
+import { ModelUsage } from "../pages/ModelUsage";
 import { Status } from "../ui/Status";
 
 describe("配置与状态", () => {
@@ -43,5 +44,23 @@ describe("配置与状态", () => {
     const user = userEvent.setup();
     await user.click(within(screen.getByRole("group", { name: "发现 2 的反馈" })).getByRole("button", { name: "有帮助" }));
     expect(onFeedback).toHaveBeenCalledWith(1, "helpful");
+  });
+  it("用量与费用分别显示，缺失数据不推断金额", () => {
+    const { rerender } = render(<ModelUsage result={{
+      usage: { input_tokens: 500000, output_tokens: 250000, total_tokens: 750000 },
+      estimated_cost: { currency: "CNY", input: "1", output: "2", total: "3" },
+    }} />);
+    expect(screen.getByText("500,000")).toBeVisible();
+    expect(screen.getByText("250,000")).toBeVisible();
+    expect(screen.getByText("¥3.0000")).toBeVisible();
+    rerender(<ModelUsage result={{ usage: { total_tokens: 99 }, estimated_cost: null }} />);
+    expect(screen.getByText("99")).toBeVisible();
+    expect(screen.getAllByText("未提供", { selector: "strong" })).toHaveLength(3);
+    expect(screen.queryByText("¥3.0000")).not.toBeInTheDocument();
+    rerender(<ModelUsage result={{
+      usage: { input_tokens: 1, output_tokens: 0 },
+      estimated_cost: { currency: "CNY", input: "0.0000001", output: "0", total: "0.0000001" },
+    }} />);
+    expect(screen.getByText("<¥0.000001")).toBeVisible();
   });
 });

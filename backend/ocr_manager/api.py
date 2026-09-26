@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import sqlite3
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
 from typing import Any, Literal
@@ -25,6 +26,7 @@ from ocr_manager.auth import register_auth, session_identity, users_mode
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
+from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.operations_api import register_operations
 from ocr_manager.premerge import (
     enqueue_premerge,
@@ -137,6 +139,11 @@ class ModelProfileCreate(BaseModel):
     base_url: str = ""
     api_key: str = Field(min_length=1)
     provider: str = Field(default="dashscope", pattern=r"^[a-zA-Z0-9_-]+$")
+    price_currency: Literal["CNY", "USD"] = "CNY"
+    input_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
+                                                    decimal_places=6)
+    output_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
+                                                     decimal_places=6)
 
     model_config = {"extra": "forbid"}
 
@@ -149,6 +156,11 @@ class ModelProfileUpdate(BaseModel):
     base_url: str | None = None
     api_key: str | None = Field(default=None, min_length=1)
     provider: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
+    price_currency: Literal["CNY", "USD"] | None = None
+    input_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
+                                                    decimal_places=6)
+    output_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
+                                                     decimal_places=6)
 
     model_config = {"extra": "forbid"}
 
@@ -337,6 +349,13 @@ def validate_model_endpoint(base_url: str) -> str:
         ):
             raise HTTPException(status_code=422, detail="Base URL 必须是无凭据的 HTTPS 地址")
     return endpoint
+
+
+def validate_model_prices(input_price: object, output_price: object) -> None:
+    """输入和输出单价须成对提供，否则详情页无法给出完整费用。"""
+
+    if (input_price is None) != (output_price is None):
+        raise HTTPException(status_code=422, detail="请同时填写或清空输入、输出 Token 单价")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -886,12 +905,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         if not payload.name.strip():
             raise HTTPException(status_code=422, detail="配置名称不能为空")
+        validate_model_prices(payload.input_price_per_million, payload.output_price_per_million)
         profile_id = store.add_model_profile(
             payload.name.strip(),
             payload.provider,
             payload.model,
             validate_model_endpoint(payload.base_url),
             secrets.encrypt(payload.api_key),
+            payload.price_currency,
+            str(payload.input_price_per_million) if payload.input_price_per_million is not None
+            else None,
+            str(payload.output_price_per_million) if payload.output_price_per_million is not None
+            else None,
         )
         row = next(row for row in store.list_model_profiles() if row["id"] == profile_id)
         return public_model_profile(row)
@@ -901,8 +926,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """更新已保存模型；启用配置在队列运行期间保持不可变。"""
 
         values = payload.model_dump(exclude_unset=True, exclude_none=True)
+        # 单价显式传 null 表示清空；其他可选字段仍沿用省略即保留的现有语义。
+        for field in ("input_price_per_million", "output_price_per_million"):
+            if field in payload.model_fields_set and getattr(payload, field) is None:
+                values[field] = None
         if not values:
             raise HTTPException(status_code=422, detail="没有可更新的模型设置")
+        current = next((row for row in store.list_model_profiles() if row["id"] == profile_id),
+                       None)
+        if current is None:
+            raise HTTPException(status_code=404, detail="模型配置不存在")
+        validate_model_prices(
+            values.get("input_price_per_million", current["input_price_per_million"]),
+            values.get("output_price_per_million", current["output_price_per_million"]),
+        )
+        for field in ("input_price_per_million", "output_price_per_million"):
+            if values.get(field) is not None:
+                values[field] = str(values[field])
         if "name" in values:
             values["name"] = values["name"].strip()
             if not values["name"]:
@@ -1004,6 +1044,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if job["mr_iid"] > 0:
                 job["mr_url"] = f"{project_url}/-/merge_requests/{job['mr_iid']}"
             job["commit_url"] = f"{project_url}/-/commit/{job['commit_sha']}"
+        snapshot = json.loads(job["config_snapshot"]) if job.get("config_snapshot") else None
+        if job.get("result"):
+            job["result"]["estimated_cost"] = estimate_cost(
+                job["result"].get("usage"), snapshot,
+            )
         # 逐次结果通过受保护的报告接口读取，详情列表不重复传输安全 JSON 或内部路径。
         for attempt in job["attempt_history"]:
             attempt.pop("result_json", None)

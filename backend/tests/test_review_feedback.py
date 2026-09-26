@@ -215,6 +215,12 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
         db.execute("DROP TABLE management_auth_mode")
         db.execute("ALTER TABLE audit_log DROP COLUMN actor_id")
         db.execute("ALTER TABLE audit_log DROP COLUMN actor_name")
+        # 将新报价列及其触发器退回旧结构，才能真实演练从 17 版升级到最新版。
+        for suffix in ("insert", "update", "delete"):
+            db.execute(f"DROP TRIGGER history_model_profiles_{suffix}")
+        for column in ("price_currency", "input_price_per_million",
+                       "output_price_per_million"):
+            db.execute(f"ALTER TABLE model_profiles DROP COLUMN {column}")
         db.execute("PRAGMA user_version=17")
     store.migrate()
     assert store.get_repository(repository_id) is not None

@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 import uvicorn
 from cryptography.fernet import Fernet
 from ocr_manager.api import create_app
+from ocr_manager.attempt_history import save_snapshot
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
 
@@ -37,8 +38,14 @@ def main() -> None:
         store.finish_event(event["id"], ["a" * 40], {"a" * 40: ("fixture", "")}, None)
         job = store.next_job()
         assert job is not None
+        save_snapshot(store, job["id"], {"command": {"name": "ocr"}, "pricing": {
+            "price_currency": "CNY", "input_price_per_million": "2",
+            "output_price_per_million": "8",
+        }})
         store.finish_job(job["id"], "partial", None, {
             "comments": [{"path": "app.py", "content": "示例发现", "severity": "high"}],
+            "summary": {"input_tokens": 500000, "output_tokens": 250000,
+                        "total_tokens": 750000},
             "manifest": {"coverage": {"selected": [1, 2], "completed": [1],
                                       "reused": [], "failed": [2], "waived": []}},
         }, None)

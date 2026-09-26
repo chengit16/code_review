@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.storage import Store
 
 
@@ -84,12 +85,15 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
     manifest = result.get("manifest") or {}
     coverage = manifest.get("coverage") or {}
     preview = result.get("preview") or {}
+    snapshot = public_snapshot(job.get("config_snapshot"))
     return {
         "job": {key: job.get(key) for key in (
             "id", "repository_id", "mr_iid", "commit_sha", "target_branch", "status",
             "failure_stage", "error", "attempts", "created_at", "finished_at",
         )},
         "comments": result.get("comments", []),
+        "usage": result.get("usage"),
+        "estimated_cost": estimate_cost(result.get("usage"), snapshot),
         "coverage": {key: len(coverage.get(key) or []) for key in (
             "selected", "completed", "reused", "failed", "waived",
         )},
@@ -100,7 +104,7 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
             "attempt_number", "status", "error", "failure_stage", "finished_at",
         )} for item in job["attempt_history"]],
         "delivery": job.get("delivery"),
-        "configuration": public_snapshot(job.get("config_snapshot")),
+        "configuration": snapshot,
     }
 
 

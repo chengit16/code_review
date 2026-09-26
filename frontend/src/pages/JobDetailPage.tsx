@@ -8,6 +8,7 @@ import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
 import { JobFiles } from "./JobFiles";
 import { JobNavigation } from "./JobNavigation";
+import { ModelUsage } from "./ModelUsage";
 import { TaskStop } from "./TaskControls";
 import { AttemptReports } from "./AttemptReports";
 import { FindingsPanel } from "./FindingsPanel";
@@ -60,7 +61,7 @@ function JobDetail({ token, canEdit }: {
     {job.failure_stage && <p className="detail-line">{job.status === "running" ? "当前阶段" : "失败阶段"}：{({ configuration: "配置校验", git: "Git 拉取与提交准备", ocr_configuration: "OCR 模型配置", preview: "范围预览", review: "模型评审", validation: "结果校验" } as Record<string, string>)[job.failure_stage] ?? job.failure_stage}</p>}
     <JobFiles job={job} />
     <AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} />
-    {job.result?.usage && Object.keys(job.result.usage).length > 0 && <p className="detail-line">模型用量：{job.result.usage.total_tokens ?? "未提供"} tokens</p>}
+    <ModelUsage result={job.result} />
     {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
     {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
     {job.error && <div className="detail-error" role="alert">{job.error}</div>}

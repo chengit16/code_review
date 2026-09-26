@@ -129,6 +129,9 @@ export interface ModelConfiguration {
   base_url: string;
   enabled: number;
   has_api_key: boolean;
+  price_currency: "CNY" | "USD";
+  input_price_per_million: string | null;
+  output_price_per_million: string | null;
   version: number;
 }
 
@@ -235,6 +238,7 @@ export interface ReviewJobDetail extends ReviewJob {
     manifest?: ReviewManifest;
     preview?: ReviewPreview;
     usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    estimated_cost?: { currency: "CNY" | "USD"; input: string; output: string; total: string } | null;
     summary?: { budget_exceeded?: boolean };
     message?: string;
   } | null;
