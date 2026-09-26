@@ -26,7 +26,12 @@ from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
 from ocr_manager.operations_api import register_operations
-from ocr_manager.premerge import enqueue_premerge, parse_premerge_event, register_premerge
+from ocr_manager.premerge import (
+    enqueue_premerge,
+    invalidate_premerge,
+    parse_premerge_event,
+    register_premerge,
+)
 from ocr_manager.project_limits_api import register_project_limits
 from ocr_manager.publications import register_publications
 from ocr_manager.secrets import SecretBox
@@ -1115,8 +1120,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if premerge_setting and premerge_setting["enabled"]:
             version = parse_premerge_event(body, row["project_id"], row["target_branch"])
             if version:
-                created = enqueue_premerge(store, row["id"], *version)
-                return {"status": "queued" if created else "duplicate"}
+                iid, head = version
+                if head is None:
+                    invalidate_premerge(store, row["id"], iid)
+                else:
+                    created = enqueue_premerge(store, row["id"], iid, head)
+                    return {"status": "queued" if created else "duplicate"}
         if not row["enable_merge_requests"]:
             return {"status": "ignored"}
         event = parse_merge_event(body, row["project_id"], row["target_branch"])

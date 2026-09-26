@@ -42,7 +42,9 @@ CREATE INDEX idx_premerge_mr ON premerge_reviews(repository_id, mr_iid, id DESC)
 SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 
 
-def parse_premerge_event(body: bytes, project_id: int, branch: str) -> tuple[int, str] | None:
+def parse_premerge_event(
+    body: bytes, project_id: int, branch: str
+) -> tuple[int, str | None] | None:
     """仅从通过项目密钥鉴权的 MR 更新提取版本；Worker 仍须向 GitLab 复核。"""
 
     try:
@@ -54,7 +56,7 @@ def parse_premerge_event(body: bytes, project_id: int, branch: str) -> tuple[int
     attributes, project = payload.get("object_attributes"), payload.get("project")
     if not isinstance(attributes, dict) or not isinstance(project, dict):
         raise HTTPException(422, "GitLab MR 字段缺失")
-    if attributes.get("action") not in {"open", "reopen", "update"}:
+    if attributes.get("action") not in {"open", "reopen", "update", "close", "merge"}:
         return None
     if (type(project.get("id")) is not int or project["id"] != project_id or
         type(attributes.get("target_project_id")) is not int or
@@ -63,11 +65,24 @@ def parse_premerge_event(body: bytes, project_id: int, branch: str) -> tuple[int
     if attributes.get("target_branch") != branch:
         return None
     iid = attributes.get("iid")
+    if type(iid) is not int or not 0 < iid <= 9223372036854775807:
+        raise HTTPException(422, "MR IID 无效")
+    if attributes.get("action") in {"close", "merge"}:
+        return iid, None
     last_commit = attributes.get("last_commit")
     head = last_commit.get("id") if isinstance(last_commit, dict) else None
     if type(iid) is not int or iid <= 0 or not isinstance(head, str) or not SHA.fullmatch(head):
         raise HTTPException(422, "MR 提交版本无效")
     return iid, head.lower()
+
+
+def invalidate_premerge(store: Store, repository_id: int, mr_iid: int) -> None:
+    """关闭或合并 MR 后终止预审语义，与是否开启合并后审查无关。"""
+
+    with store.connection() as db:
+        db.execute("""UPDATE premerge_reviews SET status='superseded',
+            finished_at=CURRENT_TIMESTAMP WHERE repository_id=? AND mr_iid=?
+            AND status!='superseded'""", (repository_id, mr_iid))
 
 
 def enqueue_premerge(store: Store, repository_id: int, mr_iid: int, head_sha: str) -> bool:

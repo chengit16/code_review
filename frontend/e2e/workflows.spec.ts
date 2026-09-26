@@ -72,6 +72,12 @@ test("账号模式登录与只读界面", async ({ page }) => {
   await page.getByLabel("用户名").fill("browser-reader");
   await page.getByLabel("密码", { exact: true }).fill("browser-password-123");
   await page.getByRole("button", { name: "保存账号" }).click();
+  await expect(page.getByText("browser-reader", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/users-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/users-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByLabel("启用多人账号登录").click();
   await expect(page.getByLabel("用户名")).toBeVisible();
   await page.getByLabel("用户名").fill("browser-reader");

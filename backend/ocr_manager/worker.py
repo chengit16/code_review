@@ -28,7 +28,13 @@ from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
-from ocr_manager.premerge import SHA, finish_premerge, next_premerge, premerge_is_current
+from ocr_manager.premerge import (
+    SHA,
+    enqueue_premerge,
+    finish_premerge,
+    next_premerge,
+    premerge_is_current,
+)
 from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.publications import next_publication, publish_one
 from ocr_manager.secrets import SecretBox
@@ -449,6 +455,8 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         # 1. Webhook 只提供待核验版本；GitLab 当前 MR 身份和 SHA 才能确定输入。
         token = SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
         client = GitLabClient(repository["gitlab_url"], token)
+        client.check_access(repository["project_id"], repository["target_branch"],
+                            repository["remote_url"])
         mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
         if (mr.get("state") != "opened" or
             mr.get("target_branch") != repository["target_branch"] or
@@ -456,10 +464,18 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
             mr.get("sha") != review["head_sha"]):
             finish_premerge(store, review["id"], "superseded", None, None, None, None,
                             "MR 状态或提交版本已变化")
+            # 乱序旧事件可能使更新版本失效；只用已复核的 GitLab 事实补回当前头。
+            current_sha = mr.get("sha")
+            if (mr.get("state") == "opened" and
+                mr.get("target_branch") == repository["target_branch"] and
+                mr.get("target_project_id") == repository["project_id"] and
+                isinstance(current_sha, str) and SHA.fullmatch(current_sha)):
+                enqueue_premerge(store, repository["id"], review["mr_iid"], current_sha)
             return
         refs = mr.get("diff_refs")
         base_sha = refs.get("base_sha") if isinstance(refs, dict) else None
-        if not isinstance(base_sha, str) or not SHA.fullmatch(base_sha):
+        if (not isinstance(base_sha, str) or not SHA.fullmatch(base_sha) or
+            not isinstance(refs, dict) or refs.get("head_sha") != review["head_sha"]):
             raise RuntimeError("GitLab 尚未生成 MR diff 基准")
         git = GitRepository(settings.data_dir, {**repository, "gitlab_token": token})
         git.fetch()
@@ -484,6 +500,12 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         if latest_mr.get("state") != "opened" or latest_mr.get("sha") != review["head_sha"]:
             finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
                             "GitLab MR 已更新")
+            current_sha = latest_mr.get("sha")
+            if (latest_mr.get("state") == "opened" and
+                latest_mr.get("target_branch") == repository["target_branch"] and
+                latest_mr.get("target_project_id") == repository["project_id"] and
+                isinstance(current_sha, str) and SHA.fullmatch(current_sha)):
+                enqueue_premerge(store, repository["id"], review["mr_iid"], current_sha)
             return
         # 3. 条件更新避免迟到结果覆盖新提交，原始工件仅供受控本机诊断。
         finish_premerge(store, review["id"], status, base_sha, result,
