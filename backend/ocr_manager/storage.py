@@ -15,9 +15,10 @@ from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
+from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -284,6 +285,7 @@ class Store:
                 (19, CONTROL_MIGRATION),
                 (20, ATTEMPT_MIGRATION),
                 (21, ALERT_MIGRATION),
+                (22, LIMITS_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1067,6 +1069,16 @@ class Store:
                 ).fetchone()[0]
                 if busy:
                     raise ValueError("队列运行期间不能修改启用的模型配置")
+            project_busy = db.execute("""SELECT EXISTS(
+                SELECT 1 FROM project_review_limits p JOIN review_jobs j
+                ON j.repository_id=p.repository_id
+                WHERE p.model_profile_id=? AND j.status IN ('queued','running'))
+                OR EXISTS(SELECT 1 FROM project_review_limits p JOIN merge_events e
+                ON e.repository_id=p.repository_id
+                WHERE p.model_profile_id=? AND e.status IN ('queued','running'))""",
+                (profile_id, profile_id)).fetchone()[0]
+            if project_busy:
+                raise ValueError("项目队列运行期间不能修改其专属模型")
             db.execute(
                 f"UPDATE model_profiles SET {assignments}, version=version+1, "
                 "updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -1085,6 +1097,9 @@ class Store:
                 return False
             if row["enabled"]:
                 raise ValueError("请先启用其他模型")
+            if db.execute("SELECT 1 FROM project_review_limits WHERE model_profile_id=?",
+                          (profile_id,)).fetchone():
+                raise ValueError("模型已关联项目，请先解除关联")
             db.execute("DELETE FROM model_profiles WHERE id=?", (profile_id,))
             return True
 
@@ -1163,6 +1178,11 @@ class Store:
                 "summary": {"budget_exceeded": result["summary"].get("budget_exceeded") is True}
                 if isinstance(result.get("summary"), dict)
                 else None,
+                "usage": {
+                    key: value for key, value in result.get("summary", {}).items()
+                    if key in {"input_tokens", "output_tokens", "total_tokens"}
+                    and isinstance(value, int) and not isinstance(value, bool) and value >= 0
+                } if isinstance(result.get("summary"), dict) else None,
                 "preview": result.get("preview"),
                 "message": result.get("message"),
                 "source": result.get("source"),
@@ -1200,6 +1220,9 @@ class Store:
                 db.execute(
                     "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
                 )
+            usage = projection.get("usage") if projection else None
+            db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
+                       (json.dumps(usage) if usage else None, job_id))
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, result_path, error, failure_stage,
@@ -1309,6 +1332,8 @@ class Store:
                     if isinstance(manifest, dict)
                     else None,
                     "preview": parsed.get("preview"),
+                    "summary": parsed.get("summary"),
+                    "usage": parsed.get("usage"),
                 }
             else:
                 result["result"] = None
@@ -1375,6 +1400,7 @@ class Store:
                 """UPDATE review_jobs SET status='queued', error=NULL,
                 retry_start_attempts=attempts, cancel_requested=0,
                 result_json=NULL, result_path=NULL, changed_files=NULL, config_snapshot=NULL,
+                usage_json=NULL,
                 finished_at=NULL, failure_stage=NULL,
                 next_run_at=CURRENT_TIMESTAMP WHERE id=?
                 AND status IN ('complete','partial','failed','skipped','cancelled')""",

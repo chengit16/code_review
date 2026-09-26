@@ -44,6 +44,8 @@ export function JobDetailPage({ token }: { /** 内存中的管理口令。 */ to
     {job.failure_stage && <p className="detail-line">{job.status === "running" ? "当前阶段" : "失败阶段"}：{({ configuration: "配置校验", git: "Git 拉取与提交准备", ocr_configuration: "OCR 模型配置", preview: "范围预览", review: "模型评审", validation: "结果校验" } as Record<string, string>)[job.failure_stage] ?? job.failure_stage}</p>}
     <JobFiles job={job} />
     <AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} />
+    {job.result?.usage && Object.keys(job.result.usage).length > 0 && <p className="detail-line">模型用量：{job.result.usage.total_tokens ?? "未提供"} tokens</p>}
+    {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
     {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
     {job.error && <div className="detail-error" role="alert">{job.error}</div>}
     <section className="section"><div className="section-head"><h2>覆盖情况</h2></div>{coverage ? <div className="coverage-grid"><div><strong>{coverage.selected.length}</strong><span>选中文件</span></div><div><strong>{coverage.completed.length + coverage.reused.length}</strong><span>完成 / 复用</span></div><div><strong>{coverage.failed.length}</strong><span>失败</span></div><div><strong>{coverage.waived.length}</strong><span>豁免</span></div></div> : <p className="empty-inline">尚无 OCR 覆盖结果</p>}</section>

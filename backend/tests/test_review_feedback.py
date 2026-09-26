@@ -200,6 +200,8 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
             db.execute(f"ALTER TABLE review_attempts DROP COLUMN {column}")
         for table in ("alert_deliveries", "alert_states", "alert_config"):
             db.execute(f"DROP TABLE {table}")
+        db.execute("DROP TABLE project_review_limits")
+        db.execute("ALTER TABLE review_jobs DROP COLUMN usage_json")
         db.execute("PRAGMA user_version=17")
     store.migrate()
     assert store.get_repository(repository_id) is not None

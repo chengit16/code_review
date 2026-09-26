@@ -27,6 +27,7 @@ from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.ocr import check_rule, run_review
+from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import cancellation_requested
@@ -75,17 +76,22 @@ def worker_is_running(data_dir: Path) -> bool:
         os.close(descriptor)
 
 
-def review_settings(store: Store, settings: Settings) -> tuple[Settings, int]:
+def review_settings(
+    store: Store, settings: Settings, repository_id: int | None = None
+) -> tuple[Settings, int]:
     """从启用的模型配置读取评审参数；测试注入的 Settings 只用于隔离验证。"""
 
-    profile = store.get_model_profile()
+    limits = get_limits(store, repository_id)
+    profile_id = limits["model_profile_id"]
+    profile = (next((item for item in store.list_model_profiles() if item["id"] == profile_id),
+                    None) if profile_id else store.get_model_profile())
     if profile is None:
         if settings.ocr_model and settings.ocr_api_key:
-            return settings, 0
+            return apply_limits(settings, limits), 0
         raise ValueError("请先在管理台启用 Agent 模型")
     key = SecretBox(settings.master_key).decrypt(profile["api_key_ciphertext"])
     return replace(
-        settings,
+        apply_limits(settings, limits),
         ocr_provider=profile["provider"],
         ocr_model=profile["model"],
         ocr_api_key=key,
@@ -98,7 +104,7 @@ def configuration_snapshot(
 ) -> dict[str, Any]:
     """按模型、OCR 安装文件及该提交规则记录配置事实，始终排除密钥。"""
 
-    model_settings, model_version = review_settings(store, settings)
+    model_settings, model_version = review_settings(store, settings, repository_id)
     command = shutil.which(settings.ocr_command)
     command_fingerprint: dict[str, Any] = {"name": settings.ocr_command}
     if command:
@@ -120,7 +126,10 @@ def configuration_snapshot(
             "base_url": model_settings.ocr_base_url,
             "model_version": model_version,
             "command": command_fingerprint,
-            "timeout_seconds": settings.ocr_timeout_seconds,
+            "timeout_seconds": model_settings.ocr_timeout_seconds,
+            "max_files": model_settings.ocr_max_files,
+            "max_tokens_budget": model_settings.ocr_max_tokens_budget,
+            "model_profile_id": get_limits(store, repository_id)["model_profile_id"],
             "rule_digest": rule_digest,
             "global_rule": store.get_review_rule(None),
             "project_rule": (
@@ -265,7 +274,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         with store.connection() as db:
             db.execute("UPDATE review_jobs SET changed_files=? WHERE id=?",
                        (json.dumps(git.changed_files(job["commit_sha"])), job["id"]))
-        model_settings, _ = review_settings(store, settings)
+        model_settings, _ = review_settings(store, settings, job["repository_id"])
         set_job_stage(store, job["id"], "ocr_configuration")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
             status, result = run_review(

@@ -28,6 +28,8 @@ class Settings:
     ocr_base_url: str = ""
     webhook_url: str = ""
     management_url: str = ""
+    ocr_max_files: int = 0
+    ocr_max_tokens_budget: int = 0
 
     @property
     def webhook_base_url(self) -> str:

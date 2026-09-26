@@ -310,6 +310,8 @@ def run_review(
     ]
     if settings.ocr_model:
         base.extend(["--model", settings.ocr_model])
+    if settings.ocr_max_tokens_budget:
+        base.extend(["--max-tokens-budget", str(settings.ocr_max_tokens_budget)])
     if project_rule is not None:
         # 管理台按项目设置的规则显式覆盖仓库版本化文件，预览和正式评审共用同一份。
         rule_path = run_dir / "managed-rule.json"
@@ -338,6 +340,8 @@ def run_review(
             raise RuntimeError("OCR 预览失败，请查看受控诊断工件")
         if name == "preview":
             preview = read_preview(run_dir / "preview.json")
+            if settings.ocr_max_files and preview["reviewable_count"] > settings.ocr_max_files:
+                raise ValueError("可审查文件超过项目上限，未调用模型")
             if preview["reviewable_count"] == 0:
                 # 只在明确的零文件预览下跳过，保留文件及排除原因供管理页查看。
                 payload = skipped_result(preview, sha)

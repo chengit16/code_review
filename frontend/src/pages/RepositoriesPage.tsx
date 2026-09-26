@@ -14,6 +14,7 @@ import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 import { WebhookTokenCell } from "./WebhookTokenCell";
+import { ProjectReviewLimits } from "./ProjectReviewLimits";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
 
@@ -205,6 +206,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <div className="form-actions wide"><button type="button" className="button button-secondary" onClick={() => setEditing(null)}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存设置</button></div>
     </form>
     <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} />
+    <ProjectReviewLimits token={token} repositoryId={editing.id} />
   </Modal>}
   </div>;
 }

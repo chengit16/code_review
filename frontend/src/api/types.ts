@@ -230,6 +230,8 @@ export interface ReviewJobDetail extends ReviewJob {
     comments?: ReviewComment[];
     manifest?: ReviewManifest;
     preview?: ReviewPreview;
+    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    summary?: { budget_exceeded?: boolean };
     message?: string;
   } | null;
   result_path: string | null;
