@@ -97,6 +97,59 @@ def test_document_repository_fields_and_shared_webhook(
     assert current != secret
 
 
+def test_project_id_can_be_corrected_before_business_events(
+    client: TestClient, settings: Settings
+) -> None:
+    """录错 GitLab 数字 ID 时可保留现有凭据修正；业务事件建立后身份必须冻结。"""
+
+    repository_id, webhook_secret = configured_repository(client)
+    corrected = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"project_id": 43}
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["project_id"] == 43
+    assert corrected.json()["has_gitlab_token"] is True
+    assert corrected.json()["feishu_target_id"] is not None
+    assert (
+        client.get(f"/api/repositories/{repository_id}/webhook-token", headers=ADMIN).json()[
+            "webhook_token"
+        ]
+        == webhook_secret
+    )
+    store = Store(settings.data_dir / "app.db")
+    assert store.enqueue_mr(repository_id, 7)
+    rejected = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"project_id": 44}
+    )
+    assert rejected.status_code == 409
+    assert store.get_repository(repository_id)["project_id"] == 43
+
+
+def test_project_id_is_frozen_after_authenticated_webhook(client: TestClient) -> None:
+    """即使审核开关关闭，只要旧身份接收过合法投递就不再重新绑定项目。"""
+
+    repository_id, secret = configured_repository(client)
+    client.patch(
+        f"/api/repositories/{repository_id}",
+        headers=ADMIN,
+        json={"enable_merge_requests": False},
+    )
+    response = client.post(
+        "/api/webhooks/gitlab",
+        headers={"X-Gitlab-Token": secret, "X-Gitlab-Event": "Merge Request Hook"},
+        json={
+            "object_kind": "merge_request",
+            "project": {"id": 42},
+            "object_attributes": {"target_branch": "main"},
+        },
+    )
+    assert response.status_code == 204
+    rejected = client.patch(
+        f"/api/repositories/{repository_id}", headers=ADMIN, json={"project_id": 43}
+    )
+    assert rejected.status_code == 409
+
+
 def test_https_repository_rejects_embedded_credentials_and_path_mismatch(
     client: TestClient,
 ) -> None:

@@ -51,9 +51,10 @@ class RepositoryCreate(BaseModel):
 
 
 class RepositoryUpdate(BaseModel):
-    """仓库接入后的可变设置；项目身份和 remote 不允许事后改写。"""
+    """接入设置；项目数字 ID 只允许在业务投递前纠正，remote 保持不可变。"""
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    project_id: int | None = Field(default=None, gt=0)
     enabled: bool | None = None
     auth_kind: Literal["signing", "secret"] | None = None
     webhook_token: str | None = Field(default=None, min_length=16)
@@ -512,7 +513,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             values["feishu_target_id"] = None
         elif "feishu_target_id" in payload.model_fields_set:
             values["feishu_webhook"] = ""
-        store.update_repository(repository_id, values)
+        try:
+            store.update_repository(repository_id, values)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except sqlite3.IntegrityError as error:
+            raise HTTPException(status_code=409, detail="仓库和目标分支已存在") from error
         updated = store.get_repository(repository_id)
         assert updated is not None
         return public_repository(updated, config.public_url)

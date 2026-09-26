@@ -329,10 +329,11 @@ class Store:
             return [dict(row) for row in db.execute("SELECT * FROM repositories ORDER BY id")]
 
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
-        """仅更新受控配置字段；项目身份和 Git remote 保持不可变以保护历史任务。"""
+        """仅允许在没有业务历史时纠正项目 ID，避免旧事件指向另一项目。"""
 
         allowed = {
             "name",
+            "project_id",
             "enabled",
             "auth_kind",
             "webhook_secret",
@@ -347,6 +348,20 @@ class Store:
             raise ValueError("仓库更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
         with self.connection() as db:
+            if "project_id" in values:
+                # 先取得写锁，防止检查业务历史与更新 ID 之间插入 Webhook 事件。
+                db.execute("BEGIN IMMEDIATE")
+                current = db.execute(
+                    "SELECT project_id, last_webhook_at FROM repositories WHERE id=?",
+                    (repository_id,),
+                ).fetchone()
+                if current and values["project_id"] != current["project_id"]:
+                    has_event = db.execute(
+                        "SELECT 1 FROM merge_events WHERE repository_id=? LIMIT 1",
+                        (repository_id,),
+                    ).fetchone()
+                    if current["last_webhook_at"] or has_event:
+                        raise ValueError("已有 Webhook 投递或评审事件，不能修改项目 ID")
             cursor = db.execute(
                 f"UPDATE repositories SET {assignments} WHERE id=?",
                 (*values.values(), repository_id),

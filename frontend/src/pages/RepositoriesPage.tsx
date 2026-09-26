@@ -76,7 +76,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
 
   function beginEdit(repo: Repository) {
     setEditing(repo);
-    setEditForm({ name: repo.name, feishu_target_id: repo.feishu_target_id, enable_merge_requests: Boolean(repo.enable_merge_requests), enable_default_branch_pushes: Boolean(repo.enable_default_branch_pushes) });
+    setEditForm({ name: repo.name, project_id: repo.project_id, feishu_target_id: repo.feishu_target_id, enable_merge_requests: Boolean(repo.enable_merge_requests), enable_default_branch_pushes: Boolean(repo.enable_default_branch_pushes) });
     update.reset();
   }
 
@@ -132,6 +132,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   {editing && <Modal titleId="edit-repo-title" onClose={() => setEditing(null)}><div className="modal-heading"><h2 id="edit-repo-title">编辑 {editing.name}</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setEditing(null)}><X size={19} /></button></div>
     <form onSubmit={submitEdit} className="form-grid">
       <label>仓库名称<input value={editForm.name ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} required /></label>
+      <label>项目数字 ID<input type="number" min="1" value={editForm.project_id || ""} onChange={(event) => setEditForm((current) => ({ ...current, project_id: Number(event.target.value) }))} required /></label>
       <label>新 GitLab Token<input type="password" autoComplete="new-password" value={editForm.gitlab_token ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, gitlab_token: event.target.value }))} placeholder="留空则保留" /></label>
       <label>飞书配置<select value={editForm.feishu_target_id ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, feishu_target_id: event.target.value ? Number(event.target.value) : null }))}><option value="">暂不关联</option>{targets.data?.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
       <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_merge_requests ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_merge_requests: event.target.checked }))} />Merge Request 审核</label>

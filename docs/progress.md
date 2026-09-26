@@ -32,12 +32,13 @@
 - 项目配置和飞书 Hook 支持分别删除：删除 Hook 保留项目与评审历史并即时更新页面状态；项目无论是否已有事件、评审、通知或连接测试记录都可删除，关联业务记录会在同一事务中级联清理。在途 Worker 结果发现目标已删除时安全结束，不会恢复记录或退出进程。
 - 增加 `OCR_APP_DEV_MODE=1` 本地开发模式：管理 API 暂时不要求管理员口令，前端会直接进入管理台；生产模式仍要求 `OCR_APP_ADMIN_TOKEN`，开发模式不影响 Fernet 主密钥和 webhook 鉴权。
 - 本机固定使用 `127.0.0.1:8781`，用户配置与主密钥保存在忽略目录 `.local-data/local/`。开发模式页面返回 HTTP 200，`/api/health` 返回 `status=ok`、`worker=running`；匹配项目但缺少 Secret 的 GitLab Webhook 请求返回 401。
-- 2026-09-26 使用已保存配置联调：`App` 项目的完整 Git 克隆与目标分支拉取通过，已启用的 Agent 模型连接测试通过，飞书机器人连接测试消息发送成功。GitLab API 的用户和项目接口均返回 403，当前令牌尚不能支持 MR 核验；项目的 MR 与默认分支 Push 审核开关均为关闭状态，未触发正式评审。
-- 本地检查通过：`uv run pytest -q`（86 项）、`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。本机 `launchd` 试运行停在 Python 解释器加载阶段，已移除未运行的服务清单；当前 API 与 Worker 以前台进程运行，重启系统后须按部署文档重新启动。
+- 仓库数字项目 ID 可在收到合法 Webhook 或创建评审事件前于编辑窗口纠正；身份变更在 SQLite 写事务中校验，避免并发投递时改写历史事件归属。
+- 2026-09-26 使用已保存配置联调：`App` 项目的完整 Git 克隆与目标分支拉取通过，已启用的 Agent 模型连接测试通过，飞书机器人连接测试消息发送成功。更新 GitLab Token 后发现项目数字 ID 误填为 331；按仓库路径查得真实 ID 为 311，修正后 GitLab API 项目、分支和路径校验通过。正式评审仍待真实入站事件验收。
+- 本地检查通过：`uv run pytest -q`（88 项）、`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。本机 `launchd` 试运行停在 Python 解释器加载阶段，已移除未运行的服务清单；当前 API 与 Worker 以前台进程运行，重启系统后须按部署文档重新启动。
 
 ## 待完成
 
-- 修复 `App` 项目 GitLab API 令牌的读取权限，重新执行 API 连接测试；配置可从 GitLab 访问的 HTTPS 内网穿透地址，再验证真实入站 Webhook。
+- 配置可从 GitLab 访问的 HTTPS 内网穿透地址，再验证真实入站 Webhook。
 - 目标机器上的 `launchd` 安装和备份计划；本机后台启动须先解决 Python 解释器加载问题。
 - 在最终 Mac mini 部署用户下确认固定版 OCR CLI、模型配置与 API key 可用，并用真实 MR 输出核对 review manifest 与飞书卡片。
 - 使用真实 GitLab 测试项目配置 SSH deploy key、只读 API token 与 HTTPS webhook；完成普通 merge、squash、fast-forward 和重复投递演练。
