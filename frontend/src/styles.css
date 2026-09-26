@@ -40,6 +40,15 @@ a { color: inherit; text-decoration: none; }
 td.file-path { white-space: normal; overflow-wrap: anywhere; }
 .revision-changes { white-space: normal; min-width: 180px; max-width: 500px; overflow-wrap: anywhere; }
 .revision-changes summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.operation-alerts { list-style: none; padding: 0; margin: 0; border-top: 1px solid #e1e7e3; }
+.operation-alerts li { display: flex; align-items: center; gap: 10px; padding: 13px 4px; border-bottom: 1px solid #e1e7e3; color: #933f32; font-size: 13px; }
+.operation-facts { display: flex; flex-wrap: wrap; gap: 30px; padding: 18px 0; border-top: 1px solid #e1e7e3; }
+.operation-facts div { display: flex; flex-direction: column; gap: 6px; min-width: 180px; }
+.operation-facts span { color: #586d60; font-size: 12px; }
+.operation-facts strong { font-size: 16px; }
+.maintenance-bar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding: 16px 0; }
+.maintenance-bar label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.maintenance-bar input { min-height: 44px; width: 120px; padding: 8px; border: 1px solid #cdd9d3; border-radius: 6px; }
 @media (max-width: 1100px) { .task-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .task-filters { grid-template-columns: minmax(0, 1fr); } .page-actions { flex-wrap: wrap; } }
 .page { max-width: 1500px; min-height: 100dvh; margin: 0 auto; padding: 32px 38px 72px; }

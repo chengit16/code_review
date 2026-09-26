@@ -11,6 +11,7 @@ import { EventsPage } from "../pages/EventsPage";
 import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
+import { OperationsPage } from "../pages/OperationsPage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
 import { ReviewRulesPage } from "../pages/ReviewRulesPage";
 import { SettingsPage } from "../pages/SettingsPage";
@@ -23,6 +24,7 @@ const navigation = [
     { to: "/", label: "运行概览", icon: LayoutDashboard, end: true },
     { to: "/events", label: "GitLab 事件", icon: GitMerge },
     { to: "/jobs", label: "评审任务", icon: Activity },
+    { to: "/operations", label: "运行监控", icon: Activity },
   ] },
   { heading: "接入配置", links: [
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
@@ -108,6 +110,7 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
             <Route path="/events" element={<EventsPage token={token} />} />
             <Route path="/jobs" element={<JobsPage token={token} />} />
             <Route path="/jobs/:id" element={<JobDetailPage token={token} />} />
+            <Route path="/operations" element={<OperationsPage token={token} />} />
             <Route path="/settings" element={<SettingsPage token={token} />} />
             <Route path="/review-rules" element={<ReviewRulesPage token={token} />} />
             <Route path="/config-history" element={<ConfigHistoryPage token={token} />} />

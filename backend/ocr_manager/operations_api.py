@@ -13,6 +13,7 @@ from starlette.responses import Response
 
 from ocr_manager.config import Settings
 from ocr_manager.config_history import list_config_history, restore_config
+from ocr_manager.monitoring import eligible_artifacts, operations_snapshot, prune_artifacts
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import report_projection, search_jobs
@@ -20,6 +21,25 @@ from ocr_manager.tasks import report_projection, search_jobs
 
 def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
+
+    @app.get("/api/operations", dependencies=[admin])
+    def operations() -> dict[str, Any]:
+        """展示队列、失败、磁盘和同目录约定下的成对备份状态。"""
+
+        return operations_snapshot(store, settings.data_dir, settings.data_dir.parent / "backups")
+
+    @app.get("/api/maintenance/preview", dependencies=[admin])
+    def maintenance_preview(days: int = Query(90, ge=7, le=3650)) -> dict[str, int]:
+        """预览终态任务旧工件；不触碰任务、结果摘要或未发送通知。"""
+
+        candidates = eligible_artifacts(store, settings.data_dir, days)
+        return {"count": len(candidates), "bytes": sum(row[2] for row in candidates)}
+
+    @app.post("/api/maintenance/prune", dependencies=[admin])
+    def maintenance_prune(days: int = Query(90, ge=7, le=3650)) -> dict[str, int]:
+        """人工确认后清理；每日备份及数据库历史不由此接口删除。"""
+
+        return prune_artifacts(store, settings.data_dir, days)
 
     @app.get("/api/repository-readiness", dependencies=[admin])
     def repository_readiness() -> list[dict[str, Any]]:
