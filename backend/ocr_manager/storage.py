@@ -10,13 +10,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -282,6 +283,7 @@ class Store:
                 (18, FEEDBACK_MIGRATION),
                 (19, CONTROL_MIGRATION),
                 (20, ATTEMPT_MIGRATION),
+                (21, ALERT_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:

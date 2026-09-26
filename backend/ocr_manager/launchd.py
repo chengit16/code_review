@@ -12,8 +12,8 @@ from typing import Any
 def generate_plists(
     project_dir: Path, config_file: Path, data_dir: Path, output_dir: Path,
     port: int = 8781, no_proxy: str = "", node_bin_dir: Path | None = None,
-) -> tuple[Path, Path]:
-    """分别生成 API 与单 Worker 清单，显式传递直连域名和 Node 路径。"""
+) -> tuple[Path, Path, Path]:
+    """生成 API、Worker 与独立监控清单，显式传递直连域名和 Node 路径。"""
 
     root = project_dir.resolve(strict=True)
     python = root / ".venv" / "bin" / "python"
@@ -68,6 +68,7 @@ def generate_plists(
             ],
         ),
         ("worker", [str(python), "-m", "ocr_manager.worker"]),
+        ("monitor", [str(python), "-m", "ocr_manager.alerts"]),
     )
     paths: list[Path] = []
     for name, command in definitions:
@@ -82,7 +83,7 @@ def generate_plists(
             plistlib.dump(payload, target)
         os.chmod(path, 0o600)
         paths.append(path)
-    return paths[0], paths[1]
+    return paths[0], paths[1], paths[2]
 
 
 def generate_backup_plist(

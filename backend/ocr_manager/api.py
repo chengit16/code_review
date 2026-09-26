@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
+from ocr_manager.alerts_api import register_alerts
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.gitlab import project_web_url
 from ocr_manager.operations_api import register_operations
@@ -390,6 +391,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     admin = Depends(require_admin)
     register_operations(app, store, config, admin)
     register_task_control(app, store, config, admin)
+    register_alerts(app, store, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

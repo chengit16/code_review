@@ -124,7 +124,7 @@ def test_launchd_plists_reference_config_without_embedding_secrets(tmp_path: Pat
     node_dir.mkdir()
     node = node_dir / "node"
     node.touch(mode=0o755)
-    api, worker = generate_plists(
+    api, worker, monitor = generate_plists(
         project, config, tmp_path / "data", tmp_path / "launchd", 8777,
         "gitlab.example.test,127.0.0.1", node_dir,
     )
@@ -160,7 +160,7 @@ def test_launchd_defaults_to_local_fixed_port(tmp_path: Path) -> None:
     python.touch()
     config = tmp_path / "private.json"
     config.touch()
-    api, _ = generate_plists(project, config, tmp_path / "data", tmp_path / "launchd")
+    api, _, _ = generate_plists(project, config, tmp_path / "data", tmp_path / "launchd")
     arguments = plistlib.loads(api.read_bytes())["ProgramArguments"]
     assert arguments[-4:] == ["--host", "127.0.0.1", "--port", "8781"]
 
