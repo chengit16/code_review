@@ -1,0 +1,36 @@
+/** @description 保护配置编辑冲突时的草稿，以及部分评审的真实状态。 */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { apiRequest } from "../api/client";
+import { FeishuHooksPage } from "../pages/FeishuHooksPage";
+import { Status } from "../ui/Status";
+
+describe("配置与状态", () => {
+  it("保存冲突保留草稿，可继续编辑", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) =>
+      new Response(JSON.stringify(options?.method === "POST" ? { detail: "配置冲突" } : []),
+        { status: options?.method === "POST" ? 409 : 200 }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={queryClient}><FeishuHooksPage token="" /></QueryClientProvider>);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "新增飞书配置" }));
+    await user.type(screen.getByLabelText("配置名称"), "测试通知");
+    await user.type(screen.getByLabelText("Webhook URL"), "https://open.feishu.cn/open-apis/bot/v2/hook/test");
+    await user.click(screen.getByRole("button", { name: /^保存$/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("配置冲突");
+    expect(screen.getByLabelText("配置名称")).toHaveValue("测试通知");
+  });
+  it("部分覆盖不显示完成", () => {
+    render(<Status value="partial" />);
+    expect(screen.getByText("部分完成")).toBeVisible();
+    expect(screen.queryByText("已完成")).not.toBeInTheDocument();
+  });
+  it("请求失败保留状态与服务端原因", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "请先停止任务" }), { status: 409 }));
+    await expect(apiRequest("", "/api/test")).rejects.toMatchObject({ status: 409, message: "请先停止任务" });
+  });
+});

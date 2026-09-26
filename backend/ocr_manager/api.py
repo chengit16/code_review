@@ -992,9 +992,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = store.get_job(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="任务不存在")
-        queued_id = store.retry_job(
-            job_id, config_hash(store, config, job["rule_digest"], job["repository_id"])
-        )
+        try:
+            snapshot = config_hash(store, config, job["rule_digest"], job["repository_id"])
+        except (ValueError, InvalidToken) as error:
+            raise HTTPException(409, "评审配置不可用，请先启用并检查 Agent 模型") from error
+        queued_id = store.retry_job(job_id, snapshot)
         if queued_id is None:
             raise HTTPException(status_code=409, detail="任务当前无法重跑")
         return {"status": "queued", "job_id": queued_id}
