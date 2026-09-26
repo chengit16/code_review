@@ -1,12 +1,12 @@
 /** @description 管理 OCR 全局兜底规则与项目显式覆盖规则。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, History, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
-import type { Repository, ReviewRuleConfiguration, ReviewRuleDocument } from "../api/types";
+import type { Repository, ReviewRuleConfiguration, ReviewRuleDocument, ReviewRuleRevision } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
@@ -41,13 +41,18 @@ export function ReviewRulesPage({ token }: { /** 内存中的管理口令。 */ 
   }, [repositoryId, configurations.data]);
 
   const endpoint = repositoryId === null ? "/api/review-rules/global" : `/api/review-rules/repositories/${repositoryId}`;
+  const revisions = useQuery({ queryKey: ["review-rule-revisions", scope], queryFn: () => apiRequest<ReviewRuleRevision[]>(token, `${endpoint}/revisions`) });
   const save = useMutation({
     mutationFn: (value: ReviewRuleDocument) => apiRequest<{ status: string }>(token, endpoint, { method: "PUT", body: JSON.stringify(value) }),
-    onSuccess: () => { remove.reset(); setFeedback("审核规则已保存"); void queryClient.invalidateQueries({ queryKey: ["review-rules"] }); },
+    onSuccess: () => { remove.reset(); setFeedback("审核规则已保存"); void queryClient.invalidateQueries({ queryKey: ["review-rules"] }); void queryClient.invalidateQueries({ queryKey: ["review-rule-revisions", scope] }); },
   });
   const remove = useMutation({
     mutationFn: () => apiRequest<{ status: string }>(token, endpoint, { method: "DELETE" }),
-    onSuccess: () => { save.reset(); setFeedback("当前配置已删除"); void queryClient.invalidateQueries({ queryKey: ["review-rules"] }); },
+    onSuccess: () => { save.reset(); setFeedback("当前配置已删除"); void queryClient.invalidateQueries({ queryKey: ["review-rules"] }); void queryClient.invalidateQueries({ queryKey: ["review-rule-revisions", scope] }); },
+  });
+  const restore = useMutation({
+    mutationFn: (revisionId: number) => apiRequest<{ status: string }>(token, `${endpoint}/revisions/${revisionId}/restore`, { method: "POST" }),
+    onSuccess: () => { setFeedback("历史版本已恢复"); void queryClient.invalidateQueries({ queryKey: ["review-rules"] }); void queryClient.invalidateQueries({ queryKey: ["review-rule-revisions", scope] }); },
   });
 
   function submit(event: FormEvent) {
@@ -110,6 +115,17 @@ export function ReviewRulesPage({ token }: { /** 内存中的管理口令。 */ 
           {feedback && <p className="form-success" role="status">{feedback}</p>}
           <div className="form-actions"><button className="button button-secondary" type="button" disabled={!current || remove.isPending} onClick={() => { if (window.confirm("确定删除当前范围的审核规则配置？")) remove.mutate(); }}><Trash2 size={16} />删除配置</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存规则</button></div>
         </form>
+      </section>
+      <section className="section rule-workspace rule-history">
+        <div className="section-head"><h2><History size={18} />版本历史</h2><span>最近 50 次变更</span></div>
+        <QueryState loading={revisions.isLoading} error={revisions.error} />
+        {restore.error && <p className="form-error" role="alert">{restore.error.message}</p>}
+        {revisions.data?.length === 0 && <p className="rule-empty">尚无历史版本</p>}
+        <div className="rule-revisions">{revisions.data?.map((revision) => <div className="rule-revision" key={revision.id}>
+          <div><strong>版本 #{revision.id}</strong><span>{revision.action === "deleted" ? "已删除" : revision.action === "restored" ? `已恢复自 #${revision.restored_from}` : "已保存"}</span><time>{formatTime(revision.created_at)}</time></div>
+          <div className="row-actions"><button className="button button-secondary" type="button" disabled={restore.isPending} onClick={() => { if (dirty && !window.confirm("当前编辑内容尚未保存，恢复历史版本会覆盖当前配置。确定继续？")) return; if (window.confirm(`确定恢复版本 #${revision.id}？`)) restore.mutate(revision.id); }}><RotateCcw size={15} />恢复</button></div>
+          <details><summary>查看版本内容</summary><pre>{revision.content ? JSON.stringify(revision.content, null, 2) : "该版本未配置审核规则"}</pre></details>
+        </div>)}</div>
       </section>
     </>}
   </div>;

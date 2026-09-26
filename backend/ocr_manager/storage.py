@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -182,6 +182,20 @@ CREATE TABLE review_rule_configs (
 CREATE UNIQUE INDEX idx_review_rule_global ON review_rule_configs((1))
 WHERE repository_id IS NULL;
 """
+SCHEMA_V12 = """
+CREATE TABLE review_rule_revisions (
+  id INTEGER PRIMARY KEY,
+  repository_id INTEGER REFERENCES repositories(id) ON DELETE CASCADE,
+  content TEXT,
+  action TEXT NOT NULL CHECK (action IN ('saved', 'deleted', 'restored')),
+  restored_from INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_review_rule_revisions_scope
+ON review_rule_revisions(repository_id, id DESC);
+INSERT INTO review_rule_revisions(repository_id, content, action)
+SELECT repository_id, content, 'saved' FROM review_rule_configs;
+"""
 
 
 class Store:
@@ -224,6 +238,7 @@ class Store:
                 (9, SCHEMA_V9),
                 (10, SCHEMA_V10),
                 (11, SCHEMA_V11),
+                (12, SCHEMA_V12),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -361,41 +376,86 @@ class Store:
             ).fetchone()
             return str(row["content"]) if row else None
 
+    def list_review_rule_revisions(self, repository_id: int | None) -> list[dict[str, Any]]:
+        """按范围列出最近版本；正文用于管理员核对和回滚。"""
+
+        with self.connection() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    """SELECT id, repository_id, content, action, restored_from, created_at
+                    FROM review_rule_revisions WHERE repository_id IS ?
+                    ORDER BY id DESC LIMIT 50""",
+                    (repository_id,),
+                )
+            ]
+
+    def _write_review_rule(
+        self, db: sqlite3.Connection, repository_id: int | None,
+        content: str | None, restored_from: int | None = None,
+    ) -> bool:
+        """在调用方事务内核对活动任务并保存当前配置与历史版本。"""
+
+        if repository_id is not None and db.execute(
+            "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
+        ).fetchone() is None:
+            raise LookupError("仓库不存在")
+        active = db.execute(
+            """SELECT 1 FROM review_jobs WHERE status IN ('queued','running')
+            AND (? IS NULL OR repository_id=?) LIMIT 1""",
+            (repository_id, repository_id),
+        ).fetchone()
+        if active:
+            raise ValueError("有待处理评审任务，请完成后再修改审核规则")
+        current = db.execute(
+            "SELECT id, content FROM review_rule_configs WHERE repository_id IS ?",
+            (repository_id,),
+        ).fetchone()
+        if content is None and current is None:
+            return False
+        if current is not None and content == current["content"] and restored_from is None:
+            return True
+        if content is None:
+            db.execute("DELETE FROM review_rule_configs WHERE id=?", (current["id"],))
+        elif current:
+            db.execute(
+                """UPDATE review_rule_configs SET content=?,
+                updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (content, current["id"]),
+            )
+        else:
+            db.execute(
+                "INSERT INTO review_rule_configs(repository_id, content) VALUES (?, ?)",
+                (repository_id, content),
+            )
+        db.execute(
+            """INSERT INTO review_rule_revisions(repository_id, content, action, restored_from)
+            VALUES (?, ?, ?, ?)""",
+            (repository_id, content, "restored" if restored_from else
+             "saved" if content is not None else "deleted", restored_from),
+        )
+        return True
+
     def change_review_rule(self, repository_id: int | None, content: str | None) -> bool:
         """在写锁内阻止修改运行中或排队任务使用的规则。"""
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            if repository_id is not None and db.execute(
-                "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
-            ).fetchone() is None:
-                raise LookupError("仓库不存在")
-            active = db.execute(
-                """SELECT 1 FROM review_jobs WHERE status IN ('queued','running')
-                AND (? IS NULL OR repository_id=?) LIMIT 1""",
-                (repository_id, repository_id),
+            return self._write_review_rule(db, repository_id, content)
+
+    def restore_review_rule(self, repository_id: int | None, revision_id: int) -> bool:
+        """同一写事务内读取目标版本并恢复，防止并发配置变更越过队列保护。"""
+
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            revision = db.execute(
+                """SELECT content FROM review_rule_revisions
+                WHERE id=? AND repository_id IS ?""",
+                (revision_id, repository_id),
             ).fetchone()
-            if active:
-                raise ValueError("有待处理评审任务，请完成后再修改审核规则")
-            current = db.execute(
-                "SELECT id FROM review_rule_configs WHERE repository_id IS ?", (repository_id,)
-            ).fetchone()
-            if content is None:
-                if current:
-                    db.execute("DELETE FROM review_rule_configs WHERE id=?", (current["id"],))
-                return bool(current)
-            if current:
-                db.execute(
-                    """UPDATE review_rule_configs SET content=?,
-                    updated_at=CURRENT_TIMESTAMP WHERE id=?""",
-                    (content, current["id"]),
-                )
-            else:
-                db.execute(
-                    "INSERT INTO review_rule_configs(repository_id, content) VALUES (?, ?)",
-                    (repository_id, content),
-                )
-            return True
+            if revision is None:
+                raise LookupError("审核规则版本不存在")
+            return self._write_review_rule(db, repository_id, revision["content"], revision_id)
 
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
         """项目身份有历史后冻结；来源变化必须等待当前事件和评审结束。"""

@@ -175,6 +175,15 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .rule-form textarea:focus { outline: 2px solid #258d72; outline-offset: 2px; }
 .rule-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
 .rule-form > .form-actions { padding-top: 20px; }
+.rule-history { margin-top: 18px; }
+.rule-history .section-head h2 { display: flex; align-items: center; gap: 8px; }
+.rule-revisions { display: grid; gap: 0; }
+.rule-revision { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; padding: 12px 0; border-top: 1px solid #e1e8e3; }
+.rule-revision > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px; }
+.rule-revision time { color: #64766c; }
+.rule-revision details { grid-column: 1 / -1; font-size: 12px; }
+.rule-revision summary { width: fit-content; cursor: pointer; color: #246b51; }
+.rule-revision pre { max-height: 300px; overflow: auto; padding: 12px; border: 1px solid #dce5df; background: #f7faf8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; }
 .form-success { color: #176749; font-size: 13px; }
 .settings-section { max-width: 650px; }

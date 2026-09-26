@@ -81,6 +81,16 @@ export interface ReviewRuleConfiguration {
   updated_at: string;
 }
 
+/** 规则历史保留删除状态；恢复任一版本会生成新的历史记录。 */
+export interface ReviewRuleRevision {
+  id: number;
+  repository_id: number | null;
+  content: ReviewRuleDocument | null;
+  action: "saved" | "deleted" | "restored";
+  restored_from: number | null;
+  created_at: string;
+}
+
 /** 可供多个仓库引用的飞书通知通道；凭据从不进入列表响应。 */
 export interface NotificationTarget {
   id: number;

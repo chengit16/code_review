@@ -160,3 +160,51 @@ def test_deleting_repository_removes_its_managed_rule(
     store = Store(settings.data_dir / "app.db")
     assert store.get_review_rule(repository_id) is None
     assert store.get_review_rule(None) is not None
+
+
+def test_rule_history_restores_saved_and_deleted_versions(
+    client: TestClient, settings: Settings
+) -> None:
+    """历史回滚保留旧版本、创建新版本，并重新影响评审快照。"""
+
+    repository_id = add_repository(client)
+    endpoint = f"/api/review-rules/repositories/{repository_id}"
+    changed = {**RULE, "rules": [{**RULE["rules"][0], "rule": "检查授权"}]}
+    assert client.get(f"{endpoint}/revisions").status_code == 401
+    assert client.put(endpoint, headers=ADMIN, json=RULE).status_code == 200
+    store = Store(settings.data_dir / "app.db")
+    initial_hash = config_hash(store, settings, repository_id=repository_id)
+    assert client.put(endpoint, headers=ADMIN, json=changed).status_code == 200
+    assert client.delete(endpoint, headers=ADMIN).status_code == 200
+    revisions = client.get(f"{endpoint}/revisions", headers=ADMIN).json()
+    assert [item["action"] for item in revisions] == ["deleted", "saved", "saved"]
+    first_id = revisions[-1]["id"]
+    restored = client.post(f"{endpoint}/revisions/{first_id}/restore", headers=ADMIN)
+    assert restored.status_code == 200
+    assert json.loads(store.get_review_rule(repository_id) or "null") == RULE
+    assert config_hash(store, settings, repository_id=repository_id) == initial_hash
+    assert client.get(f"{endpoint}/revisions", headers=ADMIN).json()[0]["restored_from"] == first_id
+    assert client.post(f"{endpoint}/revisions/9999/restore", headers=ADMIN).status_code == 404
+    global_endpoint = "/api/review-rules/global"
+    wrong_scope = client.post(f"{global_endpoint}/revisions/{first_id}/restore", headers=ADMIN)
+    assert wrong_scope.status_code == 404
+
+
+def test_rule_restore_respects_pending_job_lock(client: TestClient, settings: Settings) -> None:
+    """恢复历史不能绕过已有排队评审的配置快照锁。"""
+
+    repository_id = add_repository(client)
+    endpoint = f"/api/review-rules/repositories/{repository_id}"
+    assert client.put(endpoint, headers=ADMIN, json=RULE).status_code == 200
+    revision_id = client.get(f"{endpoint}/revisions", headers=ADMIN).json()[0]["id"]
+    store = Store(settings.data_dir / "app.db")
+    assert store.enqueue_mr(repository_id, 7)
+    event = store.next_event()
+    assert event is not None
+    sha = "a" * 40
+    snapshot = config_hash(store, settings, repository_id=repository_id)
+    store.finish_event(event["id"], [sha], {sha: (snapshot, "")}, None)
+    assert client.post(
+        f"{endpoint}/revisions/{revision_id}/restore", headers=ADMIN
+    ).status_code == 409
+    assert len(client.get(f"{endpoint}/revisions", headers=ADMIN).json()) == 1

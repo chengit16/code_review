@@ -432,7 +432,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/review-rules/repositories/{repository_id}", dependencies=[admin])
     def delete_repository_review_rule(repository_id: int) -> dict[str, str]:
+        """删除项目规则，保留历史版本以便恢复。"""
+
         return change_review_rule(repository_id, None)
+
+    def rule_revisions(repository_id: int | None) -> list[dict[str, Any]]:
+        """历史正文仅在管理鉴权之后返回，删除后的版本仍可查看。"""
+
+        if repository_id is not None and store.get_repository(repository_id) is None:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+        return [
+            {**row, "content": json.loads(row["content"]) if row["content"] else None}
+            for row in store.list_review_rule_revisions(repository_id)
+        ]
+
+    def restore_rule(repository_id: int | None, revision_id: int) -> dict[str, str]:
+        """历史版本恢复仍受未完成任务保护，并生成新的可追溯版本。"""
+
+        try:
+            store.restore_review_rule(repository_id, revision_id)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        return {"status": "restored"}
+
+    @app.get("/api/review-rules/global/revisions", dependencies=[admin])
+    def global_rule_revisions() -> list[dict[str, Any]]:
+        """列出全局规则的最近 50 个版本。"""
+
+        return rule_revisions(None)
+
+    @app.post("/api/review-rules/global/revisions/{revision_id}/restore", dependencies=[admin])
+    def restore_global_rule(revision_id: int) -> dict[str, str]:
+        """恢复全局规则并重新计算后续任务快照。"""
+
+        return restore_rule(None, revision_id)
+
+    @app.get("/api/review-rules/repositories/{repository_id}/revisions", dependencies=[admin])
+    def repository_rule_revisions(repository_id: int) -> list[dict[str, Any]]:
+        """列出项目规则的最近 50 个版本。"""
+
+        return rule_revisions(repository_id)
+
+    @app.post(
+        "/api/review-rules/repositories/{repository_id}/revisions/{revision_id}/restore",
+        dependencies=[admin],
+    )
+    def restore_repository_rule(repository_id: int, revision_id: int) -> dict[str, str]:
+        """恢复指定项目的一个规则版本。"""
+
+        return restore_rule(repository_id, revision_id)
 
     @app.get("/api/repositories/{repository_id}/webhook-token", dependencies=[admin])
     def get_webhook_token(repository_id: int, response: Response) -> dict[str, str]:
