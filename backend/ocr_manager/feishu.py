@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import time
 from typing import Any
 
@@ -60,59 +61,147 @@ def post_message(webhook_url: str, body: dict[str, Any], signing_secret: str = "
         raise FeishuDeliveryError("飞书未确认消息投递成功", retryable=False)
 
 
-def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "") -> None:
-    """检查 HTTP 与飞书业务返回码；异常交给投递队列重试。"""
+def _plain_section(content: str) -> dict[str, Any]:
+    return {"tag": "div", "text": {"tag": "plain_text", "content": content}}
 
+
+def _coverage_state(
+    coverage: dict[str, Any], status: str, budget_exceeded: bool
+) -> tuple[str, bool]:
+    # OCR 成功状态不等于全量覆盖；豁免或预算耗尽时不能发绿色结论。
+    fields = ("selected", "completed", "reused", "failed", "waived")
+    has_coverage = all(isinstance(coverage.get(field), list) for field in fields)
+    if not has_coverage:
+        return "覆盖：结果记录不可用", False
+    selected = coverage["selected"]
+    reviewed = len(coverage["completed"]) + len(coverage["reused"])
+    failed = len(coverage["failed"])
+    waived = len(coverage["waived"])
+    is_complete = (
+        status == "complete"
+        and not budget_exceeded
+        and bool(selected)
+        and reviewed == len(selected)
+        and failed == 0
+        and waived == 0
+    )
+    return (
+        f"覆盖：已审查 {reviewed}/{len(selected)} 个文件 · 失败 {failed} · 豁免 {waived}",
+        is_complete,
+    )
+
+
+def _review_status(
+    status: str, finding_count: int, counts: dict[str, int], is_complete: bool
+) -> tuple[str, str, str]:
+    # 状态色表达评审结论；有发现的 complete 也不能使用绿色。
+    if status == "failed":
+        return "评审失败", "red", "结论：评审执行失败，本次结果不能作为无问题依据。"
+    if status == "skipped":
+        return "无可审查文件", "grey", "结论：本次提交没有可审查文件。"
+    if not is_complete:
+        return (
+            "评审未完成",
+            "orange",
+            f"结论：评审覆盖不完整，已发现 {finding_count} 条问题；请查看任务详情。",
+        )
+    if finding_count:
+        color = "red" if counts["critical"] or counts["high"] else "orange"
+        return "需处理", color, f"结论：发现 {finding_count} 条问题，请查看完整评审并处理。"
+    return "未发现问题", "green", "结论：已完成全部可审查文件，未发现问题。"
+
+
+def _finding_sections(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # OCR 评论是不可信文本，只作为 plain_text 放入卡片，不解释 Markdown 或 HTML。
+    priority = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    labels = {"critical": "严重", "high": "高危", "medium": "中危", "low": "低危"}
+
+    def rank(item: dict[str, Any]) -> int:
+        severity = item.get("severity")
+        return priority.get(severity, 4) if isinstance(severity, str) else 4
+
+    # 低危及未分级发现保留在详情页；群消息只摘录可优先处理的问题。
+    highlights = sorted((item for item in findings if rank(item) < 3), key=rank)[:3]
+    if not highlights:
+        return []
+    elements: list[dict[str, Any]] = [{"tag": "hr"}, _plain_section("重点发现")]
+    for item in highlights:
+        raw_severity = item.get("severity")
+        severity = labels.get(raw_severity, "未分级") if isinstance(raw_severity, str) else "未分级"
+        content = " ".join(str(item.get("content") or "查看完整评审了解详情").split())[:140]
+        path = " ".join(str(item.get("path") or "文件").split())[:100]
+        line = item.get("start_line")
+        location = (
+            f"{path}:{line}"
+            if isinstance(line, int) and not isinstance(line, bool) and line > 0
+            else path
+        )
+        elements.append(_plain_section(f"{severity} · {content}\n{location}"))
+    if len(findings) > len(highlights):
+        elements.append(
+            _plain_section(f"另有 {len(findings) - len(highlights)} 条发现，请查看完整评审。")
+        )
+    return elements
+
+
+def build_review_card(job: dict[str, Any]) -> dict[str, Any]:
+    """从已保存的 OCR 事实构造卡片；未完整覆盖时绝不输出绿色无问题结论。"""
+
+    # 1. 只提取可展示的评审字段，不把原始推理或代码片段转发到群聊。
     result = job.get("result_json")
     if isinstance(result, str):
-        import json
-
         result = json.loads(result)
     comments = result.get("comments", []) if isinstance(result, dict) else []
-    if not isinstance(comments, list):
-        comments = []
+    findings = (
+        [item for item in comments if isinstance(item, dict)] if isinstance(comments, list) else []
+    )
     manifest = result.get("manifest", {}) if isinstance(result, dict) else {}
     coverage = manifest.get("coverage", {}) if isinstance(manifest, dict) else {}
+    if not isinstance(coverage, dict):
+        coverage = {}
+    summary = result.get("summary", {}) if isinstance(result, dict) else {}
+    budget_exceeded = isinstance(summary, dict) and summary.get("budget_exceeded") is True
     counts = {
-        severity: sum(
-            isinstance(item, dict) and item.get("severity") == severity for item in comments
-        )
+        severity: sum(item.get("severity") == severity for item in findings)
         for severity in ("critical", "high", "medium", "low")
     }
-    selected = coverage.get("selected", []) if isinstance(coverage, dict) else []
-    completed = coverage.get("completed", []) if isinstance(coverage, dict) else []
-    reused = coverage.get("reused", []) if isinstance(coverage, dict) else []
-    failed = coverage.get("failed", []) if isinstance(coverage, dict) else []
-    waived = coverage.get("waived", []) if isinstance(coverage, dict) else []
-    lines = [
-        f"仓库：{job['repository_name']} · {job['target_branch']}",
-        f"{'MR !' + str(job['mr_iid']) if job['mr_iid'] > 0 else '默认分支 Push'}"
-        f" · 提交 {str(job['commit_sha'])[:10]} · 任务 #{job['job_id']}",
-        f"状态：{job['review_status']} · 发现 {len(comments)} 条",
-        f"覆盖：{len(completed) + len(reused)}/{len(selected)} 完成，"
-        f"{len(failed)} 失败，{len(waived)} 豁免",
-        "严重性：" + " · ".join(f"{name} {count}" for name, count in counts.items()),
+
+    # 2. 覆盖与严重性共同决定顶部状态，不能只看 Worker 的终态。
+    coverage_text, is_complete = _coverage_state(coverage, job["review_status"], budget_exceeded)
+    title, color, conclusion = _review_status(
+        job["review_status"], len(findings), counts, is_complete
+    )
+
+    severity_labels = ("critical", "high", "medium", "low")
+    severity_names = {"critical": "严重", "high": "高危", "medium": "中危", "low": "低危"}
+    severity_counts = [
+        f"{severity_names[severity]} {counts[severity]}"
+        for severity in severity_labels
+        if counts[severity]
     ]
-    if job.get("review_error"):
-        lines.append("执行失败，请在管理台查看诊断")
-    # 卡片空间有限，优先放入高严重性发现；低级别与未分级评论仍保留在管理页。
-    priority = {"critical": 0, "high": 1, "medium": 2}
-    highlights = sorted(
-        (item for item in comments if isinstance(item, dict) and item.get("severity") in priority),
-        key=lambda item: priority[item["severity"]],
-    )[:3]
-    for item in highlights:
-        path = str(item.get("path", "文件"))[:100]
-        content = str(item.get("content", ""))[:180].replace("\n", " ")
-        lines.append(f"• {path}：{content}")
-    # 外部评审内容按纯文本呈现，避免评论里的 Markdown 被解释成卡片指令。
+    other_count = len(findings) - sum(counts.values())
+    if other_count:
+        severity_counts.append(f"未分级 {other_count}")
+    header = " · ".join((title, *severity_counts))
+    repository = str(job.get("path_with_namespace") or job["repository_name"])
+    source = f"MR !{job['mr_iid']}" if job["mr_iid"] > 0 else "默认分支 Push"
+    metadata = (
+        f"{repository[:100]} · {job['target_branch']} · SHA {str(job['commit_sha'])[:10]}\n"
+        f"{source} · 任务 #{job['job_id']}"
+    )
     elements: list[dict[str, Any]] = [
-        {"tag": "div", "text": {"tag": "plain_text", "content": "\n".join(lines)[:3500]}}
+        _plain_section(metadata),
+        _plain_section(coverage_text),
+        _plain_section(conclusion),
     ]
+    if findings:
+        elements.extend(_finding_sections(findings))
+
+    # 3. 外部链接仅来自已有的受控任务与 GitLab URL，不从 OCR 评论中生成操作。
     actions = [
+        ("查看完整评审", job.get("detail_url")),
+        ("查看 GitLab 提交", job.get("commit_url")),
         ("查看 MR", job.get("mr_url")),
-        ("查看提交", job.get("commit_url")),
-        ("查看任务", job.get("detail_url")),
     ]
     if any(url for _label, url in actions):
         elements.append(
@@ -130,20 +219,23 @@ def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "")
                 ],
             }
         )
-    color = {"complete": "green", "partial": "orange", "failed": "red", "skipped": "grey"}.get(
-        job["review_status"], "blue"
-    )
-    body = {
+    return {
         "msg_type": "interactive",
         "card": {
             "config": {"wide_screen_mode": True},
             "header": {
                 "template": color,
-                "title": {"tag": "plain_text", "content": "Open Code Review 评审结果"},
+                "title": {"tag": "plain_text", "content": header},
             },
             "elements": elements,
         },
     }
+
+
+def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "") -> None:
+    """发送结构化卡片并校验飞书业务响应，失败由独立投递队列重试。"""
+
+    body = build_review_card(job)
     if signing_secret:
         post_message(webhook_url, body, signing_secret)
     else:

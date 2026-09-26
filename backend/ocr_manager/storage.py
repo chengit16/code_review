@@ -760,6 +760,9 @@ class Store:
                 }
                 if isinstance(result.get("manifest"), dict)
                 else None,
+                "summary": {"budget_exceeded": result["summary"].get("budget_exceeded") is True}
+                if isinstance(result.get("summary"), dict)
+                else None,
                 "preview": result.get("preview"),
                 "message": result.get("message"),
                 "source": result.get("source"),
@@ -943,7 +946,8 @@ class Store:
             row = db.execute(
                 """SELECT d.*, j.repository_id, j.commit_sha, j.mr_iid, j.status AS review_status,
                 j.result_json, j.error AS review_error,
-                r.name AS repository_name, r.target_branch, r.gitlab_url, r.remote_url
+                r.name AS repository_name, r.path_with_namespace, r.target_branch,
+                r.gitlab_url, r.remote_url
                 FROM notification_deliveries d
                 JOIN review_jobs j ON j.id=d.job_id
                 JOIN repositories r ON r.id=j.repository_id

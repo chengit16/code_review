@@ -342,6 +342,48 @@ def test_job_detail_does_not_expose_raw_model_thinking(tmp_path: Path) -> None:
         assert "private-reasoning" not in row.fetchone()[0]
 
 
+def test_delivery_keeps_repository_path_and_budget_flag(tmp_path: Path) -> None:
+    """通知从已保存事实生成卡片，保留必要字段且不携带模型推理。"""
+
+    store, repository_id = make_store(tmp_path)
+    with store.connection() as db:
+        db.execute(
+            "UPDATE repositories SET path_with_namespace=? WHERE id=?",
+            ("team/repo", repository_id),
+        )
+    store.add_event(repository_id, 7, None, None, None)
+    event = store.next_event()
+    assert event is not None
+    store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
+    job = store.next_job()
+    assert job is not None
+    store.finish_job(
+        job["id"],
+        "partial",
+        "result.json",
+        {
+            "comments": [],
+            "summary": {"budget_exceeded": True, "thinking": "private-reasoning"},
+            "manifest": {
+                "coverage": {
+                    "selected": [1],
+                    "completed": [1],
+                    "reused": [],
+                    "failed": [],
+                    "waived": [],
+                }
+            },
+        },
+        None,
+    )
+    delivery = store.next_delivery()
+    assert delivery is not None
+    assert delivery["path_with_namespace"] == "team/repo"
+    result = json.loads(delivery["result_json"])
+    assert result["summary"] == {"budget_exceeded": True}
+    assert "private-reasoning" not in json.dumps(result)
+
+
 def test_paused_repository_holds_jobs_and_notifications(tmp_path: Path) -> None:
     """暂停仓库时保留已入库工作，恢复后从同一状态继续处理。"""
 
