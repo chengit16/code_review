@@ -1,151 +1,118 @@
-/**
- * @description 按项目维护飞书机器人 Hook
- *
- * 只负责选择项目、录入和测试飞书地址；项目身份与 Agent 模型分别由其他配置入口维护。
- * Hook 密钥只在表单内存中存在，服务端只返回是否已配置。
- */
+/** @description 飞书机器人作为独立通知通道，可被多个 GitLab 仓库共享。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquare, Save, Settings2, Trash2, X } from "lucide-react";
+import { Plus, Save, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
-import type { Repository, RepositoryUpdateInput } from "../api/types";
-import { ConnectionChecks } from "../ui/ConnectionChecks";
+import type { NotificationTarget, NotificationTargetInput, Repository } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
-import { Status } from "../ui/Status";
-import { formatTime } from "../ui/format";
 
-/** 维护每个项目的飞书通知 Hook，凭据不会进入查询缓存或页面文本。 */
+interface TargetForm {
+  name: string;
+  webhookUrl: string;
+  signingSecret: string;
+  clearSigning: boolean;
+}
+
+const emptyForm: TargetForm = { name: "", webhookUrl: "", signingSecret: "", clearSigning: false };
+
 export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
   const queryClient = useQueryClient();
-  const query = useQuery({
-    queryKey: ["repositories"],
-    queryFn: () => apiRequest<Repository[]>(token, "/api/repositories"),
-  });
-  const [editing, setEditing] = useState<Repository | null>(null);
-  const [webhook, setWebhook] = useState("");
+  const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
+  const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<NotificationTarget | null>(null);
+  const [form, setForm] = useState<TargetForm>(emptyForm);
   const [feedback, setFeedback] = useState("");
-  const update = useMutation({
-    mutationFn: ({ id, input }: { id: number; input: RepositoryUpdateInput }) =>
-      apiRequest<Repository>(token, `/api/repositories/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(input),
+
+  const save = useMutation({
+    mutationFn: ({ targetId, input }: { targetId: number | null; input: NotificationTargetInput }) =>
+      apiRequest<NotificationTarget>(token, targetId === null ? "/api/notification-targets" : `/api/notification-targets/${targetId}`, {
+        method: targetId === null ? "POST" : "PATCH", body: JSON.stringify(input),
       }),
-    onSuccess: (updated) => {
+    onSuccess: () => {
+      setOpen(false);
       setEditing(null);
-      setWebhook("");
-      setFeedback("飞书 Hook 已保存");
-      queryClient.setQueryData<Repository[]>(["repositories"], (current) =>
-        current?.map((repository) => repository.id === updated.id ? updated : repository),
-      );
+      setForm(emptyForm);
+      setFeedback("飞书配置已保存");
+      void queryClient.invalidateQueries({ queryKey: ["notification-targets"] });
       void queryClient.invalidateQueries({ queryKey: ["repositories"] });
-      void queryClient.invalidateQueries({ queryKey: ["connection-checks"] });
     },
   });
   const remove = useMutation({
-    mutationFn: (id: number) => apiRequest<Repository>(token, `/api/repositories/${id}/feishu-hook`, { method: "DELETE" }),
-    onSuccess: (updated) => {
-      setFeedback("飞书 Hook 已删除");
-      queryClient.setQueryData<Repository[]>(["repositories"], (current) =>
-        current?.map((repository) => repository.id === updated.id ? updated : repository),
-      );
+    mutationFn: (targetId: number) => apiRequest<{ status: string }>(token, `/api/notification-targets/${targetId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setFeedback("飞书配置已删除，关联仓库已解除绑定");
+      void queryClient.invalidateQueries({ queryKey: ["notification-targets"] });
       void queryClient.invalidateQueries({ queryKey: ["repositories"] });
-      void queryClient.invalidateQueries({ queryKey: ["connection-checks"] });
     },
   });
 
-  function beginEdit(repository: Repository) {
-    setEditing(repository);
-    setWebhook("");
-    update.reset();
-    remove.reset();
+  function beginAdd() {
+    setEditing(null);
+    setForm(emptyForm);
+    setOpen(true);
+    save.reset();
+  }
+
+  function beginEdit(target: NotificationTarget) {
+    setEditing(target);
+    setForm({ ...emptyForm, name: target.name });
+    setOpen(true);
+    save.reset();
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!editing || !webhook) return;
-    update.mutate({ id: editing.id, input: { feishu_webhook: webhook } });
+    const input: NotificationTargetInput = { name: form.name.trim() };
+    if (form.webhookUrl.trim()) input.webhook_url = form.webhookUrl.trim();
+    if (form.signingSecret) input.signing_secret = form.signingSecret;
+    if (form.clearSigning) input.signing_secret = "";
+    save.mutate({ targetId: editing?.id ?? null, input });
   }
 
-  function deleteHook(repository: Repository) {
-    if (!window.confirm(`确定删除项目“${repository.name}”的飞书 Hook？项目和评审历史会保留。`)) return;
+  function deleteTarget(target: NotificationTarget) {
+    if (!window.confirm(`确定删除飞书配置“${target.name}”？${target.repository_count} 个关联仓库将不再发送通知。`)) return;
     setFeedback("");
     remove.reset();
-    remove.mutate(repository.id);
+    remove.mutate(target.id);
   }
 
-  return (
-    <div className="page">
-      <PageHeader title="飞书 Hook" subtitle="按项目配置通知目标；地址只写入，不回显" />
-      {feedback && <p className="form-success" role="status">{feedback}</p>}
-      {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
-      <QueryState loading={query.isLoading} error={query.error} />
-      {!query.isLoading && !query.error && (
-        <section className="section">
-          <div className="config-callout">
-            <MessageSquare size={19} aria-hidden="true" />
-            <div>
-              <strong>通知配置独立于项目参数</strong>
-              <p>项目可以先接入 GitLab，稍后再为每个项目配置飞书机器人 Hook。</p>
+  return <div className="page">
+    <PageHeader title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
+    {feedback && <p className="form-success" role="status">{feedback}</p>}
+    {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
+    <QueryState loading={targets.isLoading} error={targets.error} />
+    {!targets.isLoading && !targets.error && <section className="section">
+      <div className="hook-list">
+        {targets.data?.map((target) => {
+          const linked = repositories.data?.filter((repository) => repository.feishu_target_id === target.id) ?? [];
+          return <article className="hook-row" key={target.id}>
+            <div className="hook-project"><strong>{target.name}</strong><span>{linked.length ? linked.map((repository) => repository.name).join("、") : "尚未关联仓库"}</span></div>
+            <span>{target.repository_count} 个仓库</span>
+            <span className="hook-last">{target.has_signing_secret ? "签名校验已配置" : "未配置签名校验"}</span>
+            <div className="row-actions">
+              <button className="icon-button" type="button" title="编辑飞书配置" aria-label={`编辑 ${target.name}`} onClick={() => beginEdit(target)}><Settings2 size={16} /></button>
+              <button className="icon-button icon-button-danger" type="button" title="删除飞书配置" aria-label={`删除 ${target.name}`} onClick={() => deleteTarget(target)} disabled={remove.isPending}><Trash2 size={16} /></button>
             </div>
-          </div>
-          <div className="hook-list">
-            {query.data?.map((repository) => (
-              <article className="hook-row" key={repository.id}>
-                <div className="hook-project">
-                  <strong>{repository.name}</strong>
-                  <span>{repository.gitlab_url} · {repository.target_branch}</span>
-                </div>
-                <Status value={repository.has_feishu_webhook ? "configured" : "unconfigured"} />
-                <span className="hook-last">最近 GitLab 投递：{formatTime(repository.last_webhook_at)}</span>
-                <div className="row-actions">
-                  <button className="icon-button" type="button" title={repository.has_feishu_webhook ? "轮换飞书 Hook" : "添加飞书 Hook"} aria-label={`${repository.has_feishu_webhook ? "轮换" : "添加"} ${repository.name} 的飞书 Hook`} onClick={() => beginEdit(repository)}>
-                    <Settings2 size={16} />
-                  </button>
-                  <button className="icon-button icon-button-danger" type="button" title="删除飞书 Hook" aria-label={`删除 ${repository.name} 的飞书 Hook`} onClick={() => deleteHook(repository)} disabled={!repository.has_feishu_webhook || remove.isPending}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </article>
-            ))}
-            {query.data?.length === 0 && <p className="empty-inline">请先在项目配置中接入 GitLab 项目。</p>}
-          </div>
-        </section>
-      )}
-      {editing && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="feishu-hook-title">
-            <div className="modal-heading">
-              <h2 id="feishu-hook-title">配置 {editing.name} 的飞书 Hook</h2>
-              <button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setEditing(null)}>
-                <X size={19} />
-              </button>
-            </div>
-            <form className="settings-form hook-form" onSubmit={submit}>
-              <label>
-                飞书机器人 Webhook
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={webhook}
-                  onChange={(event) => setWebhook(event.target.value)}
-                  placeholder={editing.has_feishu_webhook ? "已配置，输入新地址可轮换" : "粘贴 open.feishu.cn Hook 地址"}
-                  required
-                />
-              </label>
-              {update.error && <p className="form-error" role="alert">{update.error.message}</p>}
-              <div className="form-actions">
-                <button type="button" className="button button-secondary" onClick={() => setEditing(null)}>取消</button>
-                <button type="submit" className="button button-primary" disabled={update.isPending}><Save size={16} />保存 Hook</button>
-              </div>
-            </form>
-            <ConnectionChecks token={token} kinds={["feishu"]} repositoryId={editing.id} enabled={editing.has_feishu_webhook} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
+          </article>;
+        })}
+        {targets.data?.length === 0 && <p className="empty-inline">暂无飞书配置</p>}
+      </div>
+    </section>}
+    {open && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="target-title">
+      <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
+      <form className="settings-form hook-form" onSubmit={submit}>
+        <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
+        <label>Webhook URL<input type="password" autoComplete="new-password" value={form.webhookUrl} onChange={(event) => setForm((current) => ({ ...current, webhookUrl: event.target.value }))} placeholder={editing ? "留空则保留当前地址" : "https://open.feishu.cn/open-apis/bot/v2/hook/…"} required={!editing} /></label>
+        <label>签名密钥<input type="password" autoComplete="new-password" value={form.signingSecret} onChange={(event) => setForm((current) => ({ ...current, signingSecret: event.target.value, clearSigning: false }))} placeholder={editing?.has_signing_secret ? "留空则保留当前密钥" : "未启用签名校验时留空"} disabled={form.clearSigning} /></label>
+        {editing?.has_signing_secret && <label className="checkbox-label"><input type="checkbox" checked={form.clearSigning} onChange={(event) => setForm((current) => ({ ...current, clearSigning: event.target.checked, signingSecret: "" }))} />移除签名密钥</label>}
+        {save.error && <p className="form-error" role="alert">{save.error.message}</p>}
+        <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
+      </form>
+    </div></div>}
+  </div>;
 }

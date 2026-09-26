@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 from typing import Any
 
@@ -157,6 +160,43 @@ def test_feishu_business_failure_is_permanent(monkeypatch: pytest.MonkeyPatch) -
             },
         )
     assert error.value.retryable is False
+
+
+def test_signed_webhook_uses_fresh_feishu_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+    """签名密钥只参与 HMAC，出站消息不包含密钥明文。"""
+
+    sent: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, int]:
+            return {"code": 0}
+
+    class FakeClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            pass
+
+        def post(self, _url: str, json: dict[str, Any]) -> FakeResponse:
+            sent.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(feishu.httpx, "Client", FakeClient)
+    monkeypatch.setattr(feishu.time, "time", lambda: 1234567890)
+    feishu.send_connection_test(
+        "https://open.feishu.cn/open-apis/bot/v2/hook/example", "private-key"
+    )
+    body = sent[0]
+    assert body["timestamp"] == "1234567890"
+    expected = hmac.new(b"1234567890\nprivate-key", b"", hashlib.sha256).digest()
+    assert body["sign"] == base64.b64encode(expected).decode()
+    assert "private-key" not in json.dumps(body)
 
 
 @pytest.mark.parametrize(("status", "retryable"), [(401, False), (429, True), (503, True)])

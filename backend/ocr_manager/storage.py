@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -131,6 +131,23 @@ CREATE INDEX idx_connection_checks_queue ON connection_checks(status, id);
 SCHEMA_V7 = """
 ALTER TABLE review_jobs ADD COLUMN rule_digest TEXT NOT NULL DEFAULT '';
 """
+SCHEMA_V8 = """
+CREATE TABLE notification_targets (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  webhook_ciphertext TEXT NOT NULL,
+  signing_secret_ciphertext TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE repositories ADD COLUMN feishu_target_id INTEGER
+  REFERENCES notification_targets(id) ON DELETE SET NULL;
+CREATE INDEX idx_repositories_feishu_target ON repositories(feishu_target_id);
+INSERT INTO notification_targets(id, name, webhook_ciphertext)
+SELECT id, name || ' 通知', feishu_webhook FROM repositories WHERE feishu_webhook != '';
+UPDATE repositories SET feishu_target_id=id, feishu_webhook=''
+WHERE feishu_webhook != '';
+"""
 
 
 class Store:
@@ -169,6 +186,7 @@ class Store:
                 (5, SCHEMA_V5),
                 (6, SCHEMA_V6),
                 (7, SCHEMA_V7),
+                (8, SCHEMA_V8),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -248,10 +266,11 @@ class Store:
             cursor = db.execute(
                 """INSERT INTO repositories
                 (name, gitlab_url, project_id, remote_url, target_branch,
-                 auth_kind, webhook_secret, feishu_webhook)
+                 auth_kind, webhook_secret, feishu_webhook, feishu_target_id)
                 VALUES (:name, :gitlab_url, :project_id, :remote_url,
-                        :target_branch, :auth_kind, :webhook_secret, :feishu_webhook)""",
-                values,
+                        :target_branch, :auth_kind, :webhook_secret,
+                        :feishu_webhook, :feishu_target_id)""",
+                values | {"feishu_target_id": values.get("feishu_target_id")},
             )
             if cursor.lastrowid is None:
                 raise RuntimeError("仓库写入后未返回 ID")
@@ -273,7 +292,15 @@ class Store:
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
         """仅更新受控配置字段；项目身份和 Git remote 保持不可变以保护历史任务。"""
 
-        allowed = {"name", "enabled", "auth_kind", "webhook_secret", "feishu_webhook", "webhook_id"}
+        allowed = {
+            "name",
+            "enabled",
+            "auth_kind",
+            "webhook_secret",
+            "feishu_webhook",
+            "feishu_target_id",
+            "webhook_id",
+        }
         if not values or not values.keys() <= allowed:
             raise ValueError("仓库更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
@@ -285,13 +312,63 @@ class Store:
             return cursor.rowcount == 1
 
     def clear_feishu_webhook(self, repository_id: int) -> bool:
-        """只移除飞书 Hook 密文，保留项目、事件和评审历史。"""
+        """解除仓库与通知通道的关联，保留共享通道及评审历史。"""
 
         with self.connection() as db:
             cursor = db.execute(
-                "UPDATE repositories SET feishu_webhook='' WHERE id=?",
+                "UPDATE repositories SET feishu_webhook='', feishu_target_id=NULL WHERE id=?",
                 (repository_id,),
             )
+            return cursor.rowcount == 1
+
+    def add_notification_target(self, name: str, webhook: str, signing_secret: str) -> int:
+        """通知凭据只存密文；仓库通过外键共享同一目标。"""
+
+        with self.connection() as db:
+            cursor = db.execute(
+                """INSERT INTO notification_targets
+                (name, webhook_ciphertext, signing_secret_ciphertext) VALUES (?, ?, ?)""",
+                (name, webhook, signing_secret),
+            )
+            assert cursor.lastrowid is not None
+            return cursor.lastrowid
+
+    def get_notification_target(self, target_id: int) -> dict[str, Any] | None:
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT * FROM notification_targets WHERE id=?", (target_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_notification_targets(self) -> list[dict[str, Any]]:
+        with self.connection() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    """SELECT t.*, COUNT(r.id) AS repository_count
+                    FROM notification_targets t LEFT JOIN repositories r
+                    ON r.feishu_target_id=t.id GROUP BY t.id ORDER BY t.id"""
+                )
+            ]
+
+    def update_notification_target(self, target_id: int, values: dict[str, str]) -> bool:
+        allowed = {"name", "webhook_ciphertext", "signing_secret_ciphertext"}
+        if not values or not values.keys() <= allowed:
+            raise ValueError("飞书配置更新字段无效")
+        assignments = ", ".join(f"{field}=?" for field in values)
+        with self.connection() as db:
+            cursor = db.execute(
+                f"UPDATE notification_targets SET {assignments}, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (*values.values(), target_id),
+            )
+            return cursor.rowcount == 1
+
+    def delete_notification_target(self, target_id: int) -> bool:
+        """删除共享通道时外键将所有关联仓库置为未配置。"""
+
+        with self.connection() as db:
+            cursor = db.execute("DELETE FROM notification_targets WHERE id=?", (target_id,))
             return cursor.rowcount == 1
 
     def delete_repository(self, repository_id: int) -> bool:

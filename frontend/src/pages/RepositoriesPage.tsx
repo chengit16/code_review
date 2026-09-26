@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
-import type { Repository, RepositoryInput, RepositoryUpdateInput } from "../api/types";
+import type { NotificationTarget, Repository, RepositoryInput, RepositoryUpdateInput } from "../api/types";
 import { WebhookTokenCell } from "./WebhookTokenCell";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { PageHeader } from "../ui/PageHeader";
@@ -23,6 +23,7 @@ const initial: RepositoryInput = {
 export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
+  const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<RepositoryInput>(initial);
   const [copied, setCopied] = useState<number | null>(null);
@@ -72,7 +73,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
 
   function beginEdit(repo: Repository) {
     setEditing(repo);
-    setEditForm({ name: repo.name, auth_kind: repo.auth_kind, webhook_id: repo.webhook_id });
+    setEditForm({ name: repo.name, auth_kind: repo.auth_kind, webhook_id: repo.webhook_id, feishu_target_id: repo.feishu_target_id });
     update.reset();
   }
 
@@ -81,7 +82,6 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     if (!editing) return;
     const input = { ...editForm };
     if (!input.webhook_token) delete input.webhook_token;
-    delete input.feishu_webhook;
     update.mutate({ id: editing.id, input });
   }
 
@@ -95,9 +95,9 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   return <div className="page"><PageHeader title="项目配置" subtitle="GitLab 项目身份、目标分支与入站回调" actions={
     <button className="button button-primary" type="button" onClick={() => setOpen(true)}><Plus size={17} />添加仓库</button>
   } /><QueryState loading={query.isLoading} error={query.error} />{!query.isLoading && !query.error && <section className="section">
-    <div className="table-scroll"><table><thead><tr><th>仓库</th><th>项目 ID</th><th>目标分支</th><th>回调</th><th>鉴权</th><th>Webhook Token</th><th>最近验证</th><th>接收</th><th aria-label="操作" /></tr></thead><tbody>
-      {query.data?.map((repo) => <tr key={repo.id}><td><strong>{repo.name}</strong><small className="table-sub">{repo.gitlab_url}</small></td><td className="mono">{repo.project_id}</td><td className="mono">{repo.target_branch}</td><td><button className="copy-command" type="button" title="复制回调地址" onClick={() => { void navigator.clipboard.writeText(repo.webhook_url).then(() => setCopied(repo.id)); }}><span>{copied === repo.id ? "已复制" : "复制地址"}</span>{copied === repo.id ? <Check size={15} /> : <Copy size={15} />}</button></td><td><Status value={repo.auth_kind === "signing" ? "签名验证" : "令牌验证"} /></td><td><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /></td><td>{formatTime(repo.last_webhook_at)}</td><td><input className="repo-toggle" type="checkbox" checked={Boolean(repo.enabled)} disabled={toggle.isPending} onChange={(event) => toggle.mutate({ id: repo.id, enabled: event.target.checked })} aria-label={`${repo.name} 接收 webhook`} title={repo.enabled ? "暂停接收" : "恢复接收"} /></td><td><div className="row-actions"><button className="icon-button" type="button" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></button><button className="icon-button icon-button-danger" type="button" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></button></div></td></tr>)}
-      {query.data?.length === 0 && <tr><td className="empty-row" colSpan={9}>尚未接入仓库</td></tr>}
+    <div className="table-scroll"><table><thead><tr><th>仓库</th><th>项目 ID</th><th>目标分支</th><th>飞书配置</th><th>回调</th><th>鉴权</th><th>Webhook Token</th><th>最近验证</th><th>接收</th><th aria-label="操作" /></tr></thead><tbody>
+      {query.data?.map((repo) => <tr key={repo.id}><td><strong>{repo.name}</strong><small className="table-sub">{repo.gitlab_url}</small></td><td className="mono">{repo.project_id}</td><td className="mono">{repo.target_branch}</td><td>{targets.data?.find((target) => target.id === repo.feishu_target_id)?.name ?? (repo.has_feishu_webhook ? "独立 Hook" : "未配置")}</td><td><button className="copy-command" type="button" title="复制回调地址" onClick={() => { void navigator.clipboard.writeText(repo.webhook_url).then(() => setCopied(repo.id)); }}><span>{copied === repo.id ? "已复制" : "复制地址"}</span>{copied === repo.id ? <Check size={15} /> : <Copy size={15} />}</button></td><td><Status value={repo.auth_kind === "signing" ? "签名验证" : "令牌验证"} /></td><td><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /></td><td>{formatTime(repo.last_webhook_at)}</td><td><input className="repo-toggle" type="checkbox" checked={Boolean(repo.enabled)} disabled={toggle.isPending} onChange={(event) => toggle.mutate({ id: repo.id, enabled: event.target.checked })} aria-label={`${repo.name} 接收 webhook`} title={repo.enabled ? "暂停接收" : "恢复接收"} /></td><td><div className="row-actions"><button className="icon-button" type="button" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></button><button className="icon-button icon-button-danger" type="button" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></button></div></td></tr>)}
+      {query.data?.length === 0 && <tr><td className="empty-row" colSpan={10}>尚未接入仓库</td></tr>}
     </tbody></table></div>
   </section>}
       {feedback && <p className="form-success" role="status">{feedback}</p>}
@@ -118,6 +118,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <label>项目数字 ID<input type="number" min="1" value={form.project_id || ""} onChange={(e) => field("project_id", Number(e.target.value))} required /></label>
       <label>目标分支<input value={form.target_branch} onChange={(e) => field("target_branch", e.target.value)} required /></label>
       <label className="wide">Git 只读地址<input placeholder="git@gitlab.example.com:team/repo.git" value={form.remote_url} onChange={(e) => field("remote_url", e.target.value)} required /></label>
+      <label>飞书配置<select value={form.feishu_target_id ?? ""} onChange={(e) => field("feishu_target_id", e.target.value ? Number(e.target.value) : null)}><option value="">暂不关联</option>{targets.data?.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
       <label>Webhook 鉴权<select value={form.auth_kind} onChange={(e) => setForm((current) => ({ ...current, auth_kind: e.target.value as RepositoryInput["auth_kind"], webhook_token: undefined }))}><option value="secret">Secret token（自动生成）</option><option value="signing">Signing token（GitLab 生成）</option></select></label>
       {form.auth_kind === "signing" && <label>GitLab Signing token<input type="password" autoComplete="off" value={form.webhook_token ?? ""} onChange={(e) => field("webhook_token", e.target.value)} required /></label>}
       {mutation.error && <p className="form-error wide" role="alert">{mutation.error.message}</p>}
@@ -130,6 +131,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <label>GitLab Webhook ID<input value={editForm.webhook_id ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, webhook_id: event.target.value || null }))} /></label>
       <label>Webhook 鉴权<select value={editForm.auth_kind ?? editing.auth_kind} onChange={(event) => setEditForm((current) => ({ ...current, auth_kind: event.target.value as Repository["auth_kind"] }))}><option value="signing">Signing token</option><option value="secret">Secret token</option></select></label>
       <label>新 Webhook token<input type="password" autoComplete="new-password" value={editForm.webhook_token ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, webhook_token: event.target.value }))} required={editForm.auth_kind !== editing.auth_kind} /></label>
+      <label>飞书配置<select value={editForm.feishu_target_id ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, feishu_target_id: event.target.value ? Number(event.target.value) : null }))}><option value="">暂不关联</option>{targets.data?.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
       {update.error && <p className="form-error wide" role="alert">{update.error.message}</p>}
       <div className="form-actions wide"><button type="button" className="button button-secondary" onClick={() => setEditing(null)}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存设置</button></div>
     </form>

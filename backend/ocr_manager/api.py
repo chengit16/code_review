@@ -40,6 +40,7 @@ class RepositoryCreate(BaseModel):
     auth_kind: Literal["signing", "secret"]
     webhook_token: str | None = Field(default=None, min_length=16)
     feishu_webhook: str | None = None
+    feishu_target_id: int | None = Field(default=None, gt=0)
 
     model_config = {"extra": "forbid"}
 
@@ -52,6 +53,7 @@ class RepositoryUpdate(BaseModel):
     auth_kind: Literal["signing", "secret"] | None = None
     webhook_token: str | None = Field(default=None, min_length=16)
     feishu_webhook: str | None = None
+    feishu_target_id: int | None = Field(default=None, gt=0)
     webhook_id: str | None = Field(default=None, max_length=100)
 
     model_config = {"extra": "forbid"}
@@ -63,6 +65,26 @@ class ModelProfileInput(BaseModel):
     provider: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
     model: str = Field(min_length=1, max_length=160)
     api_key: str | None = Field(default=None, min_length=1)
+
+    model_config = {"extra": "forbid"}
+
+
+class NotificationTargetCreate(BaseModel):
+    """独立的飞书机器人配置，可由多个仓库引用。"""
+
+    name: str = Field(min_length=1, max_length=120)
+    webhook_url: str
+    signing_secret: str = ""
+
+    model_config = {"extra": "forbid"}
+
+
+class NotificationTargetUpdate(BaseModel):
+    """空签名密钥表示关闭签名；省略凭据表示保留原值。"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    webhook_url: str | None = None
+    signing_secret: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -131,8 +153,18 @@ def public_repository(row: dict[str, Any], public_url: str) -> dict[str, Any]:
         key: value for key, value in row.items() if key not in {"webhook_secret", "feishu_webhook"}
     } | {
         "webhook_url": f"{public_url}/api/webhooks/gitlab/{row['id']}",
-        "has_feishu_webhook": bool(row.get("feishu_webhook")),
+        "has_feishu_webhook": bool(row.get("feishu_target_id") or row.get("feishu_webhook")),
     }
+
+
+def public_notification_target(row: dict[str, Any]) -> dict[str, Any]:
+    """管理列表只返回通道元数据，密文和明文均不进入浏览器缓存。"""
+
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"webhook_ciphertext", "signing_secret_ciphertext"}
+    } | {"has_signing_secret": bool(row["signing_secret_ciphertext"])}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -155,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 resource = route.path.split("/")[2]
                 object_type = {
                     "repositories": "repository",
+                    "notification-targets": "notification_target",
                     "model-profile": "model_profile",
                     "connection-checks": "connection_check",
                     "events": "merge_event",
@@ -164,7 +197,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 object_id = next(
                     (
                         params[name]
-                        for name in ("repository_id", "event_id", "job_id")
+                        for name in ("repository_id", "target_id", "event_id", "job_id")
                         if name in params
                     ),
                     None,
@@ -238,6 +271,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return store.list_audit()
 
+    @app.get("/api/notification-targets", dependencies=[admin])
+    def list_notification_targets() -> list[dict[str, Any]]:
+        return [public_notification_target(row) for row in store.list_notification_targets()]
+
+    @app.post("/api/notification-targets", dependencies=[admin], status_code=201)
+    def create_notification_target(payload: NotificationTargetCreate) -> dict[str, Any]:
+        """加密保存可共享的飞书机器人及可选签名密钥。"""
+
+        if not payload.name.strip() or not validate_feishu_webhook(payload.webhook_url):
+            raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
+        target_id = store.add_notification_target(
+            payload.name.strip(),
+            secrets.encrypt(payload.webhook_url),
+            secrets.encrypt(payload.signing_secret) if payload.signing_secret else "",
+        )
+        row = store.get_notification_target(target_id)
+        assert row is not None
+        return public_notification_target(row) | {"repository_count": 0}
+
+    @app.patch("/api/notification-targets/{target_id}", dependencies=[admin])
+    def update_notification_target(
+        target_id: int, payload: NotificationTargetUpdate
+    ) -> dict[str, Any]:
+        """修改共享通道后，Worker 下一次投递会直接读取新凭据。"""
+
+        if store.get_notification_target(target_id) is None:
+            raise HTTPException(status_code=404, detail="飞书配置不存在")
+        values: dict[str, str] = {}
+        if payload.name is not None:
+            values["name"] = payload.name.strip()
+        if payload.webhook_url is not None:
+            if not validate_feishu_webhook(payload.webhook_url):
+                raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
+            values["webhook_ciphertext"] = secrets.encrypt(payload.webhook_url)
+        if payload.signing_secret is not None:
+            values["signing_secret_ciphertext"] = (
+                secrets.encrypt(payload.signing_secret) if payload.signing_secret else ""
+            )
+        if not values or not values.get("name", "valid").strip():
+            raise HTTPException(status_code=422, detail="飞书配置内容无效")
+        store.update_notification_target(target_id, values)
+        row = next(row for row in store.list_notification_targets() if row["id"] == target_id)
+        return public_notification_target(row)
+
+    @app.delete("/api/notification-targets/{target_id}", dependencies=[admin])
+    def delete_notification_target(target_id: int) -> dict[str, str]:
+        """删除通道并解除所有仓库关联，已有评审任务仍保留。"""
+
+        if not store.delete_notification_target(target_id):
+            raise HTTPException(status_code=404, detail="飞书配置不存在")
+        return {"status": "deleted"}
+
     @app.post("/api/repositories", dependencies=[admin], status_code=201)
     def create_repository(payload: RepositoryCreate) -> dict[str, Any]:
         """接入单个 GitLab 项目并加密 webhook 与飞书凭据。"""
@@ -267,6 +352,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="目标分支名称无效")
         if payload.feishu_webhook and not validate_feishu_webhook(payload.feishu_webhook):
             raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
+        if (
+            payload.feishu_target_id is not None
+            and store.get_notification_target(payload.feishu_target_id) is None
+        ):
+            raise HTTPException(status_code=422, detail="飞书配置不存在")
+        if payload.feishu_target_id is not None and payload.feishu_webhook:
+            raise HTTPException(status_code=422, detail="飞书配置和独立 Hook 不能同时指定")
         if payload.auth_kind == "signing" and (
             not payload.webhook_token or not payload.webhook_token.startswith("whsec_")
         ):
@@ -295,6 +387,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if current is None:
             raise HTTPException(status_code=404, detail="仓库不存在")
         values = payload.model_dump(exclude_unset=True, exclude_none=True)
+        if "feishu_target_id" in payload.model_fields_set:
+            values["feishu_target_id"] = payload.feishu_target_id
+            values["feishu_webhook"] = ""
+            if (
+                payload.feishu_target_id is not None
+                and store.get_notification_target(payload.feishu_target_id) is None
+            ):
+                raise HTTPException(status_code=422, detail="飞书配置不存在")
         if "webhook_id" in payload.model_fields_set:
             values["webhook_id"] = payload.webhook_id
         if not values:
@@ -312,6 +412,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not validate_feishu_webhook(feishu_webhook):
                 raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
             values["feishu_webhook"] = secrets.encrypt(feishu_webhook)
+            values["feishu_target_id"] = None
+        elif "feishu_target_id" in payload.model_fields_set:
+            values["feishu_webhook"] = ""
         store.update_repository(repository_id, values)
         updated = store.get_repository(repository_id)
         assert updated is not None

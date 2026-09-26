@@ -13,6 +13,7 @@ export interface Repository {
   webhook_id: string | null;
   last_webhook_at: string | null;
   has_feishu_webhook: boolean;
+  feishu_target_id: number | null;
   webhook_url: string;
   created_at: string;
 }
@@ -34,6 +35,7 @@ export interface RepositoryInput {
   auth_kind: "signing" | "secret";
   webhook_token?: string;
   feishu_webhook?: string;
+  feishu_target_id?: number | null;
 }
 
 /** 管理员主动查看单个项目令牌时的响应，不进入仓库列表缓存。 */
@@ -48,7 +50,24 @@ export interface RepositoryUpdateInput {
   auth_kind?: "signing" | "secret";
   webhook_token?: string;
   feishu_webhook?: string;
+  feishu_target_id?: number | null;
   webhook_id?: string | null;
+}
+
+/** 可供多个仓库引用的飞书通知通道；凭据从不进入列表响应。 */
+export interface NotificationTarget {
+  id: number;
+  name: string;
+  repository_count: number;
+  has_signing_secret: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationTargetInput {
+  name: string;
+  webhook_url?: string;
+  signing_secret?: string;
 }
 
 /** GitLab 合并事件收件箱记录。 */

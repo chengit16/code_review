@@ -231,14 +231,31 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
         store.finish_delivery(delivery["id"], "仓库配置已删除")
         return
     try:
-        if not repository["feishu_webhook"]:
+        target = (
+            store.get_notification_target(repository["feishu_target_id"])
+            if repository["feishu_target_id"]
+            else None
+        )
+        webhook_ciphertext = (
+            target["webhook_ciphertext"] if target else repository["feishu_webhook"]
+        )
+        if not webhook_ciphertext:
             raise ValueError("飞书 Hook 尚未配置")
-        webhook = SecretBox(settings.master_key).decrypt(repository["feishu_webhook"])
+        box = SecretBox(settings.master_key)
+        webhook = box.decrypt(webhook_ciphertext)
+        signing_secret = (
+            box.decrypt(target["signing_secret_ciphertext"])
+            if target and target["signing_secret_ciphertext"]
+            else ""
+        )
         delivery["detail_url"] = f"{settings.public_url}/jobs/{delivery['job_id']}"
         project_url = project_web_url(repository["gitlab_url"], repository["remote_url"])
         delivery["mr_url"] = f"{project_url}/-/merge_requests/{delivery['mr_iid']}"
         delivery["commit_url"] = f"{project_url}/-/commit/{delivery['commit_sha']}"
-        send_review(webhook, delivery)
+        if signing_secret:
+            send_review(webhook, delivery, signing_secret)
+        else:
+            send_review(webhook, delivery)
         store.finish_delivery(delivery["id"], None)
     except FeishuDeliveryError as error:
         LOGGER.warning("飞书投递 %s 失败：%s", delivery["id"], error)

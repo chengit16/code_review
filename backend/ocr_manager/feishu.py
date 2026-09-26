@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import time
 from typing import Any
 
 import httpx
@@ -15,18 +19,27 @@ class FeishuDeliveryError(RuntimeError):
         self.retryable = retryable
 
 
-def send_connection_test(webhook_url: str) -> None:
+def send_connection_test(webhook_url: str, signing_secret: str = "") -> None:
     """向目标群发送一条可辨识的测试消息；结果由独立诊断任务保存。"""
 
     post_message(
         webhook_url,
         {"msg_type": "text", "content": {"text": "Open Code Review 连接测试"}},
+        signing_secret,
     )
 
 
-def post_message(webhook_url: str, body: dict[str, Any]) -> None:
+def post_message(webhook_url: str, body: dict[str, Any], signing_secret: str = "") -> None:
     """统一检查 HTTP 与飞书业务状态码，调用方负责避免泄露 URL。"""
 
+    if signing_secret:
+        # 飞书机器人签名以每次发送的时间戳计算；重试不能复用过期签名。
+        timestamp = str(int(time.time()))
+        key = f"{timestamp}\n{signing_secret}".encode()
+        body = body | {
+            "timestamp": timestamp,
+            "sign": base64.b64encode(hmac.new(key, b"", hashlib.sha256).digest()).decode(),
+        }
     try:
         with httpx.Client(timeout=10) as client:
             response = client.post(webhook_url, json=body)
@@ -47,7 +60,7 @@ def post_message(webhook_url: str, body: dict[str, Any]) -> None:
         raise FeishuDeliveryError("飞书未确认消息投递成功", retryable=False)
 
 
-def send_review(webhook_url: str, job: dict[str, Any]) -> None:
+def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "") -> None:
     """检查 HTTP 与飞书业务返回码；异常交给投递队列重试。"""
 
     result = job.get("result_json")
@@ -130,4 +143,7 @@ def send_review(webhook_url: str, job: dict[str, Any]) -> None:
             "elements": elements,
         },
     }
-    post_message(webhook_url, body)
+    if signing_secret:
+        post_message(webhook_url, body, signing_secret)
+    else:
+        post_message(webhook_url, body)

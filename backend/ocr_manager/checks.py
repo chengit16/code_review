@@ -69,10 +69,27 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                 repository["remote_url"],
             )
         elif kind == "feishu":
-            if not repository["feishu_webhook"]:
+            target = (
+                store.get_notification_target(repository["feishu_target_id"])
+                if repository["feishu_target_id"]
+                else None
+            )
+            webhook_ciphertext = (
+                target["webhook_ciphertext"] if target else repository["feishu_webhook"]
+            )
+            if not webhook_ciphertext:
                 raise ValueError("飞书 Hook 尚未配置")
-            webhook = SecretBox(settings.master_key).decrypt(repository["feishu_webhook"])
-            send_connection_test(webhook)
+            box = SecretBox(settings.master_key)
+            webhook = box.decrypt(webhook_ciphertext)
+            signing_secret = (
+                box.decrypt(target["signing_secret_ciphertext"])
+                if target and target["signing_secret_ciphertext"]
+                else ""
+            )
+            if signing_secret:
+                send_connection_test(webhook, signing_secret)
+            else:
+                send_connection_test(webhook)
         else:
             raise ValueError("未知连接测试类型")
     except Exception as error:
