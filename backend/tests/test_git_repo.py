@@ -4,9 +4,37 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ocr_manager.git_repo import GitRepository
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_timeout"),
+    [("clone", 600), ("fetch", 600), ("rev-parse", 90)],
+)
+def test_network_git_commands_allow_large_repository_transfer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+    expected_timeout: int,
+) -> None:
+    """完整历史拉取可超过本地查询时限，同时仍保留有限截止时间。"""
+
+    git = GitRepository(
+        tmp_path,
+        {"id": 1, "remote_url": "https://git.example.test/team/repo.git", "target_branch": "main"},
+    )
+    observed: dict[str, Any] = {}
+
+    def fake_run(_command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(_command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    git._git(operation, "test", cwd=tmp_path)
+    assert observed["timeout"] == expected_timeout
 
 
 def test_invalid_commit_ref_never_reaches_git(tmp_path: Path) -> None:

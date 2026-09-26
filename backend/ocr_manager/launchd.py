@@ -10,7 +10,7 @@ from typing import Any
 
 
 def generate_plists(
-    project_dir: Path, config_file: Path, data_dir: Path, output_dir: Path, port: int = 8000
+    project_dir: Path, config_file: Path, data_dir: Path, output_dir: Path, port: int = 8781
 ) -> tuple[Path, Path]:
     """分别生成 API 与单 Worker 的服务清单，共用私有配置文件。"""
 
@@ -126,7 +126,7 @@ def main() -> None:
     parser.add_argument("--config-file", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8781)
     parser.add_argument("--backup-dir", type=Path)
     parser.add_argument("--backup-hour", type=int, default=3)
     parser.add_argument("--backup-minute", type=int, default=0)

@@ -76,9 +76,11 @@ def test_private_config_file_loads_without_environment_secrets(
     monkeypatch.setenv("OCR_APP_CONFIG_FILE", str(config))
     monkeypatch.delenv("OCR_APP_ADMIN_TOKEN", raising=False)
     monkeypatch.delenv("OCR_APP_MASTER_KEY", raising=False)
+    monkeypatch.delenv("OCR_APP_PUBLIC_URL", raising=False)
     settings = load_settings()
     assert settings.admin_token == "admin-secret"
     assert settings.data_dir == tmp_path / "data"
+    assert settings.public_url == "http://127.0.0.1:8781"
     os.chmod(config, 0o644)
     with pytest.raises(RuntimeError, match="0600"):
         load_settings()
@@ -129,6 +131,20 @@ def test_launchd_plists_reference_config_without_embedding_secrets(tmp_path: Pat
     assert api_payload["ProgramArguments"][-1] == "8777"
     assert worker_payload["ProgramArguments"][-1] == "ocr_manager.worker"
     assert api_payload["EnvironmentVariables"]["OCR_APP_CONFIG_FILE"] == str(config)
+
+
+def test_launchd_defaults_to_local_fixed_port(tmp_path: Path) -> None:
+    """未显式指定端口时，API 清单固定监听本机的 8781。"""
+
+    project = tmp_path / "project"
+    python = project / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    config = tmp_path / "private.json"
+    config.touch()
+    api, _ = generate_plists(project, config, tmp_path / "data", tmp_path / "launchd")
+    arguments = plistlib.loads(api.read_bytes())["ProgramArguments"]
+    assert arguments[-4:] == ["--host", "127.0.0.1", "--port", "8781"]
 
 
 def test_backup_plist_schedules_one_shot_outside_data_directory(tmp_path: Path) -> None:

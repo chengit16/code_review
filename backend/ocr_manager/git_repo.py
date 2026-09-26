@@ -12,6 +12,8 @@ from typing import Any
 class GitRepository:
     """只执行参数数组形式的 Git 命令，工作目录固定在服务数据目录。"""
 
+    FETCH_TIMEOUT_SECONDS = 600
+
     def __init__(self, root: Path, repository: dict[str, Any]) -> None:
         self.path = root / "repositories" / str(repository["id"])
         self.remote_url = str(repository["remote_url"])
@@ -27,7 +29,8 @@ class GitRepository:
             env=self._git_environment(with_token=args[0] in {"clone", "fetch"}),
             capture_output=True,
             text=True,
-            timeout=90,
+            # 首次克隆需要完整历史；大仓库不能沿用本地 Git 查询的短超时。
+            timeout=self.FETCH_TIMEOUT_SECONDS if args[0] in {"clone", "fetch"} else 90,
             check=False,
         )
         if result.returncode:

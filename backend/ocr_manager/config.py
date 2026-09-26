@@ -71,7 +71,7 @@ def load_settings() -> Settings:
         ocr_model="",
         ocr_api_key="",
         ocr_timeout_seconds=int(setting("OCR_APP_OCR_TIMEOUT_SECONDS", "3600")),
-        public_url=setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8000").rstrip("/"),
+        public_url=setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8781").rstrip("/"),
         dev_mode=dev_mode,
         ocr_base_url="",
     )

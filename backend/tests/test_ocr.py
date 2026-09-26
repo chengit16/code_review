@@ -93,15 +93,22 @@ def test_custom_endpoint_is_configured_in_isolated_ocr_home(
         return 0, ""
 
     monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
-    configured = replace(settings, ocr_base_url="https://gateway.example.test/v1")
+    configured = replace(
+        settings, ocr_base_url="https://gateway.example.test/v1", ocr_api_key="test-model-secret"
+    )
     check_model_connection(configured, tmp_path / "custom-model-check")
     assert commands[0][-2:] == [
         "custom_providers.managed-gateway.url",
         "https://gateway.example.test/v1",
     ]
     assert commands[1][-2:] == ["custom_providers.managed-gateway.protocol", "openai"]
-    assert commands[2][-2:] == ["provider", "managed-gateway"]
+    assert commands[2][-2:] == [
+        "custom_providers.managed-gateway.api_key_cmd",
+        "printenv OCR_LLM_TOKEN",
+    ]
+    assert commands[3][-2:] == ["provider", "managed-gateway"]
     assert commands[-1][-2:] == ["llm", "test"]
+    assert all("test-model-secret" not in " ".join(command) for command in commands)
 
 
 def test_empty_preview_skips_model_and_preserves_exclusions(

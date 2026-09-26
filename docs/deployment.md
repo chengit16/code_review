@@ -8,7 +8,7 @@
 - 固定版本的 Alibaba Open Code Review CLI，确认 `ocr version` 与 `ocr review --help` 可运行。当前开发机已将 `1.12.9` 安装在项目本地 `.local-tools/`，并验证空变更与单文件变更的 preview JSON；真实模型评审尚未联调。
 - GitLab 项目访问令牌、可从 GitLab 访问的 HTTPS 回调地址、飞书群机器人 webhook 和 OCR 模型 API key。
 
-默认服务仅监听 `127.0.0.1:8000`。反向代理只向 GitLab 开放 `/api/webhooks/gitlab`，管理 API 和页面通过本机或受控内网访问。新项目从管理台复制统一回调地址与自动生成的 Webhook Secret 到 GitLab，并按项目开关选择 Merge request events 和 Push events。
+本地固定端口为 `8781`，服务仅监听 `127.0.0.1:8781`，不占用 `8080`。内网穿透用于 GitLab 回调时，只向外转发 `/api/webhooks/gitlab`；开发模式没有管理鉴权，不可将整个管理台端口公开。新项目从管理台复制统一回调地址与自动生成的 Webhook Secret 到 GitLab，并按项目开关选择 Merge request events 和 Push events。
 
 ## 安装与启动
 
@@ -24,16 +24,25 @@ export OCR_APP_ADMIN_TOKEN="请替换为随机长口令"
 export OCR_APP_MASTER_KEY="请用 cryptography.fernet.Fernet.generate_key() 生成"
 export OCR_APP_PUBLIC_URL="https://review.example.com"
 export OCR_APP_OCR_COMMAND="$PWD/.local-tools/node_modules/.bin/ocr"
-uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8000
+uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
 ```
 
-本机开发使用其他端口时，`OCR_APP_PUBLIC_URL` 必须与 API 端口一致，例如 8780：
+本机开发使用固定端口时，`OCR_APP_PUBLIC_URL` 必须与 API 端口一致：
 
 ```bash
 export OCR_APP_DEV_MODE=1
 export OCR_APP_MASTER_KEY="请替换为有效的 Fernet 主密钥"
-export OCR_APP_PUBLIC_URL="http://127.0.0.1:8780"
-uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8780
+export OCR_APP_PUBLIC_URL="http://127.0.0.1:8781"
+uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
+```
+
+已有仅当前用户可读的 `.local-data/local/private.json` 时，重启本机实例应沿用该文件中的主密钥和数据目录。在两个终端分别运行以下命令，不能重新生成主密钥，否则已保存的仓库、模型和飞书凭据无法解密：
+
+```bash
+OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
+  uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
+OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
+  uv run python -m ocr_manager.worker
 ```
 
 `127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_PUBLIC_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
@@ -46,7 +55,7 @@ uv run python -m ocr_manager.worker
 
 访问 `GET /api/health` 可分别核对 API/SQLite、鉴权模式与 Worker：`status=ok` 表示管理进程和数据库可用，`auth_mode=dev` 表示本地开发模式不要求管理口令，`auth_mode=admin` 表示生产管理口令已启用；`worker=running` 表示独立 Worker 正持有单实例锁，`worker=stopped` 时即使页面仍可访问，队列也不会继续消费。概览页会显示同一状态。
 
-开发前端可在 `frontend/` 运行 `npm run dev`，Vite 默认监听 `127.0.0.1:5173` 并代理 `/api` 到 8000。生产页面由 FastAPI 从 `frontend/dist` 提供。请在专用系统用户的环境中配置主密钥，限制数据目录权限，并在该用户会话验证 HTTPS Git、OCR 和飞书连接。两个进程可分别交给 `launchd` 守护；正式启用 webhook 前须确认重启后两个进程与环境变量均可恢复。
+开发前端可在 `frontend/` 运行 `npm run dev`，Vite 默认监听 `127.0.0.1:5173` 并代理 `/api` 到 `8781`。生产页面由 FastAPI 从 `frontend/dist` 提供。请在专用系统用户的环境中配置主密钥，限制数据目录权限，并在该用户会话验证 HTTPS Git、OCR 和飞书连接。两个进程可分别交给 `launchd` 守护；正式启用 webhook 前须确认重启后两个进程与环境变量均可恢复。
 
 使用 `launchd` 时可将进程配置保存为仅服务用户可读的 JSON 文件，所有配置键均使用上述环境变量原名，值必须为字符串。例如：
 
@@ -72,7 +81,7 @@ uv run python -m ocr_manager.launchd \
   --backup-hour 3 \
   --backup-minute 0 \
   --output-dir "/absolute/path/to/launchd-output" \
-  --port 8000
+  --port 8781
 ```
 
 生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。API 与 Worker 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。

@@ -330,6 +330,8 @@ def main() -> None:
     """启动单实例 Worker 并在重启后恢复未确认任务。"""
 
     logging.basicConfig(level=logging.INFO)
+    # 飞书 Webhook 的完整 URL 含令牌，禁止 HTTP 客户端在 INFO 日志中记录请求地址。
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     signal.signal(signal.SIGTERM, stop_worker)
     signal.signal(signal.SIGINT, stop_worker)
     settings = load_settings()

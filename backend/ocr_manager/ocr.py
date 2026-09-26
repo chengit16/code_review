@@ -62,6 +62,8 @@ def _prepare_custom_provider(
     for key, value in (
         (f"custom_providers.{provider}.url", settings.ocr_base_url),
         (f"custom_providers.{provider}.protocol", "openai"),
+        # OCR 不会从通用变量读取自定义 provider 的密钥；命令只保存变量名。
+        (f"custom_providers.{provider}.api_key_cmd", "printenv OCR_LLM_TOKEN"),
     ):
         code, _stderr = run_ocr_command(
             [settings.ocr_command, "config", "set", key, value], env, home, timeout
