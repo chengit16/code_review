@@ -227,7 +227,8 @@ def check_model_connection(settings: Settings, run_dir: Path) -> None:
 
 
 def run_review(
-    settings: Settings, checkout: Path, run_dir: Path, sha: str
+    settings: Settings, checkout: Path, run_dir: Path, sha: str,
+    global_rule: str | None = None, project_rule: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """保存 preview、JSON 与诊断输出；全程不经过 shell。"""
 
@@ -236,6 +237,11 @@ def run_review(
     # OCR 与管理服务共享进程用户，但不应共享管理凭据或旧版模型端点。
     isolated_home = run_dir / "home"
     isolated_home.mkdir(exist_ok=True, mode=0o700)
+    if global_rule is not None:
+        # OCR 的 HOME 每次评审隔离；把全局规则放在其标准位置才保留仓库文件的优先级。
+        global_dir = isolated_home / ".opencodereview"
+        global_dir.mkdir(exist_ok=True, mode=0o700)
+        (global_dir / "rule.json").write_text(global_rule, encoding="utf-8")
     env = _ocr_environment(settings, isolated_home)
     provider = _prepare_custom_provider(settings, env, isolated_home, settings.ocr_timeout_seconds)
     base = [
@@ -252,6 +258,11 @@ def run_review(
     ]
     if settings.ocr_model:
         base.extend(["--model", settings.ocr_model])
+    if project_rule is not None:
+        # 管理台按项目设置的规则显式覆盖仓库版本化文件，预览和正式评审共用同一份。
+        rule_path = run_dir / "managed-rule.json"
+        rule_path.write_text(project_rule, encoding="utf-8")
+        base.extend(["--rule", str(rule_path)])
     for name, command in (
         ("preview", [*base, "--preview", "--output", str(run_dir / "preview.json")]),
         ("result", [*base, "--audience", "agent", "--output", str(run_dir / "result.json")]),

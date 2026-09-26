@@ -89,7 +89,9 @@ def review_settings(store: Store, settings: Settings) -> tuple[Settings, int]:
     ), int(profile["version"])
 
 
-def config_hash(store: Store, settings: Settings, rule_digest: str = "") -> str:
+def config_hash(
+    store: Store, settings: Settings, rule_digest: str = "", repository_id: int | None = None
+) -> str:
     """按模型、OCR 安装文件及该提交的规则内容建立不可变评审快照。"""
 
     model_settings, model_version = review_settings(store, settings)
@@ -117,6 +119,10 @@ def config_hash(store: Store, settings: Settings, rule_digest: str = "") -> str:
             "command": command_fingerprint,
             "timeout_seconds": settings.ocr_timeout_seconds,
             "rule_digest": rule_digest,
+            "global_rule": store.get_review_rule(None),
+            "project_rule": (
+                store.get_review_rule(repository_id) if repository_id is not None else None
+            ),
         },
         sort_keys=True,
     )
@@ -156,7 +162,10 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
             git.fetch()
             commits = git.push_commits(event["squash_sha"], event["merge_sha"])
             push_snapshots = {
-                sha: (config_hash(store, settings, git.rule_digest(sha)), git.rule_digest(sha))
+                sha: (
+                    config_hash(store, settings, git.rule_digest(sha), repository["id"]),
+                    git.rule_digest(sha),
+                )
                 for sha in commits
             }
             store.finish_event(event["id"], commits, push_snapshots, None)
@@ -194,7 +203,7 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         snapshots: dict[str, tuple[str, str]] = {}
         for sha in commits:
             digest = git.rule_digest(sha)
-            snapshots[sha] = (config_hash(store, settings, digest), digest)
+            snapshots[sha] = (config_hash(store, settings, digest, repository["id"]), digest)
         store.finish_event(event["id"], commits, snapshots, None)
     except Exception as error:
         # 事件处理失败必须落库为待处理状态，不能因网络库的新异常类型丢失队列项。
@@ -213,7 +222,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         store.finish_job(job["id"], "failed", None, None, "仓库配置已删除")
         return
     try:
-        current_hash = config_hash(store, settings, job["rule_digest"])
+        current_hash = config_hash(store, settings, job["rule_digest"], job["repository_id"])
     except Exception:
         # 凭据不可解时不能退回旧环境变量继续评审，也不把密钥异常持久化。
         store.finish_job(job["id"], "failed", None, None, "评审配置无法读取")
@@ -236,7 +245,10 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
             raise ValueError("待评审提交不再属于目标分支")
         git.checkout(job["commit_sha"], checkout)
         model_settings, _ = review_settings(store, settings)
-        status, result = run_review(model_settings, checkout, run_dir, job["commit_sha"])
+        status, result = run_review(
+            model_settings, checkout, run_dir, job["commit_sha"],
+            store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
+        )
         store.finish_job(job["id"], status, str(run_dir / "result.json"), result, None)
     except Exception as error:
         # 临时失败记录每次尝试并有限退避；提交范围冲突立即终止，避免盲目重试。

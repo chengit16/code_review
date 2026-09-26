@@ -72,6 +72,26 @@ class RepositoryUpdate(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ReviewRuleEntry(BaseModel):
+    """按声明顺序匹配文件路径；合并开关只合并 OCR 内置规则。"""
+
+    path: str = Field(min_length=1, max_length=500)
+    rule: str = Field(min_length=1, max_length=20000)
+    merge_system_rule: bool = False
+
+    model_config = {"extra": "forbid"}
+
+
+class ReviewRuleDocument(BaseModel):
+    """与 OCR rule.json 格式一致，避免管理页保存无法解析的自由结构。"""
+
+    include: list[str] = Field(default_factory=list, max_length=100)
+    exclude: list[str] = Field(default_factory=list, max_length=100)
+    rules: list[ReviewRuleEntry] = Field(default_factory=list, max_length=100)
+
+    model_config = {"extra": "forbid"}
+
+
 class ModelProfileCreate(BaseModel):
     """OCR 模型可来自内置 provider 或 OpenAI 兼容端点。"""
 
@@ -302,6 +322,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 resource = route.path.split("/")[2]
                 object_type = {
                     "repositories": "repository",
+                    "review-rules": "review_rule",
                     "notification-targets": "notification_target",
                     "model-profiles": "model_profile",
                     "connection-checks": "connection_check",
@@ -356,6 +377,62 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """列出已接入仓库；密钥仅由单项查看接口按需返回。"""
 
         return [public_repository(row, config.public_url) for row in store.list_repositories()]
+
+    @app.get("/api/review-rules", dependencies=[admin])
+    def list_review_rules() -> list[dict[str, Any]]:
+        """规则正文是非凭据配置；项目规则由管理台按项目选择编辑。"""
+
+        return [
+            {**row, "content": json.loads(row["content"])} for row in store.list_review_rules()
+        ]
+
+    def change_review_rule(
+        repository_id: int | None, payload: ReviewRuleDocument | None
+    ) -> dict[str, str]:
+        """统一处理全局和项目规则，并限制空配置与过大正文。"""
+
+        if payload is not None:
+            document = payload.model_dump()
+            if not any(document.values()):
+                raise HTTPException(status_code=422, detail="请至少配置一条规则或过滤路径")
+            if any(not path.strip() for path in document["include"] + document["exclude"]):
+                raise HTTPException(status_code=422, detail="路径模式不能为空")
+            content = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
+            if len(content.encode("utf-8")) > 65536:
+                raise HTTPException(status_code=422, detail="审核规则不能超过 64 KiB")
+        else:
+            content = None
+        try:
+            changed = store.change_review_rule(repository_id, content)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if content is None and not changed:
+            raise HTTPException(status_code=404, detail="审核规则不存在")
+        return {"status": "saved" if content is not None else "deleted"}
+
+    @app.put("/api/review-rules/global", dependencies=[admin])
+    def put_global_review_rule(payload: ReviewRuleDocument) -> dict[str, str]:
+        """全局配置写入每次 OCR 的隔离 HOME，作为仓库规则的后备层。"""
+
+        return change_review_rule(None, payload)
+
+    @app.delete("/api/review-rules/global", dependencies=[admin])
+    def delete_global_review_rule() -> dict[str, str]:
+        return change_review_rule(None, None)
+
+    @app.put("/api/review-rules/repositories/{repository_id}", dependencies=[admin])
+    def put_repository_review_rule(
+        repository_id: int, payload: ReviewRuleDocument
+    ) -> dict[str, str]:
+        """管理台项目规则通过 OCR --rule 置于版本化仓库规则之上。"""
+
+        return change_review_rule(repository_id, payload)
+
+    @app.delete("/api/review-rules/repositories/{repository_id}", dependencies=[admin])
+    def delete_repository_review_rule(repository_id: int) -> dict[str, str]:
+        return change_review_rule(repository_id, None)
 
     @app.get("/api/repositories/{repository_id}/webhook-token", dependencies=[admin])
     def get_webhook_token(repository_id: int, response: Response) -> dict[str, str]:
@@ -723,10 +800,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def retry_job(job_id: int) -> dict[str, str | int]:
         """将已完成或失败的任务重新排队，保留历史工件。"""
 
-        rule_digest = store.get_job_rule_digest(job_id)
-        if rule_digest is None:
+        job = store.get_job(job_id)
+        if job is None:
             raise HTTPException(status_code=404, detail="任务不存在")
-        queued_id = store.retry_job(job_id, config_hash(store, config, rule_digest))
+        queued_id = store.retry_job(
+            job_id, config_hash(store, config, job["rule_digest"], job["repository_id"])
+        )
         if queued_id is None:
             raise HTTPException(status_code=409, detail="任务当前无法重跑")
         return {"status": "queued", "job_id": queued_id}

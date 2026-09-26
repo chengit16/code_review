@@ -68,6 +68,19 @@ export interface RepositoryUpdateInput {
   enable_default_branch_pushes?: boolean;
 }
 
+/** OCR 原生 rule.json 格式；条目顺序决定同一层内的首次命中。 */
+export interface ReviewRuleDocument {
+  include: string[];
+  exclude: string[];
+  rules: { path: string; rule: string; merge_system_rule: boolean }[];
+}
+
+export interface ReviewRuleConfiguration {
+  repository_id: number | null;
+  content: ReviewRuleDocument;
+  updated_at: string;
+}
+
 /** 可供多个仓库引用的飞书通知通道；凭据从不进入列表响应。 */
 export interface NotificationTarget {
   id: number;

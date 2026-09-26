@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Activity, Bot, GitMerge, GitPullRequest, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
@@ -11,6 +11,7 @@ import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
+import { ReviewRulesPage } from "../pages/ReviewRulesPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
 import { apiRequest } from "../api/client";
@@ -26,6 +27,7 @@ const navigation = [
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
     { to: "/feishu", label: "飞书配置", icon: MessageSquare },
     { to: "/settings", label: "Agent 模型", icon: Bot },
+    { to: "/review-rules", label: "审核规则", icon: ListChecks },
   ] },
 ];
 
@@ -105,6 +107,7 @@ function Workspace({ token, onLogout }: { token: string; onLogout: () => void })
             <Route path="/jobs" element={<JobsPage token={token} />} />
             <Route path="/jobs/:id" element={<JobDetailPage token={token} />} />
             <Route path="/settings" element={<SettingsPage token={token} />} />
+            <Route path="/review-rules" element={<ReviewRulesPage token={token} />} />
           </Routes>
         </main>
     </div>

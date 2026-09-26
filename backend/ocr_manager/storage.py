@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -172,6 +172,16 @@ CREATE UNIQUE INDEX idx_model_profiles_enabled ON model_profiles(enabled) WHERE 
 INSERT INTO model_profiles(id, name, provider, model, api_key_ciphertext, enabled, version)
 SELECT id, '原有模型', provider, model, api_key_ciphertext, 1, version FROM model_profile;
 """
+SCHEMA_V11 = """
+CREATE TABLE review_rule_configs (
+  id INTEGER PRIMARY KEY,
+  repository_id INTEGER UNIQUE REFERENCES repositories(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX idx_review_rule_global ON review_rule_configs((1))
+WHERE repository_id IS NULL;
+"""
 
 
 class Store:
@@ -213,6 +223,7 @@ class Store:
                 (8, SCHEMA_V8),
                 (9, SCHEMA_V9),
                 (10, SCHEMA_V10),
+                (11, SCHEMA_V11),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -327,6 +338,64 @@ class Store:
 
         with self.connection() as db:
             return [dict(row) for row in db.execute("SELECT * FROM repositories ORDER BY id")]
+
+    def list_review_rules(self) -> list[dict[str, Any]]:
+        """返回全局与项目规则，供管理台展示当前可编辑版本。"""
+
+        with self.connection() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    """SELECT repository_id, content, updated_at
+                    FROM review_rule_configs ORDER BY repository_id"""
+                )
+            ]
+
+    def get_review_rule(self, repository_id: int | None) -> str | None:
+        """管理规则可覆盖某个项目，也可作为所有项目的全局兜底。"""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT content FROM review_rule_configs WHERE repository_id IS ?",
+                (repository_id,),
+            ).fetchone()
+            return str(row["content"]) if row else None
+
+    def change_review_rule(self, repository_id: int | None, content: str | None) -> bool:
+        """在写锁内阻止修改运行中或排队任务使用的规则。"""
+
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if repository_id is not None and db.execute(
+                "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
+            ).fetchone() is None:
+                raise LookupError("仓库不存在")
+            active = db.execute(
+                """SELECT 1 FROM review_jobs WHERE status IN ('queued','running')
+                AND (? IS NULL OR repository_id=?) LIMIT 1""",
+                (repository_id, repository_id),
+            ).fetchone()
+            if active:
+                raise ValueError("有待处理评审任务，请完成后再修改审核规则")
+            current = db.execute(
+                "SELECT id FROM review_rule_configs WHERE repository_id IS ?", (repository_id,)
+            ).fetchone()
+            if content is None:
+                if current:
+                    db.execute("DELETE FROM review_rule_configs WHERE id=?", (current["id"],))
+                return bool(current)
+            if current:
+                db.execute(
+                    """UPDATE review_rule_configs SET content=?,
+                    updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    (content, current["id"]),
+                )
+            else:
+                db.execute(
+                    "INSERT INTO review_rule_configs(repository_id, content) VALUES (?, ?)",
+                    (repository_id, content),
+                )
+            return True
 
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
         """项目身份有历史后冻结；来源变化必须等待当前事件和评审结束。"""
