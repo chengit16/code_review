@@ -111,7 +111,9 @@ def _review_status(
     return "未发现问题", "green", "结论：已完成全部可审查文件，未发现问题。"
 
 
-def _finding_sections(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _finding_sections(
+    findings: list[dict[str, Any]], minimum_severity: str = "medium"
+) -> list[dict[str, Any]]:
     # OCR 评论是不可信文本，只作为 plain_text 放入卡片，不解释 Markdown 或 HTML。
     priority = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     labels = {"critical": "严重", "high": "高危", "medium": "中危", "low": "低危"}
@@ -120,8 +122,9 @@ def _finding_sections(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         severity = item.get("severity")
         return priority.get(severity, 4) if isinstance(severity, str) else 4
 
-    # 低危及未分级发现保留在详情页；群消息只摘录可优先处理的问题。
-    highlights = sorted((item for item in findings if rank(item) < 3), key=rank)[:3]
+    # 阈值只筛选群消息摘录，不改变评审结论、完整发现数量和严重级别计数。
+    threshold = priority.get(minimum_severity, priority["medium"])
+    highlights = sorted((item for item in findings if rank(item) <= threshold), key=rank)[:3]
     if not highlights:
         return []
     elements: list[dict[str, Any]] = [{"tag": "hr"}, _plain_section("重点发现")]
@@ -195,7 +198,8 @@ def build_review_card(job: dict[str, Any]) -> dict[str, Any]:
         _plain_section(conclusion),
     ]
     if findings:
-        elements.extend(_finding_sections(findings))
+        minimum_severity = str(job.get("notification_min_severity") or "medium")
+        elements.extend(_finding_sections(findings, minimum_severity))
 
     # 3. 外部链接仅来自已有的受控任务与 GitLab URL，不从 OCR 评论中生成操作。
     actions = [

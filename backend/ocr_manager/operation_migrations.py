@@ -15,3 +15,20 @@ CREATE INDEX idx_jobs_time ON review_jobs(created_at, id DESC);
 READINESS_MIGRATION = """
 ALTER TABLE connection_checks ADD COLUMN config_revision_id INTEGER;
 """
+
+FEEDBACK_MIGRATION = """
+CREATE TABLE review_feedback (
+  job_id INTEGER NOT NULL REFERENCES review_jobs(id),
+  comment_index INTEGER NOT NULL CHECK(comment_index>=0),
+  verdict TEXT NOT NULL CHECK(verdict IN ('helpful','false_positive','fixed')),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(job_id,comment_index)
+);
+CREATE TABLE project_policies (
+  repository_id INTEGER PRIMARY KEY REFERENCES repositories(id),
+  minimum_severity TEXT NOT NULL DEFAULT 'medium'
+    CHECK(minimum_severity IN ('critical','high','medium','low')),
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE review_jobs ADD COLUMN notification_min_severity TEXT NOT NULL DEFAULT 'medium';
+"""

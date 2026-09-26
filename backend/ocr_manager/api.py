@@ -93,6 +93,22 @@ class ReviewRuleDocument(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ProjectNotificationPolicy(BaseModel):
+    """项目通知卡片的重点发现级别；完整结论仍包含所有发现。"""
+
+    minimum_severity: Literal["critical", "high", "medium", "low"]
+
+    model_config = {"extra": "forbid"}
+
+
+class ReviewFeedbackInput(BaseModel):
+    """人工标记单条发现，可在重评审前修改或撤销。"""
+
+    verdict: Literal["helpful", "false_positive", "fixed"]
+
+    model_config = {"extra": "forbid"}
+
+
 class RulePreviewInput(BaseModel):
     """规则预览只接受仓库内相对文件路径，不能选择外部工作目录。"""
 
@@ -398,6 +414,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return [
             {**row, "content": json.loads(row["content"])} for row in store.list_review_rules()
         ]
+
+    @app.get("/api/review-feedback/summary", dependencies=[admin])
+    def review_feedback_summary() -> list[dict[str, Any]]:
+        """反馈统计以已标记发现为分母，未标记发现不推断为有用或误报。"""
+
+        return store.feedback_summary()
+
+    @app.put("/api/repositories/{repository_id}/notification-policy", dependencies=[admin])
+    def put_notification_policy(
+        repository_id: int, payload: ProjectNotificationPolicy
+    ) -> dict[str, str]:
+        """保存项目通知阈值；未完成事件或任务阻止快照变更。"""
+
+        try:
+            store.set_project_policy(repository_id, payload.minimum_severity)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        return {"minimum_severity": payload.minimum_severity}
 
     @app.get("/api/repositories/{repository_id}/rule-previews", dependencies=[admin])
     def list_rule_previews(repository_id: int) -> list[dict[str, Any]]:
@@ -924,6 +960,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 job["mr_url"] = f"{project_url}/-/merge_requests/{job['mr_iid']}"
             job["commit_url"] = f"{project_url}/-/commit/{job['commit_sha']}"
         return job
+
+    @app.put("/api/jobs/{job_id}/feedback/{comment_index}", dependencies=[admin])
+    def put_review_feedback(
+        job_id: int, comment_index: int, payload: ReviewFeedbackInput
+    ) -> dict[str, str]:
+        """仅接受已完成任务中实际存在的 OCR 评论序号。"""
+
+        try:
+            store.set_review_feedback(job_id, comment_index, payload.verdict)
+        except LookupError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        return {"verdict": payload.verdict}
+
+    @app.delete("/api/jobs/{job_id}/feedback/{comment_index}", dependencies=[admin])
+    def delete_review_feedback(job_id: int, comment_index: int) -> dict[str, str]:
+        """撤销已有反馈；缺失记录明确返回 404。"""
+
+        if not store.clear_review_feedback(job_id, comment_index):
+            raise HTTPException(status_code=404, detail="反馈不存在")
+        return {"status": "deleted"}
 
     @app.post("/api/jobs/{job_id}/retry", dependencies=[admin])
     def retry_job(job_id: int) -> dict[str, str | int]:

@@ -124,6 +124,9 @@ def config_hash(
             "project_rule": (
                 store.get_review_rule(repository_id) if repository_id is not None else None
             ),
+            "notification_min_severity": (
+                store.get_project_policy(repository_id) if repository_id is not None else "medium"
+            ),
         },
         sort_keys=True,
     )

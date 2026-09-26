@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from ocr_manager.config_history import history_migration
-from ocr_manager.operation_migrations import READINESS_MIGRATION, TASK_MIGRATION
+from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -276,6 +276,7 @@ class Store:
                 (15, TASK_MIGRATION),
                 (16, history_migration()),
                 (17, READINESS_MIGRATION),
+                (18, FEEDBACK_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -689,6 +690,11 @@ class Store:
 
         with self.connection() as db:
             db.execute(
+                """DELETE FROM review_feedback WHERE job_id IN
+                (SELECT id FROM review_jobs WHERE repository_id=?)""", (repository_id,)
+            )
+            db.execute("DELETE FROM project_policies WHERE repository_id=?", (repository_id,))
+            db.execute(
                 """DELETE FROM notification_deliveries
                 WHERE job_id IN (SELECT id FROM review_jobs WHERE repository_id=?)""",
                 (repository_id,),
@@ -703,6 +709,97 @@ class Store:
             db.execute("DELETE FROM connection_checks WHERE repository_id=?", (repository_id,))
             cursor = db.execute("DELETE FROM repositories WHERE id=?", (repository_id,))
             return cursor.rowcount == 1
+
+    def get_project_policy(self, repository_id: int) -> str:
+        """读取项目通知重点发现的最低级别；旧项目默认中危。"""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT minimum_severity FROM project_policies WHERE repository_id=?",
+                (repository_id,),
+            ).fetchone()
+            return str(row["minimum_severity"]) if row else "medium"
+
+    def set_project_policy(self, repository_id: int, minimum_severity: str) -> None:
+        """写锁内保护已入队的配置快照，避免阈值变更影响在途任务。"""
+
+        if minimum_severity not in {"critical", "high", "medium", "low"}:
+            raise ValueError("通知级别无效")
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute(
+                "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
+            ).fetchone() is None:
+                raise LookupError("仓库不存在")
+            if db.execute(
+                """SELECT 1 FROM merge_events WHERE repository_id=?
+                AND status IN ('queued','running')
+                UNION ALL SELECT 1 FROM review_jobs WHERE repository_id=?
+                AND status IN ('queued','running') LIMIT 1""", (repository_id, repository_id),
+            ).fetchone():
+                raise ValueError("有待处理事件或评审任务，请完成后再修改通知级别")
+            db.execute(
+                """INSERT INTO project_policies(repository_id, minimum_severity)
+                VALUES (?, ?) ON CONFLICT(repository_id) DO UPDATE SET
+                minimum_severity=excluded.minimum_severity,
+                updated_at=CURRENT_TIMESTAMP""",
+                (repository_id, minimum_severity),
+            )
+
+    def feedback_summary(self) -> list[dict[str, Any]]:
+        """按项目聚合人工反馈；误报率以已标记的发现为分母。"""
+
+        with self.connection() as db:
+            return [dict(row) for row in db.execute(
+                """SELECT r.id AS repository_id, r.name AS repository_name,
+                COALESCE(p.minimum_severity, 'medium') AS minimum_severity,
+                COUNT(f.job_id) AS total,
+                SUM(CASE WHEN f.verdict='helpful' THEN 1 ELSE 0 END) AS helpful,
+                SUM(CASE WHEN f.verdict='false_positive' THEN 1 ELSE 0 END) AS false_positive,
+                SUM(CASE WHEN f.verdict='fixed' THEN 1 ELSE 0 END) AS fixed
+                FROM repositories r LEFT JOIN project_policies p ON p.repository_id=r.id
+                LEFT JOIN review_jobs j ON j.repository_id=r.id
+                LEFT JOIN review_feedback f ON f.job_id=j.id
+                GROUP BY r.id ORDER BY r.name, r.id"""
+            )]
+
+    def set_review_feedback(self, job_id: int, comment_index: int, verdict: str) -> None:
+        """仅允许对终态任务中真实存在的发现反馈；同一发现可修改结论。"""
+
+        if verdict not in {"helpful", "false_positive", "fixed"}:
+            raise ValueError("反馈类型无效")
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT status, result_json FROM review_jobs WHERE id=?", (job_id,)
+            ).fetchone()
+            if row is None:
+                raise LookupError("任务不存在")
+            if row["status"] not in {"complete", "partial", "failed", "skipped"}:
+                raise ValueError("任务尚未结束，不能提交发现反馈")
+            result = json.loads(row["result_json"]) if row["result_json"] else {}
+            comments = result.get("comments") if isinstance(result, dict) else None
+            if (
+                not isinstance(comment_index, int) or isinstance(comment_index, bool)
+                or comment_index < 0 or not isinstance(comments, list)
+                or comment_index >= len(comments) or not isinstance(comments[comment_index], dict)
+            ):
+                raise ValueError("发现序号无效")
+            db.execute(
+                """INSERT INTO review_feedback(job_id, comment_index, verdict)
+                VALUES (?, ?, ?) ON CONFLICT(job_id, comment_index) DO UPDATE SET
+                verdict=excluded.verdict, updated_at=CURRENT_TIMESTAMP""",
+                (job_id, comment_index, verdict),
+            )
+
+    def clear_review_feedback(self, job_id: int, comment_index: int) -> bool:
+        """撤销人工标记，恢复该发现的未反馈状态。"""
+
+        with self.connection() as db:
+            return db.execute(
+                "DELETE FROM review_feedback WHERE job_id=? AND comment_index=?",
+                (job_id, comment_index),
+            ).rowcount == 1
 
     def record_webhook(self, repository_id: int) -> None:
         """合法鉴权投递可用于判断 GitLab 回调连接是否仍在工作。"""
@@ -845,9 +942,11 @@ class Store:
                     db.execute(
                         """INSERT OR IGNORE INTO review_jobs
                         (repository_id, event_id, mr_iid, commit_sha, ordinal,
-                         config_hash, rule_digest, target_branch)
+                         config_hash, rule_digest, target_branch, notification_min_severity)
                         VALUES (?, ?, ?, ?, ?, ?, ?,
-                          (SELECT target_branch FROM repositories WHERE id=?))""",
+                          (SELECT target_branch FROM repositories WHERE id=?),
+                          COALESCE((SELECT minimum_severity FROM project_policies
+                            WHERE repository_id=?), 'medium'))""",
                         (
                             event["repository_id"],
                             event_id,
@@ -856,6 +955,7 @@ class Store:
                             ordinal,
                             snapshot_hash,
                             rule_digest,
+                            event["repository_id"],
                             event["repository_id"],
                         ),
                     )
@@ -1195,6 +1295,12 @@ class Store:
                     "SELECT * FROM review_attempts WHERE job_id=? ORDER BY id DESC", (job_id,)
                 )
             ]
+            result["feedback"] = {
+                int(feedback["comment_index"]): str(feedback["verdict"])
+                for feedback in db.execute(
+                    "SELECT comment_index, verdict FROM review_feedback WHERE job_id=?", (job_id,)
+                )
+            }
             delivery = db.execute(
                 """SELECT id, status, attempts, error, sent_at
                 FROM notification_deliveries WHERE job_id=?""",
@@ -1214,8 +1320,10 @@ class Store:
                 cursor = db.execute(
                     """INSERT OR IGNORE INTO review_jobs
                     (repository_id, event_id, mr_iid, commit_sha, ordinal,
-                     config_hash, rule_digest, target_branch)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     config_hash, rule_digest, target_branch, notification_min_severity)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
+                      (SELECT minimum_severity FROM project_policies WHERE repository_id=?),
+                      'medium'))""",
                     (
                         old["repository_id"],
                         old["event_id"],
@@ -1225,6 +1333,7 @@ class Store:
                         config_hash,
                         old["rule_digest"],
                         old["target_branch"],
+                        old["repository_id"],
                     ),
                 )
                 return cursor.lastrowid if cursor.rowcount else None
@@ -1239,6 +1348,7 @@ class Store:
             if cursor.rowcount:
                 # 旧投递不得在重审期间发送，新的评审结论完成后再生成通知。
                 db.execute("DELETE FROM notification_deliveries WHERE job_id=?", (job_id,))
+                db.execute("DELETE FROM review_feedback WHERE job_id=?", (job_id,))
             return job_id if cursor.rowcount else None
 
     def next_delivery(self) -> dict[str, Any] | None:
@@ -1247,7 +1357,7 @@ class Store:
         with self.connection() as db:
             row = db.execute(
                 """SELECT d.*, j.repository_id, j.commit_sha, j.mr_iid, j.status AS review_status,
-                j.result_json, j.error AS review_error,
+                j.result_json, j.error AS review_error, j.notification_min_severity,
                 r.name AS repository_name, r.path_with_namespace, r.target_branch,
                 r.gitlab_url, r.remote_url
                 FROM notification_deliveries d

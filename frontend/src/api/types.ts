@@ -231,6 +231,8 @@ export interface ReviewJobDetail extends ReviewJob {
     message?: string;
   } | null;
   result_path: string | null;
+  notification_min_severity: "critical" | "high" | "medium" | "low";
+  feedback: Record<number, "helpful" | "false_positive" | "fixed">;
   changed_files?: string | null;
   attempt_history: Array<{
     id: number;
@@ -247,6 +249,17 @@ export interface ReviewJobDetail extends ReviewJob {
     error: string | null;
     sent_at: string | null;
   } | null;
+}
+
+/** 项目级人工反馈统计；误报率仅以已标记发现为分母。 */
+export interface ReviewFeedbackSummary {
+  repository_id: number;
+  repository_name: string;
+  minimum_severity: "critical" | "high" | "medium" | "low";
+  total: number;
+  helpful: number;
+  false_positive: number;
+  fixed: number;
 }
 
 /** 由 Worker 异步执行的外部连接测试，不包含凭据或原始响应。 */
