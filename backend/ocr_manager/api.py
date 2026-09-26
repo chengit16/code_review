@@ -1169,11 +1169,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if premerge_setting and premerge_setting["enabled"]:
             version = parse_premerge_event(body, row["project_id"], row["target_branch"])
             if version:
-                iid, head = version
+                iid, head, context_hint = version
                 if head is None:
                     invalidate_premerge(store, row["id"], iid)
                 else:
-                    created = enqueue_premerge(store, row["id"], iid, head)
+                    with store.connection() as db:
+                        setting = db.execute("""SELECT include_description
+                            FROM premerge_settings WHERE repository_id=?""",
+                            (row["id"],)).fetchone()
+                    if setting is None or not setting["include_description"]:
+                        context_hint = None
+                    created = enqueue_premerge(store, row["id"], iid, head, context_hint)
                     return {"status": "queued" if created else "duplicate"}
         if not row["enable_merge_requests"]:
             return {"status": "ignored"}

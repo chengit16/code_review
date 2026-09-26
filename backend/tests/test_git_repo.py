@@ -91,6 +91,44 @@ def test_rule_digest_tracks_content_at_each_commit(tmp_path: Path) -> None:
     assert git.rule_digest(second) == command("rev-parse", f"{second}:.opencodereview/rule.json")
 
 
+def test_context_file_reads_fixed_commit_and_rejects_symlink_or_large_file(
+    tmp_path: Path,
+) -> None:
+    """业务文档只从指定提交读取，符号链接及过大的内容不能进入模型背景。"""
+
+    root = tmp_path / "repositories" / "1"
+    (root / "docs").mkdir(parents=True)
+
+    def command(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=root, capture_output=True,
+                              text=True, check=True).stdout.strip()
+
+    command("init", "-q")
+    command("config", "user.name", "Test")
+    command("config", "user.email", "test@example.test")
+    document = root / "docs" / "spec.md"
+    document.write_text("第一版业务规则", encoding="utf-8")
+    command("add", "docs/spec.md")
+    command("commit", "-qm", "first")
+    first = command("rev-parse", "HEAD")
+    document.write_text("第二版业务规则", encoding="utf-8")
+    (root / "docs" / "link.md").symlink_to("spec.md")
+    (root / "docs" / "large.md").write_text("x" * 6401, encoding="utf-8")
+    command("add", "docs")
+    command("commit", "-qm", "second")
+    second = command("rev-parse", "HEAD")
+    git = GitRepository(tmp_path, {"id": 1,
+        "remote_url": "git@example.test:team/repo.git", "target_branch": "main"})
+    assert git.read_context_file(first, "docs/spec.md", 1600) == "第一版业务规则"
+    assert git.read_context_file(second, "docs/spec.md", 1600) == "第二版业务规则"
+    with pytest.raises(ValueError, match="普通文件"):
+        git.read_context_file(second, "docs/link.md", 1600)
+    with pytest.raises(ValueError, match="过大"):
+        git.read_context_file(second, "docs/large.md", 1600)
+    with pytest.raises(ValueError, match="路径"):
+        git.read_context_file(second, "../secret.md", 1600)
+
+
 def test_push_commits_uses_fast_forward_range_and_rejects_rewrite(tmp_path: Path) -> None:
     """默认分支 Push 只审查本次新增提交，分叉旧 SHA 不能冒充快进更新。"""
 

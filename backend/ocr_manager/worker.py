@@ -31,11 +31,13 @@ from ocr_manager.model_pricing import pricing_snapshot
 from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.premerge import (
     SHA,
+    description_digest,
     enqueue_premerge,
     finish_premerge,
     next_premerge,
     premerge_is_current,
 )
+from ocr_manager.premerge_context import build_premerge_context
 from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.publications import next_publication, publish_one
 from ocr_manager.secrets import SecretBox
@@ -496,6 +498,26 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         if not premerge_is_current(store, review["id"]):
             return
 
+        with store.connection() as db:
+            context_setting = db.execute("""SELECT include_description,context_paths
+                FROM premerge_settings WHERE repository_id=?""",
+                (repository["id"],)).fetchone()
+        if context_setting is None:
+            raise ValueError("合并前审查配置已删除")
+        include_description = bool(context_setting["include_description"])
+        current_hint = description_digest(mr.get("description"))
+        if (include_description and review["context_hint"] is not None and
+            review["context_hint"] != current_hint):
+            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
+                            "MR 描述已更新")
+            enqueue_premerge(store, repository["id"], review["mr_iid"],
+                             review["head_sha"], current_hint)
+            return
+        background, context = build_premerge_context(
+            git, review["head_sha"], mr, include_description,
+            json.loads(context_setting["context_paths"]),
+        )
+
         # 2. 工作区固定在可信目标分支基准；OCR 用已拉取的头对象计算完整 MR 差异。
         git.checkout(base_sha, checkout)
         model_settings, _ = review_settings(store, settings, repository["id"])
@@ -504,11 +526,14 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
             status, result = run_review(
                 model_settings, checkout, run_dir, review["head_sha"],
                 store.get_review_rule(None), store.get_review_rule(repository["id"]),
-                base_sha=base_sha,
+                base_sha=base_sha, background=background,
             )
             check_cancellation()
         latest_mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
-        if latest_mr.get("state") != "opened" or latest_mr.get("sha") != review["head_sha"]:
+        if (latest_mr.get("state") != "opened" or
+            latest_mr.get("sha") != review["head_sha"] or
+            latest_mr.get("target_branch") != repository["target_branch"] or
+            latest_mr.get("target_project_id") != repository["project_id"]):
             finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
                             "GitLab MR 已更新")
             current_sha = latest_mr.get("sha")
@@ -518,9 +543,16 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
                 isinstance(current_sha, str) and SHA.fullmatch(current_sha)):
                 enqueue_premerge(store, repository["id"], review["mr_iid"], current_sha)
             return
+        latest_hint = description_digest(latest_mr.get("description"))
+        if include_description and latest_hint != current_hint:
+            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
+                            "MR 描述在审查期间更新")
+            enqueue_premerge(store, repository["id"], review["mr_iid"],
+                             review["head_sha"], latest_hint)
+            return
         # 3. 条件更新避免迟到结果覆盖新提交，原始工件仅供受控本机诊断。
         finish_premerge(store, review["id"], status, base_sha, result,
-                        str(run_dir / "result.json"), changed_files, None)
+                        str(run_dir / "result.json"), changed_files, None, context)
     except ReviewCancelled:
         finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
                         "已有新的 MR 提交版本")
@@ -533,8 +565,11 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
                     WHERE id=? AND status='running'""",
                     (f"合并前审查暂时失败：{type(error).__name__}", review["id"]))
         else:
+            detail = (f"合并前审查配置无效：{str(error)[:200]}"
+                      if isinstance(error, ValueError)
+                      else f"合并前审查失败：{type(error).__name__}")
             finish_premerge(store, review["id"], "failed", base_sha, None, None, None,
-                            f"合并前审查失败：{type(error).__name__}")
+                            detail)
     finally:
         if git is not None:
             try:

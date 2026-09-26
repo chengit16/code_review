@@ -210,6 +210,25 @@ class GitRepository:
         sha = self._commit_sha(sha)
         return self._git("ls-tree", "--object-only", sha, "--", ".opencodereview/rule.json")
 
+    def read_context_file(self, sha: str, path: str, max_chars: int) -> str:
+        """从已拉取提交读取受限普通文本文件，不跟随工作区符号链接。"""
+
+        from ocr_manager.premerge_context import validate_context_paths
+
+        path = validate_context_paths([path])[0]
+        sha = self._commit_sha(sha)
+        entry = self._git("ls-tree", sha, "--", path)
+        if (not entry.startswith(("100644 blob ", "100755 blob ")) or
+            not entry.endswith(f"\t{path}")):
+            raise ValueError(f"业务文档不是普通文件：{path}")
+        size = int(self._git("cat-file", "-s", f"{sha}:{path}"))
+        if size > 6400:
+            raise ValueError(f"业务文档过大：{path}")
+        content = self._git("show", f"{sha}:{path}")
+        if "\x00" in content:
+            raise ValueError(f"业务文档不是文本：{path}")
+        return content[:max_chars]
+
     def checkout(self, sha: str, target: Path) -> None:
         """为 OCR 建立与目标 SHA 一致的隔离工作目录。"""
 

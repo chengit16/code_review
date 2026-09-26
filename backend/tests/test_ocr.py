@@ -156,6 +156,27 @@ def test_empty_preview_skips_model_and_preserves_exclusions(
     assert (tmp_path / "run" / "result.json").exists()
 
 
+def test_background_uses_single_file_argument(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """业务上下文只通过 OCR 的文件参数传入，预览和正式结果使用同一份。"""
+
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
+        commands.append(command)
+        output = Path(command[command.index("--output") + 1])
+        output.write_text(json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8")
+        return 0, ""
+
+    monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
+    run_review(settings, tmp_path, tmp_path / "run", SHA, background="合成业务背景")
+    assert len(commands) == 1
+    assert "--background" not in commands[0]
+    path = Path(commands[0][commands[0].index("--background-file") + 1])
+    assert path.read_text(encoding="utf-8") == "合成业务背景"
+
+
 def test_range_command_uses_from_to_without_commit(
     settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

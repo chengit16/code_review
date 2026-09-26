@@ -19,14 +19,14 @@ from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
-from ocr_manager.premerge import PREMERGE_MIGRATION
+from ocr_manager.premerge import PREMERGE_CONTEXT_MIGRATION, PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.review_effectiveness import EFFECTIVENESS_MIGRATION
 from ocr_manager.review_issues import ISSUES_MIGRATION, backfill_existing_issues, capture_findings
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -302,6 +302,7 @@ class Store:
                 (28, PRICING_MIGRATION),
                 (29, ISSUES_MIGRATION),
                 (30, EFFECTIVENESS_MIGRATION),
+                (31, PREMERGE_CONTEXT_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:

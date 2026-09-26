@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from ocr_manager import worker
 from ocr_manager.config import Settings
 from ocr_manager.premerge import (
+    description_digest,
     enqueue_premerge,
     finish_premerge,
     next_premerge,
@@ -35,7 +36,7 @@ def create_repository(client: TestClient) -> int:
     return int(response.json()["id"])
 
 
-def payload(head: str, action: str = "update") -> dict[str, object]:
+def payload(head: str, action: str = "update") -> dict[str, Any]:
     """构造 GitLab MR 更新所需的最小可信字段。"""
 
     return {"object_kind": "merge_request", "project": {"id": 42},
@@ -130,7 +131,9 @@ def test_closed_mr_invalidates_without_postmerge_enabled(client: TestClient) -> 
     client.post(url, headers=WEBHOOK, json=payload("a" * 40))
     assert client.post(url, headers=WEBHOOK, json=payload("a" * 40, "close")).json() == {
         "status": "ignored"}
-    assert client.get("/api/premerge-reviews", headers=ADMIN).json()[0]["status"] == "superseded"
+    # 关闭事件可能乱序到达；旧结果已失效，复核任务由 Worker 确认 MR 实际状态。
+    assert [row["status"] for row in client.get("/api/premerge-reviews",
+            headers=ADMIN).json()[:2]] == ["queued", "superseded"]
 
 
 def test_worker_uses_full_range_and_requeues_authoritative_head(
@@ -186,8 +189,10 @@ def test_worker_uses_full_range_and_requeues_authoritative_head(
             pass
 
     def fake_review(_settings: Settings, _checkout: Path, _run: Path, head: str,
-                    *_args: Any, base_sha: str | None = None) -> tuple[str, dict[str, Any]]:
+                    *_args: Any, base_sha: str | None = None,
+                    background: str | None = None) -> tuple[str, dict[str, Any]]:
         seen.append((head, base_sha))
+        assert background is None
         return "complete", {"comments": [], "manifest": {"terminal_state": "complete"}}
 
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
@@ -208,3 +213,118 @@ def test_worker_uses_full_range_and_requeues_authoritative_head(
     assert len(seen) == 1
     newest = client.get("/api/premerge-reviews", headers=ADMIN).json()[0]
     assert newest["status"] == "queued" and newest["head_sha"] == current
+
+
+def test_premerge_freezes_verified_context_and_invalidates_changed_settings(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MR 描述与仓库文档在可信头上读取；配置变更立即使旧结论失效。"""
+
+    repo_id = create_repository(client)
+    client.patch(f"/api/repositories/{repo_id}", headers=ADMIN,
+                 json={"gitlab_token": "synthetic-gitlab-token"})
+    endpoint = f"/api/repositories/{repo_id}/premerge"
+    assert client.put(endpoint, headers=ADMIN, json={"enabled": True,
+        "include_description": True, "context_paths": ["docs/spec.md"]}).status_code == 200
+    assert client.put(endpoint, headers=ADMIN, json={"enabled": True,
+        "context_paths": ["../secret.md"]}).status_code == 422
+    head, base = "a" * 40, "b" * 40
+    description = "必须拒绝未授权请求"
+    captured: list[str | None] = []
+
+    class FakeGitLab:
+        """只返回 Worker 复核后的当前 MR，不依赖 Webhook 描述。"""
+
+        def __init__(self, *_args: Any) -> None:
+            pass
+
+        def check_access(self, *_args: Any) -> None:
+            pass
+
+        def get_merge_request(self, *_args: Any) -> dict[str, Any]:
+            return {"state": "opened", "sha": head, "description": description,
+                    "target_branch": "main", "target_project_id": 42,
+                    "diff_refs": {"base_sha": base, "head_sha": head}}
+
+    class FakeGit:
+        """确认业务文档来自不可变 MR 头，返回合成内容。"""
+
+        def __init__(self, *_args: Any) -> None:
+            pass
+
+        def fetch(self) -> None:
+            pass
+
+        def fetch_mr_head(self, _iid: int, _sha: str) -> None:
+            pass
+
+        def is_range_base(self, _base: str, _head: str) -> bool:
+            return True
+
+        def read_context_file(self, sha: str, path: str, limit: int) -> str:
+            assert (sha, path, limit) == (head, "docs/spec.md", 1600)
+            return "接口必须验证身份"
+
+        def checkout(self, _sha: str, _target: Path) -> None:
+            pass
+
+        def range_changed_files(self, _base: str, _head: str) -> list[dict[str, Any]]:
+            return []
+
+        def remove_checkout(self, _target: Path) -> None:
+            pass
+
+    def fake_review(_settings: Settings, _checkout: Path, _run: Path, _head: str,
+                    *_args: Any, base_sha: str | None = None,
+                    background: str | None = None) -> tuple[str, dict[str, Any]]:
+        nonlocal description
+        assert base_sha == base
+        captured.append(background)
+        if len(captured) == 2:
+            description = "审查中修改后的描述"
+        return "complete", {"comments": [], "manifest": {"terminal_state": "complete"}}
+
+    monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
+    monkeypatch.setattr(worker, "GitRepository", FakeGit)
+    monkeypatch.setattr(worker, "run_review", fake_review)
+    store = Store(settings.data_dir / "app.db")
+    assert enqueue_premerge(store, repo_id, 7, head, description_digest(description))
+    claimed = next_premerge(store)
+    assert claimed is not None
+    worker.review_premerge(store, settings, claimed)
+    assert captured == ["MR 描述:\n必须拒绝未授权请求\n\n仓库文档 docs/spec.md:\n接口必须验证身份"]
+    detail = client.get(f"/api/premerge-reviews/{claimed['id']}", headers=ADMIN).json()
+    context = json.loads(detail["context_json"])
+    assert [item["label"] for item in context["sources"]] == ["MR 描述", "docs/spec.md"]
+    assert "必须拒绝" not in detail["context_json"]
+    assert client.put(endpoint, headers=ADMIN, json={"enabled": True,
+        "include_description": True, "context_paths": []}).status_code == 200
+    rows = client.get("/api/premerge-reviews", headers=ADMIN).json()
+    assert [row["status"] for row in rows[:2]] == ["queued", "superseded"]
+    claimed = next_premerge(store)
+    assert claimed is not None
+    worker.review_premerge(store, settings, claimed)
+    rows = client.get("/api/premerge-reviews", headers=ADMIN).json()
+    assert [row["status"] for row in rows[:3]] == ["queued", "superseded", "superseded"]
+    assert "仓库文档" not in (captured[1] or "")
+
+
+def test_same_sha_description_update_requeues_review(
+    client: TestClient, settings: Settings,
+) -> None:
+    """描述变化即使不产生新提交，也必须重新运行背景评审。"""
+
+    repo_id = create_repository(client)
+    client.put(f"/api/repositories/{repo_id}/premerge", headers=ADMIN,
+               json={"enabled": True, "include_description": True})
+    url = f"/api/webhooks/gitlab/{repo_id}"
+    first = payload("a" * 40)
+    first["object_attributes"]["description"] = "原需求"
+    assert client.post(url, headers=WEBHOOK, json=first).json()["status"] == "queued"
+    assert client.post(url, headers=WEBHOOK, json=first).json()["status"] == "duplicate"
+    changed = payload("a" * 40)
+    changed["object_attributes"]["description"] = "新需求"
+    assert client.post(url, headers=WEBHOOK, json=changed).json()["status"] == "queued"
+    rows = client.get("/api/premerge-reviews", headers=ADMIN).json()
+    assert [row["status"] for row in rows] == ["queued", "superseded"]
+    assert Store(settings.data_dir / "app.db").get_repository(repo_id) is not None

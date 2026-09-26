@@ -1,4 +1,4 @@
-/** @description 合并前 MR 版本列表；服务端状态决定当前结果与失效历史。 */
+/** @description 合并前 MR 版本、发现与背景摘要；服务端状态决定当前结论。 */
 
 import { useQuery } from "@tanstack/react-query";
 import { GitPullRequest } from "lucide-react";
@@ -17,6 +17,7 @@ interface PremergeReview {
   status: string;
   result_json: string | null;
   changed_files?: string | null;
+  context_json?: string | null;
   error: string | null;
   created_at: string;
 }
@@ -25,7 +26,7 @@ interface PremergeReview {
 export function PremergePage({ token }: { /** 内存口令。 */ token: string }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const reviews = useQuery({ queryKey: ["premerge-reviews"], queryFn: () => apiRequest<PremergeReview[]>(token, "/api/premerge-reviews"), refetchInterval: 10000 });
-  const detail = useQuery({ queryKey: ["premerge-review", selectedId], queryFn: () => apiRequest<PremergeReview>(token, `/api/premerge-reviews/${selectedId}`), enabled: selectedId !== null });
+  const detail = useQuery({ queryKey: ["premerge-review", selectedId], queryFn: () => apiRequest<PremergeReview>(token, `/api/premerge-reviews/${selectedId}`), enabled: selectedId !== null, refetchInterval: 10000 });
   const labels: Record<string, string> = { queued: "排队中", running: "审查中", complete: "完成", partial: "部分完成", skipped: "无可审查文件", failed: "失败", superseded: "已失效" };
   return <div className="page"><PageHeader title="合并前审查" subtitle="按 MR 提交版本查看完整差异结果" /><QueryState loading={reviews.isLoading} error={reviews.error} />
     <section className="section"><div className="table-scroll responsive-table"><table><thead><tr><th>项目 / MR</th><th>提交版本</th><th>状态</th><th>发现</th><th>接收时间</th></tr></thead><tbody>
@@ -39,6 +40,10 @@ export function PremergePage({ token }: { /** 内存口令。 */ token: string }
       <p>版本 {detail.data.head_sha} · {labels[detail.data.status] ?? detail.data.status}</p>
       {detail.data.error && <p className="form-error" role="alert">{detail.data.error}</p>}
       {detail.data.status === "superseded" && <p>该版本已失效，请以最新 MR 提交为准。</p>}
+      {detail.data.context_json && (() => {
+        const context = JSON.parse(detail.data.context_json) as { digest: string; sources: Array<{ kind: string; label: string; characters: number; digest: string }> };
+        return <><h3>业务上下文</h3><p>本次上下文摘要 {context.digest}</p><ul>{context.sources.map((source) => <li key={`${source.kind}-${source.label}`}>{source.label} · {source.characters} 字 · 摘要 {source.digest}</li>)}</ul></>;
+      })()}
       {detail.data.status !== "superseded" && (() => {
         const result = detail.data.result_json ? JSON.parse(detail.data.result_json) as { comments?: { path?: string; start_line?: number; severity?: string; content?: string }[] } : null;
         const files = detail.data.changed_files ? JSON.parse(detail.data.changed_files) as { path: string }[] : [];

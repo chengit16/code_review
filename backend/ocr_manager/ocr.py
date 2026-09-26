@@ -288,6 +288,7 @@ def run_review(
     global_rule: str | None = None, project_rule: str | None = None,
     on_stage: Callable[[str], None] | None = None,
     base_sha: str | None = None,
+    background: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """保存 preview、JSON 与诊断输出；合并前范围以冻结的 base/head 验证。"""
 
@@ -323,6 +324,11 @@ def run_review(
         rule_path = run_dir / "managed-rule.json"
         rule_path.write_text(project_rule, encoding="utf-8")
         base.extend(["--rule", str(rule_path)])
+    if background:
+        # 两种 OCR 背景参数不能并传；受限文本固定为本次运行工件。
+        background_path = run_dir / "background.md"
+        background_path.write_text(background, encoding="utf-8")
+        base.extend(["--background-file", str(background_path)])
     for name, command in (
         ("preview", [*base, "--preview", "--output", str(run_dir / "preview.json")]),
         ("result", [*base, "--audience", "agent", "--output", str(run_dir / "result.json")]),
