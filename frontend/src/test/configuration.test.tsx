@@ -1,11 +1,12 @@
 /** @description 保护配置编辑冲突时的草稿，以及部分评审的真实状态。 */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiRequest } from "../api/client";
 import { FeishuHooksPage } from "../pages/FeishuHooksPage";
+import { FindingsPanel } from "../pages/FindingsPanel";
 import { Status } from "../ui/Status";
 
 describe("配置与状态", () => {
@@ -32,5 +33,15 @@ describe("配置与状态", () => {
   it("请求失败保留状态与服务端原因", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "请先停止任务" }), { status: 409 }));
     await expect(apiRequest("", "/api/test")).rejects.toMatchObject({ status: 409, message: "请先停止任务" });
+  });
+  it("筛选后仍以原始发现索引提交反馈", async () => {
+    const onFeedback = vi.fn();
+    render(<FindingsPanel comments={[
+      { path: "a.py", content: "低危", severity: "low" },
+      { path: "b.py", content: "高危", severity: "high" },
+    ]} feedback={{}} status="complete" coverageWaived={false} pending={false} onFeedback={onFeedback} />);
+    const user = userEvent.setup();
+    await user.click(within(screen.getByRole("group", { name: "发现 2 的反馈" })).getByRole("button", { name: "有帮助" }));
+    expect(onFeedback).toHaveBeenCalledWith(1, "helpful");
   });
 });
