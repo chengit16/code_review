@@ -17,6 +17,6 @@ class SecretBox:
         return self._fernet.encrypt(value.encode("utf-8")).decode("ascii")
 
     def decrypt(self, value: str) -> str:
-        """只在调用外部服务或验证 webhook 时解密。"""
+        """仅供鉴权、外部服务调用及管理员主动查看时解密。"""
 
         return self._fernet.decrypt(value.encode("ascii")).decode("utf-8")

@@ -1,4 +1,4 @@
-"""保护 GitLab webhook 鉴权、合并过滤、密钥不回显和重复投递。"""
+"""保护 GitLab webhook 鉴权、合并过滤、令牌按需查看和重复投递。"""
 
 from __future__ import annotations
 
@@ -97,6 +97,89 @@ def test_project_can_be_saved_before_feishu_hook(client: TestClient) -> None:
     assert configured.status_code == 200, configured.text
     assert configured.json()["has_feishu_webhook"] is True
     assert "feishu_webhook" not in configured.json()
+
+
+def test_generated_secret_token_can_be_revealed_and_used(
+    client: TestClient, settings: Settings
+) -> None:
+    """服务端生成的令牌只在授权查看接口返回，并可通过真实入站鉴权。"""
+
+    admin = {"X-Admin-Token": "test-admin-token"}
+    project = {
+        "name": "自动令牌项目",
+        "gitlab_url": "https://gitlab.example.test",
+        "project_id": 42,
+        "remote_url": "git@gitlab.example.test:team/generated-token.git",
+        "target_branch": "main",
+        "auth_kind": "secret",
+    }
+    created = client.post("/api/repositories", headers=admin, json=project)
+    assert created.status_code == 201, created.text
+    repository_id = created.json()["id"]
+    url = f"/api/repositories/{repository_id}/webhook-token"
+    assert "webhook_token" not in created.json()
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers={"X-Admin-Token": "incorrect"}).status_code == 401
+    listed = client.get("/api/repositories", headers=admin)
+    assert "webhook_token" not in listed.text
+    assert "webhook_secret" not in listed.text
+
+    revealed = client.get(url, headers=admin)
+    assert revealed.status_code == 200
+    assert revealed.headers["Cache-Control"] == "no-store"
+    token = revealed.json()["webhook_token"]
+    assert len(token) >= 40
+    assert token not in listed.text
+    store = Store(settings.data_dir / "app.db")
+    assert token not in store.get_repository(repository_id)["webhook_secret"]
+    audit = client.get("/api/audit-logs", headers=admin)
+    assert audit.json()[0]["action"] == "GET /api/repositories/{repository_id}/webhook-token"
+    assert token not in audit.text
+
+    response = client.post(
+        f"/api/webhooks/gitlab/{repository_id}",
+        headers={"X-Gitlab-Token": token, "X-Gitlab-Event": "Merge Request Hook"},
+        json=merge_payload(),
+    )
+    assert response.json() == {"status": "queued"}
+
+
+def test_signing_token_requires_gitlab_value_and_reveal_tracks_rotation(
+    client: TestClient,
+) -> None:
+    """Signing token 不由平台伪造；已有项目轮换后查看到最新值。"""
+
+    admin = {"X-Admin-Token": "test-admin-token"}
+    payload = {
+        "name": "签名项目",
+        "gitlab_url": "https://gitlab.example.test",
+        "project_id": 42,
+        "remote_url": "git@gitlab.example.test:team/signing.git",
+        "target_branch": "main",
+        "auth_kind": "signing",
+    }
+    missing = client.post("/api/repositories", headers=admin, json=payload)
+    assert missing.status_code == 422
+
+    first_token = "whsec_" + base64.b64encode(b"first-signing-key-0123456789").decode()
+    created = client.post(
+        "/api/repositories", headers=admin, json={**payload, "webhook_token": first_token}
+    )
+    assert created.status_code == 201, created.text
+    repository_id = created.json()["id"]
+    url = f"/api/repositories/{repository_id}/webhook-token"
+    assert client.get(url, headers=admin).json() == {"webhook_token": first_token}
+
+    next_token = "whsec_" + base64.b64encode(b"next-signing-key-0123456789").decode()
+    rotated = client.patch(
+        f"/api/repositories/{repository_id}",
+        headers=admin,
+        json={"webhook_token": next_token},
+    )
+    assert rotated.status_code == 200
+    assert next_token not in rotated.text
+    assert client.get(url, headers=admin).json() == {"webhook_token": next_token}
+    assert client.get("/api/repositories/9999/webhook-token", headers=admin).status_code == 404
 
 
 def test_project_and_feishu_hook_deletion_are_separate(

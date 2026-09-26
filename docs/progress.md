@@ -28,7 +28,7 @@
 - OCR CLI `1.12.9` 已安装到忽略目录 `.local-tools/`；`ocr version`、`ocr review --help` 与隔离 Git 仓库中的零文件/单文件 preview 已实际通过，正式模型调用仍待凭据。
 - OCR preview、正式评审及模型连接测试的子进程环境使用运行、代理和证书变量允许列表，不继承管理服务凭据、其他模型密钥或 Node 注入参数，并单独传入本次模型配置；manifest 覆盖分组中的重复文件 ID 会被拒绝，避免重复计数被判为完整评审。
 - 管理台已提供 Git、GitLab API、模型与飞书连接测试。测试请求持久化后由 Worker 执行，最近结果可查询；同一目标的未完成测试去重，Worker 中断后不会自动重发飞书测试消息。模型测试在隔离 HOME 中配置 provider/model，并用 OCR 自身的 `llm test` 发起请求；假密钥已验证能到达 DashScope 并收到 401，真实密钥仍待联调。
-- 管理台配置入口拆为“项目配置”“飞书 Hook”“Agent 模型”三块；项目可先保存 GitLab 身份与入站回调，再按项目补录飞书机器人 Hook，密钥仍只单向写入并通过独立连接测试验证。
+- 管理台配置入口拆为“项目配置”“飞书 Hook”“Agent 模型”三块；项目可先保存 GitLab 身份与入站回调，再按项目补录飞书机器人 Hook。Secret token 由服务端自动生成，项目列表默认遮罩并支持按需查看、复制；Signing token 仍由 GitLab 生成并录入。模型 API key 与飞书 Hook 只单向写入并通过独立连接测试验证。
 - 项目配置和飞书 Hook 支持分别删除：删除 Hook 保留项目与评审历史并即时更新页面状态；项目无论是否已有事件、评审、通知或连接测试记录都可删除，关联业务记录会在同一事务中级联清理。在途 Worker 结果发现目标已删除时安全结束，不会恢复记录或退出进程。
 - 增加 `OCR_APP_DEV_MODE=1` 本地开发模式：管理 API 暂时不要求管理员口令，前端会直接进入管理台；生产模式仍要求 `OCR_APP_ADMIN_TOKEN`，开发模式不影响 Fernet 主密钥和 webhook 鉴权。
 - 本地检查通过：`uv run pytest -q`（具体数量以最近一次命令输出为准）、`uv run ruff check backend`、`uv run ruff format --check backend`、`uv run mypy backend/ocr_manager`、前端 `npm run lint` 与 `npm run build`。开发模式服务 `http://127.0.0.1:8780/` 首页返回 HTTP 200；不带令牌访问管理 API 返回 200，Worker 启动后 `/api/health` 返回 `worker=running`。

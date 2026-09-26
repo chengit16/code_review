@@ -24,7 +24,7 @@ export interface Health {
   worker: "running" | "stopped";
 }
 
-/** 新仓库表单；密钥只在创建请求中提交，不在响应中回显。 */
+/** 新仓库表单；Secret token 省略时由服务端生成。 */
 export interface RepositoryInput {
   name: string;
   gitlab_url: string;
@@ -32,8 +32,13 @@ export interface RepositoryInput {
   remote_url: string;
   target_branch: string;
   auth_kind: "signing" | "secret";
-  webhook_token: string;
+  webhook_token?: string;
   feishu_webhook?: string;
+}
+
+/** 管理员主动查看单个项目令牌时的响应，不进入仓库列表缓存。 */
+export interface WebhookTokenResponse {
+  webhook_token: string;
 }
 
 /** 仓库可变设置；GitLab 项目身份和 Git remote 保持不可变。 */

@@ -7,6 +7,7 @@ import logging
 import re
 import sqlite3
 from pathlib import Path
+from secrets import token_urlsafe
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
@@ -29,7 +30,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class RepositoryCreate(BaseModel):
-    """接入 GitLab 项目所需配置；飞书 Hook 可在独立配置页稍后录入。"""
+    """接入 GitLab 项目；Secret token 可省略并由服务端生成。"""
 
     name: str = Field(min_length=1, max_length=120)
     gitlab_url: str
@@ -37,7 +38,7 @@ class RepositoryCreate(BaseModel):
     remote_url: str
     target_branch: str = Field(min_length=1, max_length=200)
     auth_kind: Literal["signing", "secret"]
-    webhook_token: str = Field(min_length=16)
+    webhook_token: str | None = Field(default=None, min_length=16)
     feishu_webhook: str | None = None
 
     model_config = {"extra": "forbid"}
@@ -204,9 +205,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/repositories", dependencies=[admin])
     def list_repositories() -> list[dict[str, Any]]:
-        """列出已接入仓库，不向浏览器返回凭据。"""
+        """列出已接入仓库；密钥仅由单项查看接口按需返回。"""
 
         return [public_repository(row, config.public_url) for row in store.list_repositories()]
+
+    @app.get("/api/repositories/{repository_id}/webhook-token", dependencies=[admin])
+    def get_webhook_token(repository_id: int, response: Response) -> dict[str, str]:
+        """管理员按需查看已有令牌，响应禁止缓存且审计不记录明文。"""
+
+        response.headers["Cache-Control"] = "no-store"
+        row = store.get_repository(repository_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+        try:
+            token = secrets.decrypt(row["webhook_secret"])
+        except InvalidToken as error:
+            raise HTTPException(status_code=503, detail="Webhook 密钥不可用") from error
+        try:
+            store.record_audit(
+                "GET /api/repositories/{repository_id}/webhook-token",
+                "repository",
+                repository_id,
+                "success",
+            )
+        except sqlite3.Error:
+            LOGGER.exception("Webhook 令牌查看审计记录失败")
+        return {"webhook_token": token}
 
     @app.get("/api/audit-logs", dependencies=[admin])
     def list_audit_logs() -> list[dict[str, Any]]:
@@ -243,11 +267,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="目标分支名称无效")
         if payload.feishu_webhook and not validate_feishu_webhook(payload.feishu_webhook):
             raise HTTPException(status_code=422, detail="飞书 webhook 地址无效")
-        if payload.auth_kind == "signing" and not payload.webhook_token.startswith("whsec_"):
-            raise HTTPException(status_code=422, detail="Signing token 格式无效")
+        if payload.auth_kind == "signing" and (
+            not payload.webhook_token or not payload.webhook_token.startswith("whsec_")
+        ):
+            raise HTTPException(status_code=422, detail="请填写 GitLab 生成的 Signing token")
+        # Secret token 由服务端生成，避免浏览器随机数兼容差异和弱口令。
+        webhook_token = payload.webhook_token or token_urlsafe(32)
         values = payload.model_dump(exclude={"webhook_token"})
         values["gitlab_url"] = payload.gitlab_url.rstrip("/")
-        values["webhook_secret"] = secrets.encrypt(payload.webhook_token)
+        values["webhook_secret"] = secrets.encrypt(webhook_token)
         values["feishu_webhook"] = (
             secrets.encrypt(payload.feishu_webhook) if payload.feishu_webhook else ""
         )

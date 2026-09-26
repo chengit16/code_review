@@ -89,6 +89,13 @@ input, select { min-height: 36px; width: 100%; border: 1px solid #cdd8d2; border
 input:focus, select:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72; outline-offset: 2px; }
 .filter-bar select { width: auto; }
 .copy-command { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: #177562; font-size: 12px; font-weight: 600; }
+.webhook-token { display: grid; gap: 4px; min-width: 140px; }
+.webhook-token-controls { display: inline-flex; align-items: center; gap: 5px; }
+.webhook-token-controls .icon-button { width: 30px; min-height: 30px; }
+.webhook-token-mask { min-width: 74px; color: #7c8d83; font-size: 13px; letter-spacing: 0; }
+.webhook-token-value { width: 220px; min-height: 30px; font-size: 11px; }
+.webhook-token-message { color: #63796c; font-size: 11px; }
+.webhook-token-message.form-error { color: #a54136; }
 .diagnostic { max-width: 300px; overflow: hidden; text-overflow: ellipsis; color: #9b5642; }
 .back-link { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 23px; color: #667a70; font-size: 12px; }
 .detail-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; padding: 25px 0; border-bottom: 1px solid #dce3df; }

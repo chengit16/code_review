@@ -6,7 +6,7 @@
 - 固定版本的 Alibaba Open Code Review CLI，确认 `ocr version` 与 `ocr review --help` 可运行。当前开发机已将 `1.12.9` 安装在项目本地 `.local-tools/`，并验证空变更与单文件变更的 preview JSON；真实模型评审尚未联调。
 - GitLab 只读 API token、项目只读 SSH deploy key、可从 GitLab 访问的 HTTPS 回调地址、飞书群机器人 webhook 和模型 API key。
 
-默认服务仅监听 `127.0.0.1:8000`。反向代理只向 GitLab 开放 `/api/webhooks/gitlab/`，管理 API 和页面通过本机或受控内网访问。GitLab 项目中需手动创建 Merge request events webhook，并把回调 URL 与 Signing token 或 Secret token 填入管理台。Webhook 测试投递只检查连接；实际 `merge` 事件才会入队。
+默认服务仅监听 `127.0.0.1:8000`。反向代理只向 GitLab 开放 `/api/webhooks/gitlab/`，管理 API 和页面通过本机或受控内网访问。GitLab 项目中需手动创建 Merge request events webhook：选择 Secret token 时，先在管理台保存项目，再从列表复制自动生成的令牌到 GitLab；选择 Signing token 时，先从 GitLab 获取令牌并录入管理台。Webhook 测试投递只检查连接；实际 `merge` 事件才会入队。
 
 ## 安装与启动
 
@@ -86,7 +86,7 @@ uv run pytest -q
 cd frontend && npm run lint && npm run build
 ```
 
-模型设置可在管理台单向录入；已有 API key 不会回显。模型配置、仓库 webhook token 与飞书地址在 SQLite 中用环境主密钥加密。备份数据库时必须同时妥善备份主密钥。修改模型时必须先处理完队列中的事件和评审任务；重新评审在配置变化后会创建新的任务 ID，原结果仍保留。
+模型设置可在管理台单向录入；已有 API key 不会回显。项目列表中的 Webhook Token 默认遮罩，管理员可按需查看或复制；开发模式免管理员口令，因此只能在可信本机使用。模型配置、仓库 webhook token 与飞书地址在 SQLite 中用环境主密钥加密。备份数据库时必须同时妥善备份主密钥。修改模型时必须先处理完队列中的事件和评审任务；重新评审在配置变化后会创建新的任务 ID，原结果仍保留。
 
 升级 OCR CLI 或调整服务级评审超时时，应先处理完排队任务。Worker 会比较任务入队时的 OCR、模型与规则快照；配置变化后的旧任务会标为失败，不会用新配置静默执行，可在任务详情中按当前配置重新评审。
 

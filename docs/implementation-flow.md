@@ -94,7 +94,7 @@ webhook 投递优先按 `webhook_config_id + webhook-id` 去重；旧版本可�
 
 1. 管理员填写 GitLab 实例地址、项目数字 ID、仓库名称、只读 remote URL、目标分支和飞书目标。第一版只接收与 GitLab 主机一致的 SSH remote，使用只读 SSH deploy key 拉取代码，并配置具备 `read_api` 等所需只读权限的 GitLab API 凭据以查询 MR 和提交；不要求写入 GitLab 的权限。
 2. 后端先验证实例与 remote URL、检查目标主机是否在允许列表并保存加密配置。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。所有 Git 命令以参数数组调用，不拼接 shell 命令。
-3. 页面生成该仓库专属的 HTTPS 回调 URL，并提供签名令牌或旧版密钥的录入入口；最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；页面提供按 MR IID 手动补触发入口。
+3. 页面生成该仓库专属的 HTTPS 回调 URL。选择 Secret token 时由服务端生成随机令牌；选择 Signing token 时录入 GitLab 生成的令牌。项目列表默认遮罩令牌，管理员可按需查看和复制；最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；页面提供按 MR IID 手动补触发入口。
 4. 管理员可以对某个已合并 MR 手动试评审，核对提交范围、模型结果与飞书卡片。
 
 每个仓库的规则优先放在该仓库版本化的 `.opencodereview/rule.json` 中。页面展示规则文件是否存在及最近命中的预览结果；第一版不在页面中提供复杂的规则编辑器。
@@ -104,7 +104,7 @@ webhook 投递优先按 `webhook_config_id + webhook-id` 去重；旧版本可�
 每个接入项目都需要在 GitLab 的 **Settings > Webhooks** 中配置一条项目 webhook，操作者需具备该项目的 Maintainer 或 Owner 权限：
 
 1. 填入管理页提供的 `https://<回调域名>/api/webhooks/gitlab/<仓库标识>`，保持 SSL 验证开启。只勾选 **Merge request events**；平台还会在服务端检查目标分支，忽略 `open`、`update`、`close` 等事件。
-2. 新版 GitLab 优先在 GitLab 页面生成 **Signing token**，创建时立即将只显示一次的令牌录入管理页；接收端验证原始请求体的 HMAC-SHA256 签名、`webhook-timestamp` 的时效，并以 `webhook-id` 识别重投。若自建 GitLab 版本尚不支持签名令牌，使用 **Secret token**，在 GitLab 和管理页录入同一个令牌；接收端恒定时间比较 `X-Gitlab-Token`，同时限制可访问回调的网络来源。实际鉴权方式由所用 GitLab 版本决定。
+2. 新版 GitLab 优先在 GitLab 页面生成 **Signing token**，创建时立即录入管理页；接收端验证原始请求体的 HMAC-SHA256 签名、`webhook-timestamp` 的时效，并以 `webhook-id` 识别重投。若自建 GitLab 版本尚不支持签名令牌，选择 **Secret token**，保存项目后从管理页复制自动生成的令牌到 GitLab；接收端恒定时间比较 `X-Gitlab-Token`，同时限制可访问回调的网络来源。实际鉴权方式由所用 GitLab 版本决定。
 3. 保存 webhook 后，在 GitLab 页面发送测试事件，确认回调返回 2xx、平台显示最近投递与鉴权结果。测试事件不满足 `action=merge` 时只验证链路，不触发 OCR。再用一个测试 MR 完成真实合并，验证整条链路。
 4. 管理页记录 GitLab webhook ID、回调地址、鉴权方式与最近成功投递时间，支持轮换令牌和检查接入状态。第一版由管理员在 GitLab 中创建 webhook；未来若要由管理页自动创建，需要另外授予 GitLab webhook 管理权限。
 
@@ -192,7 +192,7 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 
 API 由管理服务提供，前端只访问本服务。建议按资源划分为 `/api/repositories`、`/api/webhook-configs`、`/api/merge-events`、`/api/review-jobs`、`/api/model-profile`、`/api/notification-targets` 和 `/api/health`；另设只接收 GitLab 请求的 `POST /api/webhooks/gitlab/<仓库标识>`。执行型管理接口提供按 MR 补触发、手动重审、重发通知和连接测试。所有修改配置及触发任务的动作写入审计日志，记录时间、动作、对象和结果，不记录密钥。
 
-第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。页面里的密钥输入为单向更新操作，已有密钥不回显。
+第一版 FastAPI 仅监听 `127.0.0.1`，由入口代理把必要的 webhook 路径提供给 GitLab，不暴露管理页和管理 API。需要在其他电脑访问管理页时，通过受控的 Tailscale/SSH 通道接入，并增加管理员认证。模型 API key 与飞书 Hook 仍只单向更新；Webhook Token 可由管理员在项目列表中主动查看和复制，列表接口不批量返回明文。
 
 ## 6. 失败恢复与运维
 
