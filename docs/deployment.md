@@ -84,7 +84,7 @@ uv run python -m ocr_manager.launchd \
   --port 8781
 ```
 
-生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。API 与 Worker 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。
+生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。当前用户的本机实例可依次运行 `launchctl bootstrap gui/$(id -u) /absolute/path/to/ai.open-code-review.api.plist`、对应的 `worker.plist` 和 `backup.plist`；随后用 `launchctl print gui/$(id -u)/ai.open-code-review.api` 与 `/api/health` 核对进程。API 与 Worker 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。
 
 ## 质量检查
 
@@ -101,15 +101,16 @@ cd frontend && npm run lint && npm run build
 
 仓库设置中的“测试 Git”“测试 GitLab API”、飞书配置中的连接测试和 Agent 模型中的“测试模型”会建立独立诊断任务，由 Worker 异步执行并显示最近结果。Git 测试实际拉取目标分支；GitLab API 测试读取项目与目标分支，并核对 HTTPS Clone URL 的仓库路径；模型测试调用 `ocr llm test`，可能消耗少量模型额度；飞书测试会向已保存的目标群发送“Open Code Review 连接测试”。先保存配置，再发起测试；连接测试状态不等同于真实 MR 评审验收。失败摘要不保存外部响应或凭据。
 
-在线备份命令如下，支持数据库以 WAL 模式运行时执行，并对副本做完整性检查。备份目录应由专用服务用户持有；快照文件权限设为 `0600`。备份不自动删除旧文件，保留期应在正式部署时确定。
+在线备份命令如下，支持数据库以 WAL 模式运行时执行，并对副本做完整性检查。传入私有配置文件后，同批生成同名 `.private.json`，包含解密数据库凭据所需的主密钥。备份目录权限为 `0700`，快照文件权限为 `0600`；异机副本应加密保管。备份不自动删除旧文件，保留期应在正式部署时确定。
 
 ```bash
 uv run python -m ocr_manager.backup \
   --data-dir "$OCR_APP_DATA_DIR" \
+  --config-file "/path/to/private.json" \
   --output-dir "/path/to/review-backups"
 ```
 
-恢复演练时先停止 API 与 Worker，把选定快照复制到新的空数据目录并设为服务用户所有、`0600` 权限，然后使用同一主密钥启动服务并检查仓库、事件、任务与凭据可解密。不要直接覆盖正在运行的 `app.db`。每日备份清单不会自动清理历史副本；正式环境需根据磁盘容量确定保留期和异机副本位置，并定期执行恢复演练。
+恢复演练时先停止 API 与 Worker，把选定数据库快照复制到新的空数据目录并设为服务用户所有、`0600` 权限；将同批 `.private.json` 放到受限位置，再用它启动服务并检查仓库、事件、任务与凭据可解密。不要直接覆盖正在运行的 `app.db`。每日备份清单不会自动清理历史副本；正式环境需根据磁盘容量确定保留期和异机副本位置，并定期执行恢复演练。
 
 ## 试点验收
 

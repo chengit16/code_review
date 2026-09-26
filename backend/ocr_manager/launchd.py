@@ -77,8 +77,9 @@ def generate_backup_plist(
     output_dir: Path,
     hour: int = 3,
     minute: int = 0,
+    config_file: Path | None = None,
 ) -> Path:
-    """生成每日一次的 SQLite 在线备份清单，不把备份作业设为常驻服务。"""
+    """生成每日数据库及私有配置备份清单，不把备份作业设为常驻服务。"""
 
     root = project_dir.resolve(strict=True)
     python = root / ".venv" / "bin" / "python"
@@ -95,17 +96,15 @@ def generate_backup_plist(
     destination.mkdir(parents=True, exist_ok=True, mode=0o700)
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = output_dir / "ai.open-code-review.backup.plist"
+    command = [
+        str(python), "-m", "ocr_manager.backup", "--data-dir", str(data),
+    ]
+    if config_file is not None:
+        command.extend(["--config-file", str(config_file.resolve(strict=True))])
+    command.extend(["--output-dir", str(destination)])
     payload: dict[str, Any] = {
         "Label": "ai.open-code-review.backup",
-        "ProgramArguments": [
-            str(python),
-            "-m",
-            "ocr_manager.backup",
-            "--data-dir",
-            str(data),
-            "--output-dir",
-            str(destination),
-        ],
+        "ProgramArguments": command,
         "WorkingDirectory": str(root),
         "RunAtLoad": True,
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
@@ -144,6 +143,7 @@ def main() -> None:
                 args.output_dir,
                 args.backup_hour,
                 args.backup_minute,
+                args.config_file,
             )
         )
 

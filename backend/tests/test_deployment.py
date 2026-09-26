@@ -156,11 +156,17 @@ def test_backup_plist_schedules_one_shot_outside_data_directory(tmp_path: Path) 
     python.touch()
     data = tmp_path / "data"
     backup = tmp_path / "backups"
-    path = generate_backup_plist(project, data, backup, tmp_path / "launchd", 2, 30)
+    config = tmp_path / "private.json"
+    config.touch()
+    path = generate_backup_plist(
+        project, data, backup, tmp_path / "launchd", 2, 30, config
+    )
     payload = plistlib.loads(path.read_bytes())
     assert payload["StartCalendarInterval"] == {"Hour": 2, "Minute": 30}
     assert "KeepAlive" not in payload
     assert payload["ProgramArguments"][-1] == str(backup)
+    arguments = payload["ProgramArguments"]
+    assert arguments[arguments.index("--config-file") + 1] == str(config)
     assert path.stat().st_mode & 0o777 == 0o600
     with pytest.raises(ValueError, match="业务数据目录"):
         generate_backup_plist(project, data, data / "backups", tmp_path / "launchd")
