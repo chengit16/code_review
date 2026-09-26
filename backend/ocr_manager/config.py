@@ -7,6 +7,7 @@ import os
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,33 @@ class Settings:
     public_url: str
     dev_mode: bool = False
     ocr_base_url: str = ""
+    webhook_url: str = ""
+    management_url: str = ""
+
+    @property
+    def webhook_base_url(self) -> str:
+        """旧调用方仍可用 public_url，新部署可独立指定回调入口。"""
+
+        return self.webhook_url or self.public_url
+
+    @property
+    def management_base_url(self) -> str:
+        """卡片详情使用管理入口；兼容直接构造 Settings 的旧调用方。"""
+
+        return self.management_url or self.public_url
+
+
+def validate_service_url(value: str, name: str) -> str:
+    """进程级地址只接受无凭据、无查询参数的 HTTPS 或本机 HTTP 地址。"""
+
+    parsed = urlparse(value)
+    if (
+        not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
+        or parsed.scheme not in {"http", "https"}
+        or parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+    ):
+        raise RuntimeError(f"{name} 必须是无凭据的 HTTPS 或本机 HTTP 地址")
+    return value.rstrip("/")
 
 
 def load_settings() -> Settings:
@@ -60,6 +88,12 @@ def load_settings() -> Settings:
         raise RuntimeError("OCR_APP_MASTER_KEY 必须配置")
     if not dev_mode and not admin_token:
         raise RuntimeError("非开发模式必须配置 OCR_APP_ADMIN_TOKEN")
+    legacy_url = setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8781")
+    webhook_url = validate_service_url(setting("OCR_APP_WEBHOOK_URL", legacy_url),
+                                       "OCR_APP_WEBHOOK_URL")
+    management_url = validate_service_url(
+        setting("OCR_APP_MANAGEMENT_URL", "http://127.0.0.1:8781"), "OCR_APP_MANAGEMENT_URL"
+    )
     return Settings(
         data_dir=Path(setting("OCR_APP_DATA_DIR", ".local-data")).resolve(),
         admin_token=admin_token,
@@ -74,4 +108,6 @@ def load_settings() -> Settings:
         public_url=setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8781").rstrip("/"),
         dev_mode=dev_mode,
         ocr_base_url="",
+        webhook_url=webhook_url,
+        management_url=management_url,
     )

@@ -301,7 +301,7 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
             if target and target["signing_secret_ciphertext"]
             else ""
         )
-        delivery["detail_url"] = f"{settings.public_url}/jobs/{delivery['job_id']}"
+        delivery["detail_url"] = f"{settings.management_base_url}/jobs/{delivery['job_id']}"
         project_url = project_web_url(repository["gitlab_url"], repository["remote_url"])
         if delivery["mr_iid"] > 0:
             delivery["mr_url"] = f"{project_url}/-/merge_requests/{delivery['mr_iid']}"

@@ -405,7 +405,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_repositories() -> list[dict[str, Any]]:
         """列出已接入仓库；密钥仅由单项查看接口按需返回。"""
 
-        return [public_repository(row, config.public_url) for row in store.list_repositories()]
+        return [
+            public_repository(row, config.webhook_base_url) for row in store.list_repositories()
+        ]
 
     @app.get("/api/review-rules", dependencies=[admin])
     def list_review_rules() -> list[dict[str, Any]]:
@@ -698,7 +700,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="仓库和目标分支已存在") from error
         row = store.get_repository(repository_id)
         assert row is not None
-        return public_repository(row, config.public_url)
+        return public_repository(row, config.webhook_base_url)
 
     @app.post("/api/repositories/preflight", dependencies=[admin])
     def preflight_repository(
@@ -794,7 +796,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="仓库和目标分支已存在") from error
         updated = store.get_repository(repository_id)
         assert updated is not None
-        return public_repository(updated, config.public_url)
+        return public_repository(updated, config.webhook_base_url)
 
     @app.delete("/api/repositories/{repository_id}/feishu-hook", dependencies=[admin])
     def delete_feishu_hook(repository_id: int) -> dict[str, Any]:
@@ -805,7 +807,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.clear_feishu_webhook(repository_id)
         row = store.get_repository(repository_id)
         assert row is not None
-        return public_repository(row, config.public_url)
+        return public_repository(row, config.webhook_base_url)
 
     @app.delete("/api/repositories/{repository_id}", dependencies=[admin])
     def delete_repository(repository_id: int) -> dict[str, str]:

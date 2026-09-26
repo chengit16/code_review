@@ -160,6 +160,10 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .finding-meta { display: flex; justify-content: space-between; gap: 12px; color: #566d5f; font-size: 12px; }
 .finding p { margin: 12px 0 0; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .finding-feedback { display: flex; flex-wrap: wrap; gap: 0; margin-top: 14px; }
+.service-addresses { display: grid; gap: 16px; }
+.service-addresses div { display: grid; gap: 5px; }
+.service-addresses dt { font-size: 13px; color: #566d5f; }
+.service-addresses dd { margin: 0; overflow-wrap: anywhere; }
 .finding-feedback button { min-width: 70px; min-height: 34px; padding: 5px 11px; border: 1px solid #cbd8d0; background: #fff; color: #395849; font-size: 12px; cursor: pointer; }
 .finding-feedback button + button { border-left: 0; }
 .finding-feedback button:first-child { border-radius: 4px 0 0 4px; }

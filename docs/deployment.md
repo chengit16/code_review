@@ -22,17 +22,19 @@ export OCR_APP_DATA_DIR="$PWD/.local-data"
 export OCR_APP_ADMIN_TOKEN="请替换为随机长口令"
 # 本地开发可改用 OCR_APP_DEV_MODE=1，并省略 OCR_APP_ADMIN_TOKEN；生产环境不要开启开发模式。
 export OCR_APP_MASTER_KEY="请用 cryptography.fernet.Fernet.generate_key() 生成"
-export OCR_APP_PUBLIC_URL="https://review.example.com"
+export OCR_APP_WEBHOOK_URL="https://hooks.example.com"
+export OCR_APP_MANAGEMENT_URL="http://127.0.0.1:8781"
 export OCR_APP_OCR_COMMAND="$PWD/.local-tools/node_modules/.bin/ocr"
 uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
 ```
 
-本机开发使用固定端口时，`OCR_APP_PUBLIC_URL` 必须与 API 端口一致：
+回调与管理入口分别配置；管理入口可使用本机地址或受控 HTTPS 地址。旧的 `OCR_APP_PUBLIC_URL` 继续作为回调地址后备值，管理入口默认本机 `8781`。这两个设置为进程配置，修改后需重启 API 与 Worker。本机开发配置如下：
 
 ```bash
 export OCR_APP_DEV_MODE=1
 export OCR_APP_MASTER_KEY="请替换为有效的 Fernet 主密钥"
-export OCR_APP_PUBLIC_URL="http://127.0.0.1:8781"
+export OCR_APP_WEBHOOK_URL="http://127.0.0.1:8781"
+export OCR_APP_MANAGEMENT_URL="http://127.0.0.1:8781"
 uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
 ```
 
@@ -45,7 +47,7 @@ OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
   uv run python -m ocr_manager.worker
 ```
 
-`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_PUBLIC_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
+`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_WEBHOOK_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。飞书卡片的详情使用 `OCR_APP_MANAGEMENT_URL`，群成员须能够访问该受控地址；只在服务机器查看时可保留本机值。运行监控页展示实际生效的两个地址。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
 
 另一个终端使用相同环境变量启动独立 Worker：
 
@@ -66,7 +68,8 @@ uv run python -m ocr_manager.worker
   "OCR_APP_DEV_MODE": "0",
   "OCR_APP_MASTER_KEY": "请替换为有效的 Fernet 主密钥",
   "OCR_APP_OCR_COMMAND": "/absolute/path/to/project/.local-tools/node_modules/.bin/ocr",
-  "OCR_APP_PUBLIC_URL": "https://review.example.com"
+  "OCR_APP_WEBHOOK_URL": "https://hooks.example.com",
+  "OCR_APP_MANAGEMENT_URL": "http://127.0.0.1:8781"
 }
 ```
 

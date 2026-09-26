@@ -22,6 +22,13 @@ from ocr_manager.tasks import report_projection, search_jobs
 def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
 
+    @app.get("/api/service-addresses", dependencies=[admin])
+    def service_addresses() -> dict[str, str]:
+        """只返回入口地址，不读取或回显部署凭据。"""
+
+        return {"webhook_url": f"{settings.webhook_base_url}/api/webhooks/gitlab",
+                "management_url": settings.management_base_url}
+
     @app.get("/api/operations", dependencies=[admin])
     def operations() -> dict[str, Any]:
         """展示队列、失败、磁盘和同目录约定下的成对备份状态。"""

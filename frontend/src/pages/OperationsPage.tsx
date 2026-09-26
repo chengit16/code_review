@@ -8,6 +8,7 @@ import { apiRequest } from "../api/client";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { formatTime } from "../ui/format";
+import { ServiceAddresses } from "./ServiceAddresses";
 
 interface Snapshot {
   jobs: Record<string, number>; events: Record<string, number>;
@@ -37,5 +38,6 @@ export function OperationsPage({ token }: { /** 内存中的管理口令。 */ t
     </section><section className="section"><div className="section-head"><h2>运行异常</h2><span>{data.alerts.length} 项</span></div>{data.alerts.length ? <ul className="operation-alerts">{data.alerts.map((alert) => <li key={alert}><AlertTriangle size={16} />{alert}</li>)}</ul> : <p className="empty-inline">当前没有达到告警阈值的项目</p>}</section>
     <section className="section"><div className="section-head"><h2>存储与备份</h2></div><div className="operation-facts"><div><span>可用空间</span><strong>{(data.disk_free_bytes / 1024 ** 3).toFixed(1)} GB</strong></div><div><span>最近成对备份</span><strong>{formatTime(data.backup.last_at)}</strong></div><div><span>完整性</span><strong>{data.backup.healthy ? "已通过" : "待检查"}</strong></div></div></section></>}
     <section className="section"><div className="section-head"><h2>旧评审工件</h2></div><div className="maintenance-bar"><label>保留天数<input type="number" min="7" max="3650" value={days} onChange={(event) => setDays(Math.max(7, Math.min(3650, Number(event.target.value) || 7)))} /></label><span>{preview.data ? `${preview.data.count} 个目录 · ${(preview.data.bytes / 1024 ** 2).toFixed(1)} MB` : "计算中"}</span><button className="button button-secondary" disabled={!preview.data?.count || prune.isPending} onClick={() => { if (window.confirm(`清理 ${preview.data?.count} 个超过 ${days} 天的终态评审工件？任务和报告摘要会保留。`)) prune.mutate(); }}><Trash2 size={16} />清理工件</button></div>{message && <p className="form-success" role="status">{message}</p>}<QueryState loading={preview.isLoading} error={preview.error || prune.error} /></section>
+    <ServiceAddresses token={token} />
   </div>;
 }

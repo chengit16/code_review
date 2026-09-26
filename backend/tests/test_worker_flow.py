@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,9 @@ def test_merged_mr_runs_review_and_notification(
     client: TestClient, settings: Settings, monkeypatch: Any
 ) -> None:
     """HTTP 回调仅入库，Worker 分三轮完成展开、OCR 与独立通知。"""
+
+    settings = replace(settings, webhook_url="https://hooks.example.test",
+                       management_url="https://internal.example.test")
 
     admin = {"X-Admin-Token": settings.admin_token}
     response = client.post(
@@ -96,7 +100,7 @@ def test_merged_mr_runs_review_and_notification(
         def remove_checkout(self, _target: Path) -> None:
             pass
 
-    sent: list[tuple[str, int, str, str]] = []
+    sent: list[tuple[str, int, str, str, str]] = []
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
     monkeypatch.setattr(
@@ -105,7 +109,9 @@ def test_merged_mr_runs_review_and_notification(
     monkeypatch.setattr(
         worker,
         "send_review",
-        lambda url, job: sent.append((url, job["job_id"], job["mr_url"], job["commit_url"])),
+        lambda url, job: sent.append(
+            (url, job["job_id"], job["mr_url"], job["commit_url"], job["detail_url"])
+        ),
     )
     store = Store(settings.data_dir / "app.db")
     assert worker.run_once(store, settings)[0]
@@ -115,6 +121,7 @@ def test_merged_mr_runs_review_and_notification(
     assert sent[0][0].endswith("test-secret")
     assert sent[0][2].endswith("/team/repo/-/merge_requests/7")
     assert sent[0][3].endswith("/team/repo/-/commit/" + "a" * 40)
+    assert sent[0][4] == f"https://internal.example.test/jobs/{sent[0][1]}"
     detail = client.get(f"/api/jobs/{sent[0][1]}", headers=admin).json()
     assert detail["status"] == "complete"
     assert detail["delivery"]["status"] == "sent"
