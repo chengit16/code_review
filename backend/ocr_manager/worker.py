@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 from cryptography.fernet import InvalidToken
 
+from ocr_manager.attempt_history import save_snapshot
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.checks import run_connection_check
 from ocr_manager.config import Settings, load_settings
@@ -92,10 +93,10 @@ def review_settings(store: Store, settings: Settings) -> tuple[Settings, int]:
     ), int(profile["version"])
 
 
-def config_hash(
+def configuration_snapshot(
     store: Store, settings: Settings, rule_digest: str = "", repository_id: int | None = None
-) -> str:
-    """按模型、OCR 安装文件及该提交的规则内容建立不可变评审快照。"""
+) -> dict[str, Any]:
+    """按模型、OCR 安装文件及该提交规则记录配置事实，始终排除密钥。"""
 
     model_settings, model_version = review_settings(store, settings)
     command = shutil.which(settings.ocr_command)
@@ -113,8 +114,7 @@ def config_hash(
         if executable.name == "ocr.js" and package.is_file():
             package_data = json.loads(package.read_text(encoding="utf-8"))
             command_fingerprint["package_version"] = package_data.get("version")
-    snapshot = json.dumps(
-        {
+    return {
             "provider": model_settings.ocr_provider,
             "model": model_settings.ocr_model,
             "base_url": model_settings.ocr_base_url,
@@ -129,10 +129,16 @@ def config_hash(
             "notification_min_severity": (
                 store.get_project_policy(repository_id) if repository_id is not None else "medium"
             ),
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(snapshot.encode()).hexdigest()
+        }
+
+
+def config_hash(
+    store: Store, settings: Settings, rule_digest: str = "", repository_id: int | None = None
+) -> str:
+    """对安全配置事实建立稳定摘要，仍作为任务去重与执行校验依据。"""
+
+    snapshot = configuration_snapshot(store, settings, rule_digest, repository_id)
+    return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
 
 
 def is_temporary(error: Exception) -> bool:
@@ -229,7 +235,8 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         store.finish_job(job["id"], "failed", None, None, "仓库配置已删除")
         return
     try:
-        current_hash = config_hash(store, settings, job["rule_digest"], job["repository_id"])
+        snapshot = configuration_snapshot(store, settings, job["rule_digest"], job["repository_id"])
+        current_hash = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
     except Exception:
         # 凭据不可解时不能退回旧环境变量继续评审，也不把密钥异常持久化。
         store.finish_job(job["id"], "failed", None, None, "评审配置无法读取")
@@ -238,6 +245,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         # 入队快照是不可变输入；管理员可用重评审创建当前配置的新任务。
         store.finish_job(job["id"], "failed", None, None, "评审配置已变化，请按当前配置重新评审")
         return
+    save_snapshot(store, job["id"], snapshot)
     run_dir = settings.data_dir / "runs" / str(job["id"]) / str(job["attempts"] + 1)
     checkout = run_dir / "checkout"
     git: GitRepository | None = None

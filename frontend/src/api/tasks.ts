@@ -9,12 +9,12 @@ export function searchTasks(token: string, params: URLSearchParams, signal?: Abo
 }
 
 /** 下载服务器白名单报告，浏览器对象地址用完即释放，令牌不进入下载 URL。 */
-export async function downloadTaskReport(token: string, id: number) {
-  const report = await apiRequest<unknown>(token, `/api/jobs/${id}/report`);
+export async function downloadTaskReport(token: string, id: number, attempt?: number) {
+  const report = await apiRequest<unknown>(token, `/api/jobs/${id}/report${attempt ? `?attempt=${attempt}` : ""}`);
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `review-${id}.json`;
+  link.download = `review-${id}${attempt ? `-attempt-${attempt}` : ""}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

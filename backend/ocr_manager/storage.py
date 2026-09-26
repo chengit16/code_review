@@ -11,11 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from ocr_manager.artifact_lock import artifact_lock
+from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -280,6 +281,7 @@ class Store:
                 (17, READINESS_MIGRATION),
                 (18, FEEDBACK_MIGRATION),
                 (19, CONTROL_MIGRATION),
+                (20, ATTEMPT_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1168,7 +1170,8 @@ class Store:
         )
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested "
+                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested, "
+                "config_snapshot, changed_files, started_at "
                 "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
@@ -1197,10 +1200,13 @@ class Store:
                 )
             db.execute(
                 """INSERT INTO review_attempts
-                (job_id, attempt_number, status, result_path, error, failure_stage)
-                VALUES (?, ?, ?, ?, ?, ?)""",
+                (job_id, attempt_number, status, result_path, error, failure_stage,
+                 config_snapshot, result_json, changed_files, started_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (job_id, job["attempts"], status, result_path, error,
-                 job["failure_stage"] if status in {"failed", "partial"} else None),
+                 job["failure_stage"] if status in {"failed", "partial"} else None,
+                 job["config_snapshot"], json.dumps(projection, ensure_ascii=False)
+                 if projection is not None else None, job["changed_files"], job["started_at"]),
             )
 
     def defer_job(self, job_id: int, error: str) -> None:
@@ -1208,7 +1214,8 @@ class Store:
 
         with self.connection() as db:
             job = db.execute(
-                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested "
+                "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested, "
+                "config_snapshot, changed_files, started_at "
                 "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
@@ -1228,9 +1235,12 @@ class Store:
             )
             db.execute(
                 """INSERT INTO review_attempts
-                (job_id, attempt_number, status, error, failure_stage)
-                VALUES (?, ?, 'failed', ?, ?)""",
-                (job_id, attempts, error[:500], job["failure_stage"]),
+                (job_id, attempt_number, status, error, failure_stage,
+                 config_snapshot, changed_files, started_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (job_id, attempts, "cancelled" if cancelled else "failed", error[:500],
+                 job["failure_stage"], job["config_snapshot"], job["changed_files"],
+                 job["started_at"]),
             )
             if final and not cancelled:
                 db.execute(
@@ -1362,6 +1372,7 @@ class Store:
             cursor = db.execute(
                 """UPDATE review_jobs SET status='queued', error=NULL,
                 retry_start_attempts=attempts, cancel_requested=0,
+                result_json=NULL, result_path=NULL, changed_files=NULL, config_snapshot=NULL,
                 finished_at=NULL, failure_stage=NULL,
                 next_run_at=CURRENT_TIMESTAMP WHERE id=?
                 AND status IN ('complete','partial','failed','skipped','cancelled')""",

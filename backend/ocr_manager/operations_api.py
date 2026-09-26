@@ -11,6 +11,7 @@ from cryptography.fernet import InvalidToken
 from fastapi import FastAPI, HTTPException, Query
 from starlette.responses import Response
 
+from ocr_manager.attempt_history import attempt_job, compare_results
 from ocr_manager.config import Settings
 from ocr_manager.config_history import list_config_history, restore_config
 from ocr_manager.monitoring import eligible_artifacts, operations_snapshot, prune_artifacts
@@ -137,12 +138,17 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         }, page, page_size)
 
     @app.get("/api/jobs/{job_id}/report", dependencies=[admin])
-    def download_report(job_id: int) -> Response:
+    def download_report(job_id: int, attempt: int | None = Query(None, ge=1)) -> Response:
         """下载白名单报告；额外移除当前已知凭据，绝不返回原始 thinking。"""
 
         job = store.get_job(job_id)
         if job is None:
             raise HTTPException(404, "任务不存在")
+        if attempt is not None:
+            try:
+                job = attempt_job(job, attempt)
+            except ValueError as error:
+                raise HTTPException(404, "尝试不存在") from error
         content = json.dumps(report_projection(job), ensure_ascii=False, indent=2)
         box = SecretBox(settings.master_key)
         secret_values = [settings.master_key, settings.admin_token]
@@ -165,3 +171,21 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
             "Content-Disposition": f'attachment; filename="review-{job_id}.json"',
             "Cache-Control": "no-store",
         })
+
+    @app.get("/api/jobs/{job_id}/comparison", dependencies=[admin])
+    def comparison(job_id: int, before: int = Query(ge=1), after: int = Query(ge=1),
+                   other_job_id: int | None = Query(None, ge=1)) -> dict[str, Any]:
+        """可跨配置版本比较同一项目同一提交；不读取其他提交或原始工件。"""
+
+        job = store.get_job(job_id)
+        other = store.get_job(other_job_id) if other_job_id else job
+        if job is None or other is None:
+            raise HTTPException(404, "任务不存在")
+        if (job["repository_id"], job["commit_sha"]) != (
+            other["repository_id"], other["commit_sha"]
+        ):
+            raise HTTPException(409, "仅能比较同一项目同一提交")
+        try:
+            return compare_results(attempt_job(job, before), attempt_job(other, after))
+        except ValueError as error:
+            raise HTTPException(404, "尝试不存在") from error

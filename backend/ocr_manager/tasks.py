@@ -73,4 +73,15 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
             "attempt_number", "status", "error", "failure_stage", "finished_at",
         )} for item in job["attempt_history"]],
         "delivery": job.get("delivery"),
+        "configuration": public_snapshot(job.get("config_snapshot")),
     }
+
+
+def public_snapshot(raw: str | dict[str, Any] | None) -> dict[str, Any] | None:
+    """快照仅展示配置事实，OCR 可执行文件的本机路径不进入报告。"""
+
+    snapshot = json.loads(raw) if isinstance(raw, str) else raw
+    if not snapshot:
+        return None
+    return snapshot | {"command": {key: value for key, value in snapshot["command"].items()
+                                   if key != "path"}}

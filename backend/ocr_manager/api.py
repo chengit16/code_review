@@ -963,6 +963,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if job["mr_iid"] > 0:
                 job["mr_url"] = f"{project_url}/-/merge_requests/{job['mr_iid']}"
             job["commit_url"] = f"{project_url}/-/commit/{job['commit_sha']}"
+        # 逐次结果通过受保护的报告接口读取，详情列表不重复传输安全 JSON 或内部路径。
+        for attempt in job["attempt_history"]:
+            attempt.pop("result_json", None)
+            attempt.pop("result_path", None)
+            attempt.pop("config_snapshot", None)
+        job.pop("config_snapshot", None)
         return job
 
     @app.put("/api/jobs/{job_id}/feedback/{comment_index}", dependencies=[admin])
