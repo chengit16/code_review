@@ -166,10 +166,10 @@ def skipped_result(preview: dict[str, Any], sha: str) -> dict[str, Any]:
     }
 
 
-def run_ocr_command(
+def _execute_ocr_command(
     command: list[str], env: dict[str, str], checkout: Path, timeout: float
-) -> tuple[int, str]:
-    """将 npm 启动器及 OCR 子进程放入同一进程组，超时或退出时整体清理。"""
+) -> tuple[int, str, str]:
+    """将 npm 启动器及 OCR 子进程放入同一进程组，并收集诊断输出。"""
 
     process = subprocess.Popen(
         command,
@@ -181,7 +181,7 @@ def run_ocr_command(
         start_new_session=True,
     )
     try:
-        _, stderr = process.communicate(timeout=timeout)
+        stdout, stderr = process.communicate(timeout=timeout)
     except BaseException:
         # Popen 的直接子进程可能是 npm 包装器，必须连同实际 OCR 进程一起终止。
         try:
@@ -197,7 +197,45 @@ def run_ocr_command(
                 pass
             process.communicate()
         raise
-    return process.returncode, stderr
+    return process.returncode, stdout, stderr
+
+
+def run_ocr_command(
+    command: list[str], env: dict[str, str], checkout: Path, timeout: float
+) -> tuple[int, str]:
+    """正式评审只使用退出码与 stderr；stdout 不进入评审结果。"""
+
+    code, _stdout, stderr = _execute_ocr_command(command, env, checkout, timeout)
+    return code, stderr
+
+
+def check_rule(
+    settings: Settings, checkout: Path, run_dir: Path, file_path: str,
+    global_rule: str | None, project_rule: str | None,
+) -> str:
+    """按正式评审的优先级调用 OCR 规则查询，不调用模型。"""
+
+    home = run_dir / "home"
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if global_rule is not None:
+        global_dir = home / ".opencodereview"
+        global_dir.mkdir(exist_ok=True, mode=0o700)
+        (global_dir / "rule.json").write_text(global_rule, encoding="utf-8")
+    command = [settings.ocr_command, "rules", "check", "--repo", str(checkout)]
+    if project_rule is not None:
+        rule_path = run_dir / "managed-rule.json"
+        rule_path.write_text(project_rule, encoding="utf-8")
+        command.extend(["--rule", str(rule_path)])
+    command.append(file_path)
+    code, stdout, _stderr = _execute_ocr_command(
+        command, _ocr_environment(settings, home), checkout, 45
+    )
+    if code:
+        raise RuntimeError("OCR 规则预览失败，请检查规则文件格式")
+    if not stdout.strip():
+        raise RuntimeError("OCR 规则预览未返回结果")
+    # 仓库规则可能很长，数据库只保留可读上限并明确标记截断。
+    return stdout[:20000] + ("\n…结果已截断" if len(stdout) > 20000 else "")
 
 
 def check_model_connection(settings: Settings, run_dir: Path) -> None:

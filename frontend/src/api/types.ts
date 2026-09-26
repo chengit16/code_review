@@ -91,6 +91,19 @@ export interface ReviewRuleRevision {
   created_at: string;
 }
 
+/** Worker 在目标分支提交上运行的规则命中预览。 */
+export interface RulePreview {
+  id: number;
+  repository_id: number;
+  file_path: string;
+  status: "queued" | "running" | "passed" | "failed";
+  commit_sha: string | null;
+  output: string | null;
+  error: string | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
 /** 可供多个仓库引用的飞书通知通道；凭据从不进入列表响应。 */
 export interface NotificationTarget {
   id: number;

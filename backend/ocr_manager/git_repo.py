@@ -108,6 +108,13 @@ class GitRepository:
         self.fetch()
         self._git("rev-parse", "--verify", f"refs/remotes/origin/{self.branch}^{{commit}}")
 
+    def target_head(self) -> str:
+        """返回本次 fetch 后目标分支的完整 SHA，供规则预览固定输入。"""
+
+        return self._commit_sha(
+            self._git("rev-parse", "--verify", f"refs/remotes/origin/{self.branch}^{{commit}}")
+        )
+
     def is_on_target(self, sha: str) -> bool:
         """确保 webhook 或 MR API 指向的提交属于配置目标分支。"""
 

@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import sqlite3
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
 from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
@@ -88,6 +88,14 @@ class ReviewRuleDocument(BaseModel):
     include: list[str] = Field(default_factory=list, max_length=100)
     exclude: list[str] = Field(default_factory=list, max_length=100)
     rules: list[ReviewRuleEntry] = Field(default_factory=list, max_length=100)
+
+    model_config = {"extra": "forbid"}
+
+
+class RulePreviewInput(BaseModel):
+    """规则预览只接受仓库内相对文件路径，不能选择外部工作目录。"""
+
+    file_path: str = Field(min_length=1, max_length=500)
 
     model_config = {"extra": "forbid"}
 
@@ -385,6 +393,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return [
             {**row, "content": json.loads(row["content"])} for row in store.list_review_rules()
         ]
+
+    @app.get("/api/repositories/{repository_id}/rule-previews", dependencies=[admin])
+    def list_rule_previews(repository_id: int) -> list[dict[str, Any]]:
+        """显示指定仓库最近的规则预览及执行时固定的提交 SHA。"""
+
+        if store.get_repository(repository_id) is None:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+        return store.list_rule_previews(repository_id)
+
+    @app.post(
+        "/api/repositories/{repository_id}/rule-previews",
+        dependencies=[admin], status_code=202,
+    )
+    def enqueue_rule_preview(repository_id: int, payload: RulePreviewInput) -> dict[str, int | str]:
+        """HTTP 只验证路径并入队；Git 与 OCR 在 Worker 中执行。"""
+
+        if store.get_repository(repository_id) is None:
+            raise HTTPException(status_code=404, detail="仓库不存在")
+        path = payload.file_path
+        parts = PurePosixPath(path).parts
+        if (
+            path != path.strip() or path.startswith(("/", "-"))
+            or "\\" in path or "\x00" in path or any(ord(char) < 32 for char in path)
+            or not parts or any(part in {".", ".."} for part in path.split("/"))
+        ):
+            raise HTTPException(status_code=422, detail="请输入仓库内的相对文件路径")
+        preview_id = store.enqueue_rule_preview(repository_id, path)
+        return {"id": preview_id, "status": "queued"}
 
     def change_review_rule(
         repository_id: int | None, payload: ReviewRuleDocument | None

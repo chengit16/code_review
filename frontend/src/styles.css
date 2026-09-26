@@ -175,6 +175,18 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .rule-form textarea:focus { outline: 2px solid #258d72; outline-offset: 2px; }
 .rule-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
 .rule-form > .form-actions { padding-top: 20px; }
+.rule-preview { margin-top: 18px; }
+.rule-preview .section-head h2 { display: flex; align-items: center; gap: 8px; }
+.rule-preview-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.rule-preview-form .select-field { width: min(250px, 100%); }
+.rule-preview-form > label { display: grid; flex: 1 1 220px; gap: 7px; color: #425c4b; font-size: 13px; font-weight: 700; }
+.rule-preview-form > button { min-height: 40px; }
+.rule-preview-note { margin: 10px 0 0; color: #66786e; font-size: 12px; }
+.rule-preview-result { margin-top: 16px; border-top: 1px solid #e1e8e3; padding-top: 14px; }
+.rule-preview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; font-size: 12px; }
+.rule-preview-meta > strong { font-size: 13px; overflow-wrap: anywhere; }
+.rule-preview-meta > span { color: #66786e; }
+.rule-preview-result pre { max-height: 420px; overflow: auto; margin: 12px 0 0; padding: 14px; border: 1px solid #dce5df; background: #f7faf8; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rule-history { margin-top: 18px; }
 .rule-history .section-head h2 { display: flex; align-items: center; gap: 8px; }
 .rule-revisions { display: grid; gap: 0; }

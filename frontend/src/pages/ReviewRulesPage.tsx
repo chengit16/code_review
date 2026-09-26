@@ -11,6 +11,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
+import { RulePreviewPanel } from "./RulePreviewPanel";
 
 const emptyRule = (): ReviewRuleDocument => ({ include: [], exclude: [], rules: [] });
 const lines = (value: string) => value.split("\n").map((item) => item.trim()).filter(Boolean);
@@ -116,6 +117,7 @@ export function ReviewRulesPage({ token }: { /** 内存中的管理口令。 */ 
           <div className="form-actions"><button className="button button-secondary" type="button" disabled={!current || remove.isPending} onClick={() => { if (window.confirm("确定删除当前范围的审核规则配置？")) remove.mutate(); }}><Trash2 size={16} />删除配置</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存规则</button></div>
         </form>
       </section>
+      <RulePreviewPanel token={token} scopeRepositoryId={repositoryId} repositories={repositories.data ?? []} dirty={dirty} />
       <section className="section rule-workspace rule-history">
         <div className="section-head"><h2><History size={18} />版本历史</h2><span>最近 50 次变更</span></div>
         <QueryState loading={revisions.isLoading} error={revisions.error} />

@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -196,6 +196,21 @@ ON review_rule_revisions(repository_id, id DESC);
 INSERT INTO review_rule_revisions(repository_id, content, action)
 SELECT repository_id, content, 'saved' FROM review_rule_configs;
 """
+SCHEMA_V13 = """
+CREATE TABLE rule_previews (
+  id INTEGER PRIMARY KEY,
+  repository_id INTEGER NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued'
+    CHECK (status IN ('queued', 'running', 'passed', 'failed')),
+  commit_sha TEXT,
+  output TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at TEXT
+);
+CREATE INDEX idx_rule_previews_queue ON rule_previews(status, id);
+"""
 
 
 class Store:
@@ -239,6 +254,7 @@ class Store:
                 (10, SCHEMA_V10),
                 (11, SCHEMA_V11),
                 (12, SCHEMA_V12),
+                (13, SCHEMA_V13),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -389,6 +405,63 @@ class Store:
                     (repository_id,),
                 )
             ]
+
+    def enqueue_rule_preview(self, repository_id: int, file_path: str) -> int:
+        """规则预览先入库；Worker 再访问 Git 与 OCR，避免 HTTP 请求被长任务占用。"""
+
+        with self.connection() as db:
+            cursor = db.execute(
+                "INSERT INTO rule_previews(repository_id, file_path) VALUES (?, ?)",
+                (repository_id, file_path),
+            )
+            if cursor.lastrowid is None:
+                raise RuntimeError("规则预览入队失败")
+            # 仅清理已结束的旧诊断；排队和运行记录始终保留到 Worker 确认末态。
+            db.execute(
+                """DELETE FROM rule_previews WHERE repository_id=?
+                AND status IN ('passed', 'failed') AND id NOT IN (
+                    SELECT id FROM rule_previews WHERE repository_id=?
+                    ORDER BY id DESC LIMIT 100
+                )""",
+                (repository_id, repository_id),
+            )
+            return cursor.lastrowid
+
+    def list_rule_previews(self, repository_id: int) -> list[dict[str, Any]]:
+        """只展示项目最近的预览结果，命中规则文本不写入审计日志。"""
+
+        with self.connection() as db:
+            return [
+                dict(row) for row in db.execute(
+                    """SELECT * FROM rule_previews WHERE repository_id=?
+                    ORDER BY id DESC LIMIT 20""",
+                    (repository_id,),
+                )
+            ]
+
+    def next_rule_preview(self) -> dict[str, Any] | None:
+        """单 Worker 领取最早的预览，外部操作在事务结束后执行。"""
+
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT * FROM rule_previews WHERE status='queued' ORDER BY id LIMIT 1"
+            ).fetchone()
+            if row:
+                db.execute("UPDATE rule_previews SET status='running' WHERE id=?", (row["id"],))
+            return dict(row) if row else None
+
+    def finish_rule_preview(
+        self, preview_id: int, commit_sha: str | None,
+        output: str | None, error: str | None,
+    ) -> None:
+        """结果与提交 SHA 一起落库；删除项目后迟到结果不得重建记录。"""
+
+        with self.connection() as db:
+            db.execute(
+                """UPDATE rule_previews SET status=?, commit_sha=?, output=?, error=?,
+                finished_at=CURRENT_TIMESTAMP WHERE id=? AND status='running'""",
+                ("failed" if error else "passed", commit_sha, output, error, preview_id),
+            )
 
     def _write_review_rule(
         self, db: sqlite3.Connection, repository_id: int | None,
@@ -1163,6 +1236,11 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            db.execute(
+                """UPDATE rule_previews SET status='failed',
+                error='Worker 中断，预览结果未确认', finished_at=CURRENT_TIMESTAMP
+                WHERE status='running'"""
+            )
             # 飞书测试消息可能已被接收，重启后只标失败，不自动补发。
             db.execute(
                 """UPDATE connection_checks SET status='failed',

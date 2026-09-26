@@ -24,7 +24,7 @@ from ocr_manager.config import Settings, load_settings
 from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
-from ocr_manager.ocr import run_review
+from ocr_manager.ocr import check_rule, run_review
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 
@@ -314,6 +314,48 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
         store.finish_delivery(delivery["id"], f"飞书投递失败：{type(error).__name__}")
 
 
+def preview_rule(store: Store, settings: Settings, preview: dict[str, Any]) -> None:
+    """在目标分支的隔离提交上运行 OCR 规则查询，不生成正式评审任务。"""
+
+    repository = store.get_repository(preview["repository_id"])
+    if repository is None:
+        store.finish_rule_preview(preview["id"], None, None, "仓库配置已删除")
+        return
+    git: GitRepository | None = None
+    commit_sha: str | None = None
+    run_dir = settings.data_dir / "rule-previews" / str(preview["id"])
+    checkout = run_dir / "checkout"
+    try:
+        # 1. 固定目标分支提交并建立隔离 worktree，避免预览后来变化的仓库规则。
+        if repository["gitlab_token_ciphertext"]:
+            repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
+                repository["gitlab_token_ciphertext"]
+            )
+        git = GitRepository(settings.data_dir, repository)
+        git.fetch()
+        commit_sha = git.target_head()
+        git.checkout(commit_sha, checkout)
+
+        # 2. 使用与正式评审相同的页面规则层级；CLI 只返回命中规则，不访问模型。
+        output = check_rule(
+            settings, checkout, run_dir, preview["file_path"],
+            store.get_review_rule(None), store.get_review_rule(repository["id"]),
+        )
+        store.finish_rule_preview(preview["id"], commit_sha, output, None)
+    except Exception as error:
+        # Git stderr 可能包含远端 URL 或访问凭据；数据库只保存异常类别。
+        LOGGER.warning("规则预览 %s 失败：%s", preview["id"], type(error).__name__)
+        store.finish_rule_preview(
+            preview["id"], commit_sha, None, f"规则预览失败（{type(error).__name__}）"
+        )
+    finally:
+        if git is not None:
+            try:
+                git.remove_checkout(checkout)
+            except (OSError, RuntimeError) as error:
+                LOGGER.warning("规则预览目录清理失败：%s", type(error).__name__)
+
+
 def run_once(
     store: Store, settings: Settings, last_repository_id: int | None = None
 ) -> tuple[bool, int | None]:
@@ -330,6 +372,10 @@ def run_once(
     check = store.next_connection_check()
     if check:
         run_connection_check(store, settings, check)
+        return True, last_repository_id
+    preview = store.next_rule_preview()
+    if preview:
+        preview_rule(store, settings, preview)
         return True, last_repository_id
     job = store.next_job(last_repository_id)
     if job:
