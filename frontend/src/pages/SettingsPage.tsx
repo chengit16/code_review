@@ -11,6 +11,7 @@ import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
+import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 
 interface ModelForm {
@@ -90,7 +91,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
-        <label>Provider<select value={form.provider} onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value }))}><option value="dashscope">DashScope</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></label>
+        <SelectField label="Provider" value={form.provider} onValueChange={(value) => setForm((current) => ({ ...current, provider: value }))} options={[{ value: "dashscope", label: "DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
         <label>模型标识<input value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} required /></label>
         <label>Base URL<input type="url" value={form.base_url} onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))} placeholder="内置 Provider 可留空" /></label>
         <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))} placeholder={editing ? "留空则保留现有密钥" : ""} required={!editing} /></label>

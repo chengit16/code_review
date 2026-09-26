@@ -24,6 +24,8 @@ export function Modal({ titleId, onClose, children }: {
     // 焦点只在当前弹窗内循环，关闭后还给触发操作的按钮。
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        // 下拉弹层位于 Portal 中，先让它消费 Escape，下一次按键再关闭弹窗。
+        if (event.target instanceof Element && event.target.closest("[data-select-popup]")) return;
         event.preventDefault();
         onCloseRef.current();
       } else if (event.key === "Tab") {

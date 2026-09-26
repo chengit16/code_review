@@ -11,6 +11,7 @@ import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
+import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 
 const initial: RepositoryInput = {
@@ -107,7 +108,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       {(toggle.error || remove.error) && <p className="form-error" role="alert">{(toggle.error || remove.error)?.message}</p>}
   {!!query.data?.length && <section className="section"><div className="section-head"><h2>按 MR 补触发</h2></div>
     <form className="inline-form" onSubmit={(event) => { event.preventDefault(); trigger.mutate(); }}>
-      <label>仓库<select value={triggerRepository} onChange={(event) => setTriggerRepository(event.target.value)} required><option value="">选择仓库</option>{query.data.map((repo) => <option key={repo.id} value={repo.id}>{repo.name}</option>)}</select></label>
+      <SelectField label="仓库" name="repository" value={triggerRepository} onValueChange={setTriggerRepository} placeholder="选择仓库" required options={query.data.map((repo) => ({ value: String(repo.id), label: repo.name }))} />
       <label>MR IID<input type="number" min="1" value={mrIid} onChange={(event) => setMrIid(event.target.value)} required /></label>
       <button className="button button-secondary" type="submit" disabled={trigger.isPending}><Play size={16} />加入事件队列</button>
     </form>
@@ -122,7 +123,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <label>目标分支<input value={form.target_branch} onChange={(e) => field("target_branch", e.target.value)} required /></label>
       <label className="wide">Clone URL<input type="url" placeholder="https://gitlab.example.com/team/repo.git" value={form.remote_url} onChange={(e) => field("remote_url", e.target.value)} required /></label>
       <label>GitLab Token<input type="password" autoComplete="new-password" value={form.gitlab_token} onChange={(e) => field("gitlab_token", e.target.value)} required /></label>
-      <label>飞书配置<select value={form.feishu_target_id ?? ""} onChange={(e) => field("feishu_target_id", e.target.value ? Number(e.target.value) : null)}><option value="">暂不关联</option>{targets.data?.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
+      <SelectField label="飞书配置" value={form.feishu_target_id == null ? "none" : String(form.feishu_target_id)} onValueChange={(value) => field("feishu_target_id", value === "none" ? null : Number(value))} options={[{ value: "none", label: "暂不关联" }, ...(targets.data ?? []).map((target) => ({ value: String(target.id), label: target.name }))]} />
       <label className="checkbox-label"><input type="checkbox" checked={form.enable_merge_requests} onChange={(e) => field("enable_merge_requests", e.target.checked)} />Merge Request 审核</label>
       <label className="checkbox-label"><input type="checkbox" checked={form.enable_default_branch_pushes} onChange={(e) => field("enable_default_branch_pushes", e.target.checked)} />默认分支 Push 审核</label>
       {mutation.error && <p className="form-error wide" role="alert">{mutation.error.message}</p>}
@@ -134,7 +135,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <label>仓库名称<input value={editForm.name ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} required /></label>
       <label>项目数字 ID<input type="number" min="1" value={editForm.project_id || ""} onChange={(event) => setEditForm((current) => ({ ...current, project_id: Number(event.target.value) }))} required /></label>
       <label>新 GitLab Token<input type="password" autoComplete="new-password" value={editForm.gitlab_token ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, gitlab_token: event.target.value }))} placeholder="留空则保留" /></label>
-      <label>飞书配置<select value={editForm.feishu_target_id ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, feishu_target_id: event.target.value ? Number(event.target.value) : null }))}><option value="">暂不关联</option>{targets.data?.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
+      <SelectField label="飞书配置" value={editForm.feishu_target_id == null ? "none" : String(editForm.feishu_target_id)} onValueChange={(value) => setEditForm((current) => ({ ...current, feishu_target_id: value === "none" ? null : Number(value) }))} options={[{ value: "none", label: "暂不关联" }, ...(targets.data ?? []).map((target) => ({ value: String(target.id), label: target.name }))]} />
       <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_merge_requests ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_merge_requests: event.target.checked }))} />Merge Request 审核</label>
       <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_default_branch_pushes ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_default_branch_pushes: event.target.checked }))} />默认分支 Push 审核</label>
       {update.error && <p className="form-error wide" role="alert">{update.error.message}</p>}
