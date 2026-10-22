@@ -17,9 +17,10 @@ import { WebhookTokenCell } from "./WebhookTokenCell";
 import { ProjectReviewLimits } from "./ProjectReviewLimits";
 import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
 import { PremergeSetting } from "./PremergeSetting";
+import { RepositoryDiagnosis } from "./RepositoryDiagnosis";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
-type RepositoryEditSection = "connection" | "review" | "publication";
+type RepositoryEditSection = "connection" | "review" | "publication" | "diagnosis";
 
 const initial: RepositoryInput = {
   name: "", gitlab_url: "", project_id: 0, remote_url: "", target_branch: "main",
@@ -194,6 +195,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <button className={`repository-editor-tab${editSection === "connection" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "connection"} onClick={() => setEditSection("connection")}>基础接入</button>
       <button className={`repository-editor-tab${editSection === "review" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "review"} onClick={() => setEditSection("review")}>评审参数</button>
       <button className={`repository-editor-tab${editSection === "publication" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "publication"} onClick={() => setEditSection("publication")}>发布审查</button>
+      <button className={`repository-editor-tab${editSection === "diagnosis" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "diagnosis"} onClick={() => setEditSection("diagnosis")}>接入诊断</button>
     </div>
     <div className="repository-editor-body">
     {editSection === "connection" && <form onSubmit={submitEdit} className="form-grid repository-main-form">
@@ -219,6 +221,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     </form>}
     {editSection === "review" && <div className="repository-editor-panel"><ProjectReviewLimits token={token} repositoryId={editing.id} /></div>}
     {editSection === "publication" && <div className="repository-editor-panel repository-editor-stack"><GitLabPublicationSetting token={token} repositoryId={editing.id} /><PremergeSetting token={token} repositoryId={editing.id} /></div>}
+    {editSection === "diagnosis" && <div className="repository-editor-panel"><RepositoryDiagnosis token={token} repository={editing} targets={targets.data ?? []} /></div>}
     </div>
   </Modal>}
   </div>;

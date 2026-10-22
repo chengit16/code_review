@@ -9,11 +9,31 @@ from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.storage import Store
 
 
+def task_view_clause(view: str | None) -> str | None:
+    """快捷视图与首页共用口径；同一输入被后续完整评审覆盖后不再算未恢复异常。"""
+
+    if view == "active":
+        return "j.status IN ('queued','running')"
+    if view == "notification_failed":
+        return ("EXISTS (SELECT 1 FROM notification_deliveries d "
+                "WHERE d.job_id=j.id AND d.status='failed')")
+    if view == "attention":
+        return """j.status IN ('failed','partial') AND NOT EXISTS (
+            SELECT 1 FROM review_jobs n WHERE n.repository_id=j.repository_id
+            AND n.mr_iid=j.mr_iid AND n.commit_sha=j.commit_sha
+            AND COALESCE(n.base_sha,'')=COALESCE(j.base_sha,'')
+            AND n.id>j.id AND n.status='complete')"""
+    return None
+
+
 def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
     """列表和详情导航共享筛选语义，字段名固定，用户值始终参数化。"""
 
     clauses: list[str] = []
     values: list[Any] = []
+    view = task_view_clause(filters.get("view"))
+    if view:
+        clauses.append(f"({view})")
     for field in ("repository_id", "status", "target_branch", "mr_iid"):
         if filters.get(field) is not None:
             clauses.append(f"j.{field}=?")
@@ -42,7 +62,15 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
             j.ordinal, j.target_branch, j.status, j.error, j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
             j.usage_json, j.config_snapshot,
-            r.name AS repository_name FROM review_jobs j
+            r.name AS repository_name,
+            (SELECT COUNT(*) FROM review_issue_occurrences o WHERE o.job_id=j.id
+              AND o.attempt_number=j.attempts) AS finding_count,
+            (SELECT o.severity FROM review_issue_occurrences o WHERE o.job_id=j.id
+              AND o.attempt_number=j.attempts ORDER BY CASE o.severity
+              WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2
+              WHEN 'low' THEN 1 ELSE 0 END DESC LIMIT 1) AS highest_severity,
+            (SELECT d.status FROM notification_deliveries d WHERE d.job_id=j.id)
+              AS delivery_status FROM review_jobs j
             JOIN repositories r ON r.id=j.repository_id{where}
             ORDER BY j.id DESC LIMIT ? OFFSET ?""",
             [*values, page_size, (page - 1) * page_size],

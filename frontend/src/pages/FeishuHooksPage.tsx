@@ -10,6 +10,7 @@ import type { NotificationTarget, NotificationTargetInput, Repository } from "..
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
+import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 import { QueryState } from "../ui/QueryState";
 
 interface TargetForm {
@@ -32,6 +33,8 @@ export function FeishuHooksPage({ token, embedded = false }: {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<NotificationTarget | null>(null);
   const [form, setForm] = useState<TargetForm>(emptyForm);
+  const dirty = open && JSON.stringify(form) !== JSON.stringify({ ...emptyForm, name: editing?.name ?? "" });
+  const closeEditor = () => { if (!save.isPending && confirmDiscard(dirty)) { setOpen(false); setForm(emptyForm); } };
   const [feedback, setFeedback] = useState("");
 
   const save = useMutation({
@@ -93,6 +96,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
 
   return <div className={embedded ? "settings-content" : "page"}>
     <PageHeader headingLevel={embedded ? 2 : 1} title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
+    <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
     <QueryState loading={targets.isLoading} error={targets.error} />
@@ -113,16 +117,16 @@ export function FeishuHooksPage({ token, embedded = false }: {
         {targets.data?.length === 0 && <p className="empty-inline">暂无飞书配置</p>}
       </div>
     </section>}
-    {open && <Modal titleId="target-title" onClose={() => setOpen(false)}>
-      <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
-      <form className="settings-form hook-form" onSubmit={submit}>
+    {open && <Modal titleId="target-title" onClose={closeEditor}>
+      <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
+      <form className="settings-form hook-form" onSubmit={submit}><fieldset className="form-fields" disabled={save.isPending}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
         <label>Webhook URL<input type="password" autoComplete="new-password" value={form.webhookUrl} onChange={(event) => setForm((current) => ({ ...current, webhookUrl: event.target.value }))} placeholder={editing ? "留空则保留当前地址" : "https://open.feishu.cn/open-apis/bot/v2/hook/…"} required={!editing} /></label>
         <label>签名密钥<input type="password" autoComplete="new-password" value={form.signingSecret} onChange={(event) => setForm((current) => ({ ...current, signingSecret: event.target.value, clearSigning: false }))} placeholder={editing?.has_signing_secret ? "留空则保留当前密钥" : "未启用签名校验时留空"} disabled={form.clearSigning} /></label>
         {editing?.has_signing_secret && <label className="checkbox-label"><input type="checkbox" checked={form.clearSigning} onChange={(event) => setForm((current) => ({ ...current, clearSigning: event.target.checked, signingSecret: "" }))} />移除签名密钥</label>}
         {save.error && <p className="form-error" role="alert">{save.error.message}</p>}
-        <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
-      </form>
+        <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
+      </fieldset></form>
       {checkRepository && <div className="hook-form"><ConnectionChecks token={token} kinds={["feishu"]} repositoryId={checkRepository.id} /></div>}
     </Modal>}
   </div>;

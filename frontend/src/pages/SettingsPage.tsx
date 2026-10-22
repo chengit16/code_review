@@ -10,6 +10,7 @@ import type { AuditPage, ModelConfiguration } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
+import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
@@ -39,6 +40,9 @@ export function SettingsPage({ token, embedded = false }: {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ModelConfiguration | null>(null);
   const [form, setForm] = useState<ModelForm>(initial);
+  const [baseline, setBaseline] = useState<ModelForm>(initial);
+  const dirty = open && JSON.stringify(form) !== JSON.stringify(baseline);
+  const closeEditor = () => { if (!create.isPending && !update.isPending && confirmDiscard(dirty)) { setOpen(false); setForm(initial); } };
   const [feedback, setFeedback] = useState("");
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["model-profiles"] });
@@ -72,7 +76,9 @@ export function SettingsPage({ token, embedded = false }: {
   }
   function beginEdit(profile: ModelConfiguration) {
     setEditing(profile);
-    setForm({ name: profile.name, provider: profile.provider, model: profile.model, base_url: profile.base_url, api_key: "", price_currency: profile.price_currency, input_price_per_million: profile.input_price_per_million ?? "", output_price_per_million: profile.output_price_per_million ?? "" });
+    const draft: ModelForm = { name: profile.name, provider: profile.provider, model: profile.model, base_url: profile.base_url, api_key: "", price_currency: profile.price_currency, input_price_per_million: profile.input_price_per_million ?? "", output_price_per_million: profile.output_price_per_million ?? "" };
+    setBaseline(draft);
+    setForm(draft);
     create.reset();
     update.reset();
     setOpen(true);
@@ -80,7 +86,8 @@ export function SettingsPage({ token, embedded = false }: {
   const active = profiles.data?.find((profile) => profile.enabled);
   const auditPages = Math.max(1, Math.ceil((audit.data?.total ?? 0) / (audit.data?.page_size ?? 20)));
   return <div className={embedded ? "settings-content" : "page"}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
+    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
+    <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
@@ -96,9 +103,9 @@ export function SettingsPage({ token, embedded = false }: {
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </section>}
     <section className="section"><div className="section-head"><h2>管理操作</h2><span>{audit.data?.total ?? 0} 条</span></div><QueryState loading={audit.isLoading} error={audit.error} /><div className="table-scroll responsive-table"><table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody>{audit.data?.items.map((entry) => <tr key={entry.id}><td data-label="时间">{formatTime(entry.created_at)}</td><td data-label="操作者">{entry.actor_name ?? "旧记录"}</td><td data-label="操作" className="mono">{entry.action}</td><td data-label="对象">{entry.object_type}{entry.object_id !== null ? ` #${entry.object_id}` : ""}</td><td data-label="结果">{entry.outcome === "success" ? "成功" : entry.outcome}</td></tr>)}{audit.data?.items.length === 0 && <tr><td colSpan={5} className="empty-row">暂无管理操作</td></tr>}</tbody></table></div><div className="pagination" aria-label="管理操作分页"><span aria-live="polite">共 {audit.data?.total ?? 0} 条 · 第 {auditPage} / {auditPages} 页</span><button className="icon-button" type="button" aria-label="管理操作上一页" title="上一页" disabled={auditPage <= 1 || audit.isFetching} onClick={() => setAuditPage((page) => page - 1)}><ChevronLeft size={18} /></button><button className="icon-button" type="button" aria-label="管理操作下一页" title="下一页" disabled={auditPage >= auditPages || audit.isFetching} onClick={() => setAuditPage((page) => page + 1)}><ChevronRight size={18} /></button></div></section>
-    {open && <Modal titleId="model-title" onClose={() => setOpen(false)}>
-      <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
-      <form className="settings-form hook-form" onSubmit={submit}>
+    {open && <Modal titleId="model-title" onClose={closeEditor}>
+      <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
+      <form className="settings-form hook-form" onSubmit={submit}><fieldset className="form-fields" disabled={create.isPending || update.isPending}>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required /></label>
         <SelectField label="Provider" value={form.provider} onValueChange={(value) => setForm((current) => ({ ...current, provider: value }))} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
         {form.provider === "dashscope" && <p className="form-note">百练模型使用 DashScope API Key 和模型标识；Base URL 留空即可使用内置端点。</p>}
@@ -110,8 +117,8 @@ export function SettingsPage({ token, embedded = false }: {
         <label>输出单价（每百万 Token）<input type="number" min="0" max="99999999" step="0.000001" value={form.output_price_per_million} onChange={(event) => setForm((current) => ({ ...current, output_price_per_million: event.target.value }))} placeholder="可选" required={Boolean(form.input_price_per_million)} /></label>
         <p className="form-note">单价请按百练当前模型计费页填写，留空则只显示 Token 用量。已有任务的预估费用不会随之后的单价修改变化。</p>
         {(create.error || update.error) && <p className="form-error" role="alert">{(create.error || update.error)?.message}</p>}
-        <div className="form-actions"><button className="button button-secondary" type="button" onClick={() => setOpen(false)}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
-      </form>
+        <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
+      </fieldset></form>
     </Modal>}
   </div>;
 }

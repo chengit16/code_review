@@ -1,16 +1,17 @@
 /** @description 按项目跟进评审发现，原始出现记录与人工处理状态分开显示。 */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
-import { formatCategory, formatSeverity, formatTime, shortSha } from "../ui/format";
+import { formatSeverity, formatTime } from "../ui/format";
+import { IssueDetailDrawer } from "./IssueDetailDrawer";
 import { IssueBatchBar } from "./IssueBatchBar";
 import { useIssueBatch } from "./useIssueBatch";
 
@@ -32,11 +33,6 @@ interface ReviewIssue {
   merged_into_id: number | null;
 }
 
-interface IssueDetail extends ReviewIssue {
-  occurrences: Array<{ id: number; job_id: number; attempt_number: number; mr_iid: number; commit_sha: string; path: string; start_line: number | null; created_at: string }>;
-  events: Array<{ id: number; old_status: string | null; new_status: string; actor: string; note: string | null; created_at: string }>;
-}
-
 const labels: Record<IssueStatus, string> = {
   open: "待处理", fixed: "已修复", ignored: "已忽略", merged: "已合并",
 };
@@ -55,8 +51,7 @@ export function ReviewIssuesPage({ token, canEdit }: {
 
 function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boolean }) {
   const [params, setParams] = useSearchParams();
-  const [note, setNote] = useState("");
-  const [mergeTarget, setMergeTarget] = useState("");
+  const [keyword, setKeyword] = useState(params.get("q") ?? "");
   const queryClient = useQueryClient();
   const selectedId = Number(params.get("issue")) || null;
   const page = Math.max(1, Number(params.get("page")) || 1);
@@ -67,17 +62,13 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
   if (repositoryId) query.set("repository_id", repositoryId);
   if (status && status !== "all") query.set("status", status);
   if (severity) query.set("severity", severity);
+  if (params.get("q")) query.set("q", params.get("q") ?? "");
   const issues = useQuery({
     queryKey: ["review-issues", query.toString()],
     queryFn: ({ signal }) => apiRequest<{ items: ReviewIssue[]; total: number; page_size: number }>(token, `/api/review-issues?${query}`, { signal }),
     refetchInterval: 15000,
   });
   const batch = useIssueBatch(token, issues.data?.items ?? []);
-  const detail = useQuery({
-    queryKey: ["review-issue", selectedId],
-    queryFn: () => apiRequest<IssueDetail>(token, `/api/review-issues/${selectedId}`),
-    enabled: selectedId !== null,
-  });
   const repositories = useQuery({
     queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories"),
   });
@@ -87,18 +78,6 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
-  const changeStatus = useMutation({
-    mutationFn: (next: "open" | "fixed" | "ignored") => apiRequest(token, `/api/review-issues/${selectedId}`, {
-      method: "PATCH", body: JSON.stringify({ status: next, note: note.trim() || null }),
-    }),
-    onSuccess: () => { setNote(""); refresh(); },
-  });
-  const merge = useMutation({
-    mutationFn: () => apiRequest(token, `/api/review-issues/${selectedId}/merge`, {
-      method: "POST", body: JSON.stringify({ target_id: Number(mergeTarget) }),
-    }),
-    onSuccess: () => { setMergeTarget(""); refresh(); },
-  });
   function updateFilter(key: string, value: string) {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value); else next.delete(key);
@@ -109,8 +88,6 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
   function selectIssue(id: number | null) {
     const next = new URLSearchParams(params);
     if (id === null) next.delete("issue"); else next.set("issue", String(id));
-    setNote("");
-    setMergeTarget("");
     setParams(next);
   }
   function changePage(nextPage: number) {
@@ -123,29 +100,22 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
   return <div className="page">
     <PageHeader title="待跟进问题" subtitle="跨评审追踪问题与处理记录" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
     <div className="filter-bar issue-filters">
-      <SelectField label="项目" value={repositoryId} disabled={batch.mutation.isPending} onValueChange={(value) => updateFilter("repository_id", value)} options={[{ value: "", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
+      <SelectField label="项目" value={repositoryId || "all"} disabled={batch.mutation.isPending} onValueChange={(value) => updateFilter("repository_id", value === "all" ? "" : value)} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
       <SelectField label="状态" value={status} disabled={batch.mutation.isPending} onValueChange={(value) => updateFilter("status", value)} options={[{ value: "all", label: "全部状态" }, ...Object.entries(labels).map(([value, label]) => ({ value, label }))]} />
-      <SelectField label="级别" value={severity} disabled={batch.mutation.isPending} onValueChange={(value) => updateFilter("severity", value)} options={[{ value: "", label: "全部级别" }, ...["critical", "high", "medium", "low"].map((value) => ({ value, label: formatSeverity(value) }))]} />
+      <SelectField label="级别" value={severity || "all"} disabled={batch.mutation.isPending} onValueChange={(value) => updateFilter("severity", value === "all" ? "" : value)} options={[{ value: "all", label: "全部级别" }, ...["critical", "high", "medium", "low"].map((value) => ({ value, label: formatSeverity(value) }))]} />
     </div>
-    <QueryState loading={issues.isLoading} error={issues.error || repositories.error} />
+    <form className="issue-search" onSubmit={(event) => { event.preventDefault(); updateFilter("q", keyword.trim()); }}><label>搜索问题<input value={keyword} onChange={(event) => setKeyword(event.target.value)} maxLength={200} placeholder="搜索问题描述、文件路径或编号" /></label><button className="button button-secondary" disabled={batch.mutation.isPending}>搜索</button></form>
+    <QueryState loading={issues.isLoading} error={issues.error || repositories.error} onRetry={refresh} />
     {canEdit && <IssueBatchBar count={batch.targets.length} allSelected={batch.allSelected}
-      disabled={issues.isFetching || Boolean(issues.error) || batch.selectableCount === 0 || changeStatus.isPending || merge.isPending} pending={batch.mutation.isPending}
+      disabled={issues.isFetching || Boolean(issues.error) || batch.selectableCount === 0} pending={batch.mutation.isPending}
       note={batch.note} onNote={batch.setNote} onSelectAll={batch.selectAll} onClear={() => batch.selectAll(false)} onSubmit={batch.submit} />}
     {batch.mutation.error && <p className="form-error" role="alert">{batch.mutation.error.message}；勾选和处理说明已保留，可刷新列表后重新确认。</p>}
     {batch.mutation.data && <p className="form-success" role="status">批量处理完成：更新 {batch.mutation.data.updated} 条，状态未变化 {batch.mutation.data.unchanged} 条。</p>}
-    <section className="section"><div className="table-scroll responsive-table"><table><thead><tr>{canEdit && <th>选择</th>}<th>问题</th><th>项目</th><th>位置</th><th>级别</th><th>状态</th><th>出现</th><th>最近发现</th><th aria-label="操作" /></tr></thead><tbody>
-      {issues.data?.items.map((item) => <tr key={item.id}>{canEdit && <td data-label="选择"><input className="issue-checkbox" type="checkbox" aria-label={`选择问题 ${item.id}`} checked={batch.targets.some((target) => target.id === item.id)} disabled={item.status === "merged" || batch.mutation.isPending || issues.isFetching || changeStatus.isPending || merge.isPending} onChange={(event) => batch.toggle(item, event.target.checked)} /></td>}<td data-label="问题" className="mono">#{item.id}</td><td data-label="项目">{item.repository_name}</td><td data-label="位置" className="file-path mono" title={item.path}>{item.path}</td><td data-label="级别">{formatSeverity(item.severity)}</td><td data-label="状态">{labels[item.status]}</td><td data-label="出现">{item.occurrence_count} 次</td><td data-label="最近发现">{formatTime(item.last_seen_at)}</td><td data-label="操作"><button className="row-link" type="button" title={`查看问题 ${item.id}`} aria-label={`查看问题 ${item.id}`} onClick={() => selectIssue(item.id)}><ArrowUpRight size={16} /></button></td></tr>)}
-      {issues.data?.items.length === 0 && <tr><td colSpan={canEdit ? 9 : 8} className="empty-row">当前筛选下没有问题</td></tr>}
+    <section className="section"><div className="table-scroll responsive-table"><table><thead><tr>{canEdit && <th>选择</th>}<th>问题摘要</th><th>项目</th><th>位置</th><th>级别</th><th>状态</th><th>出现</th><th>最近发现</th><th aria-label="操作" /></tr></thead><tbody>
+      {issues.data?.items.map((item) => <tr key={item.id}>{canEdit && <td data-label="选择"><input className="issue-checkbox" type="checkbox" aria-label={`选择问题 ${item.id}`} checked={batch.targets.some((target) => target.id === item.id)} disabled={item.status === "merged" || batch.mutation.isPending || issues.isFetching} onChange={(event) => batch.toggle(item, event.target.checked)} /></td>}<td data-label="问题摘要" className="issue-summary"><button type="button" className="issue-summary-button" onClick={() => selectIssue(item.id)}><span className="mono">#{item.id}</span><strong>{item.content}</strong></button></td><td data-label="项目">{item.repository_name}</td><td data-label="位置" className="file-path mono" title={item.path}>{item.path}</td><td data-label="级别">{formatSeverity(item.severity)}</td><td data-label="状态">{labels[item.status]}</td><td data-label="出现">{item.occurrence_count} 次</td><td data-label="最近发现">{formatTime(item.last_seen_at)}</td><td data-label="操作"><button className="row-link" type="button" title={`查看问题 ${item.id}`} aria-label={`查看问题 ${item.id}`} onClick={() => selectIssue(item.id)}><ArrowUpRight size={16} /></button></td></tr>)}
+      {!issues.isLoading && !issues.error && issues.data?.items.length === 0 && <tr><td colSpan={canEdit ? 9 : 8} className="empty-row">当前筛选下没有问题</td></tr>}
     </tbody></table></div></section>
     <div className="pagination" aria-label="问题分页"><span>共 {issues.data?.total ?? 0} 条 · 第 {page} / {pages} 页</span><button className="icon-button" aria-label="上一页" title="上一页" disabled={page <= 1 || batch.mutation.isPending} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button><button className="icon-button" aria-label="下一页" title="下一页" disabled={page >= pages || batch.mutation.isPending} onClick={() => changePage(page + 1)}><ChevronRight size={18} /></button></div>
-    {selectedId !== null && <section className="section issue-detail"><div className="section-head"><h2>问题 #{selectedId}</h2><button className="button button-secondary" type="button" onClick={() => selectIssue(null)}>关闭</button></div><QueryState loading={detail.isLoading} error={detail.error} />
-      {detail.data && <><div className="issue-detail-head"><span>{detail.data.repository_name} · {labels[detail.data.status]}</span><span>{formatSeverity(detail.data.severity)} · {formatCategory(detail.data.category)}</span></div><p className="mono file-path">{detail.data.path}</p><p>{detail.data.content}</p>
-        {detail.data.merged_into_id && <p>已并入问题 <button className="text-link" type="button" onClick={() => selectIssue(detail.data?.merged_into_id ?? null)}>#{detail.data.merged_into_id}</button></p>}
-        {canEdit && detail.data.status !== "merged" && <div className="issue-actions"><label>处理说明<input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} placeholder="可选" /></label><div className="issue-action-buttons">{(["open", "fixed", "ignored"] as const).map((value) => <button key={value} type="button" className={detail.data?.status === value ? "button button-primary" : "button button-secondary"} disabled={changeStatus.isPending || batch.mutation.isPending || detail.data?.status === value} onClick={() => changeStatus.mutate(value)}>{labels[value]}</button>)}</div><label>合并到问题编号<input type="number" min="1" value={mergeTarget} onChange={(event) => setMergeTarget(event.target.value)} /></label><button className="button button-secondary" type="button" disabled={!Number(mergeTarget) || merge.isPending || batch.mutation.isPending} onClick={() => merge.mutate()}>合并重复问题</button></div>}
-        {(changeStatus.error || merge.error) && <p className="form-error" role="alert">{(changeStatus.error || merge.error)?.message}</p>}
-        <h3>出现记录</h3><div className="table-scroll"><table><thead><tr><th>任务</th><th>来源</th><th>提交</th><th>位置</th><th>时间</th></tr></thead><tbody>{detail.data.occurrences.map((item) => <tr key={item.id}><td><Link to={`/jobs/${item.job_id}`}>#{item.job_id} · 第 {item.attempt_number} 次</Link></td><td>{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"}</td><td className="mono">{shortSha(item.commit_sha)}</td><td className="mono">{item.path}{item.start_line ? `:${item.start_line}` : ""}</td><td>{formatTime(item.created_at)}</td></tr>)}</tbody></table></div>
-        <h3>处理记录</h3><ul className="issue-history">{detail.data.events.map((item) => <li key={item.id}><span>{formatTime(item.created_at)} · {item.actor} · {labels[item.new_status as IssueStatus]}</span>{item.note && <p>{item.note}</p>}</li>)}</ul>
-      </>}
-    </section>}
+    {selectedId !== null && <IssueDetailDrawer key={selectedId} token={token} id={selectedId} canEdit={canEdit} batchPending={batch.mutation.isPending} onSelect={selectIssue} />}
   </div>;
 }

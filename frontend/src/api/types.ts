@@ -167,6 +167,9 @@ export interface WebhookDiagnostic {
 
 /** 单提交或 Push 范围评审任务列表数据。 */
 export interface ReviewJob {
+  /** 当前尝试已持久化的发现数量；不代表完整覆盖。 */ finding_count?: number;
+  /** 当前尝试发现的最高严重级别。 */ highest_severity?: string | null;
+  /** 飞书发送状态，与评审状态相互独立。 */ delivery_status?: string | null;
   id: number;
   repository_id: number;
   event_id: number;

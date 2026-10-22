@@ -23,6 +23,7 @@ from ocr_manager.monitoring import (
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import job_neighbors, report_projection, search_jobs
+from ocr_manager.workspace_queries import overview_snapshot, search_premerge
 
 
 def task_filters(
@@ -35,6 +36,7 @@ def task_filters(
     sha: str | None = Query(None, pattern=r"^[0-9a-fA-F]{4,40}$"),
     since: datetime | None = None,
     until: datetime | None = None,
+    view: Literal["active", "attention", "notification_failed"] | None = None,
 ) -> dict[str, Any]:
     """列表和相邻任务统一校验条件；时间按 UTC 比较，无时区输入默认 UTC。"""
 
@@ -51,11 +53,32 @@ def task_filters(
     return {
         "repository_id": repository_id, "status": status, "target_branch": target_branch,
         "mr_iid": mr_iid, "sha": sha.lower() if sha else None, "since": start, "until": end,
+        "view": view,
     }
 
 
 def register_operations(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """注册独立运维资源，所有接口由既有服务端管理权限保护。"""
+
+    @app.get("/api/overview", dependencies=[admin])
+    def overview() -> dict[str, Any]:
+        """返回全量聚合与最近八条任务，不以截断列表推断队列。"""
+
+        return overview_snapshot(store)
+
+    @app.get("/api/premerge-search", dependencies=[admin])
+    def premerge_search(
+        repository_id: int | None = Query(None, gt=0),
+        mr_iid: int | None = Query(None, gt=0),
+        status: Literal["queued", "running", "complete", "partial", "failed",
+                        "skipped", "superseded"] | None = None,
+        latest_only: bool = True,
+        page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
+    ) -> dict[str, Any]:
+        """按项目和 MR 查询版本；最新指最新接收版本，不把旧结果当成当前结论。"""
+
+        return search_premerge(store, repository_id, mr_iid, status, latest_only,
+                               page, page_size)
 
     @app.get("/api/service-addresses", dependencies=[admin])
     def service_addresses() -> dict[str, str]:

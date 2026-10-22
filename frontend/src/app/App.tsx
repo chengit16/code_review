@@ -2,22 +2,31 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, GitPullRequest, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { createContext, lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createBrowserRouter, Navigate, NavLink, Route, RouterProvider, Routes, useLocation } from "react-router-dom";
 
 import { AccessScreen } from "./AccessScreen";
-import { ConfigHistoryPage } from "../pages/ConfigHistoryPage";
 import { JobsPage } from "../pages/JobsPage";
-import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
-import { OperationsPage } from "../pages/OperationsPage";
-import { PremergePage } from "../pages/PremergePage";
-import { RepositoriesPage } from "../pages/RepositoriesPage";
-import { ReviewIssuesPage } from "../pages/ReviewIssuesPage";
-import { SystemSettingsPage } from "../pages/SystemSettingsPage";
-import { UsersPage } from "../pages/UsersPage";
 import { apiRequest } from "../api/client";
 import type { Health } from "../api/types";
+import { PageErrorBoundary } from "../ui/PageErrorBoundary";
+
+// 较重的配置和详情按路由加载，避免首页一次下载全部表单与历史报告代码。
+const ConfigHistoryPage = lazy(() => import("../pages/ConfigHistoryPage").then((module) => ({ default: module.ConfigHistoryPage })));
+const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
+const OperationsPage = lazy(() => import("../pages/OperationsPage").then((module) => ({ default: module.OperationsPage })));
+const PremergePage = lazy(() => import("../pages/PremergePage").then((module) => ({ default: module.PremergePage })));
+const RepositoriesPage = lazy(() => import("../pages/RepositoriesPage").then((module) => ({ default: module.RepositoriesPage })));
+const ReviewIssuesPage = lazy(() => import("../pages/ReviewIssuesPage").then((module) => ({ default: module.ReviewIssuesPage })));
+const SystemSettingsPage = lazy(() => import("../pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage })));
+const UsersPage = lazy(() => import("../pages/UsersPage").then((module) => ({ default: module.UsersPage })));
+
+const WorkspaceSession = createContext({ token: "", role: "reader" as "admin" | "reader", username: "", onLogout: () => {} });
+
+function WorkspaceRoute() {
+  return <Workspace {...useContext(WorkspaceSession)} />;
+}
 
 const navigation = [
   { heading: "工作台", links: [
@@ -102,7 +111,7 @@ function Workspace({ token, role, username, onLogout }: {
           </div>
         </aside>
         <main id="main-content" className="main-area" tabIndex={-1}>
-          <Routes>
+          <PageErrorBoundary key={location.pathname}><Suspense fallback={<div className="page" role="status">正在加载页面…</div>}><Routes>
             <Route path="/" element={<OverviewPage token={token} />} />
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
@@ -118,7 +127,8 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/review-rules" element={role === "admin" ? <Navigate to="/settings?tab=rules" replace /> : <Navigate to="/" replace />} />
             <Route path="/config-history" element={role === "admin" ? <ConfigHistoryPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/users" element={role === "admin" ? <UsersPage token={token} /> : <Navigate to="/" replace />} />
-          </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes></Suspense></PageErrorBoundary>
         </main>
     </div>
   );
@@ -127,6 +137,7 @@ function Workspace({ token, role, username, onLogout }: {
 /** 管理台入口；退出时清除敏感查询缓存。 */
 export function App() {
   const [token, setToken] = useState("");
+  const [router] = useState(() => createBrowserRouter([{ path: "*", element: <WorkspaceRoute /> }]));
   const queryClient = useQueryClient();
   const access = useQuery({
     queryKey: ["access-health"],
@@ -153,10 +164,11 @@ export function App() {
   if (identity.isLoading) return <div className="access-screen"><p className="query-state">正在验证管理会话…</p></div>;
 
   function handleLogout() {
+    if (!window.dispatchEvent(new Event("workspace-before-logout", { cancelable: true }))) return;
     if (token.startsWith("session:")) void apiRequest(token, "/api/auth/logout", { method: "POST" }).catch(() => undefined);
     queryClient.clear();
     setToken("");
   }
 
-  return <BrowserRouter><Workspace token={token} role={identity.data?.role ?? "reader"} username={identity.data?.username ?? ""} onLogout={handleLogout} /></BrowserRouter>;
+  return <WorkspaceSession.Provider value={{ token, role: identity.data?.role ?? "reader", username: identity.data?.username ?? "", onLogout: handleLogout }}><RouterProvider router={router} /></WorkspaceSession.Provider>;
 }

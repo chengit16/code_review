@@ -13,6 +13,7 @@ import { SelectField } from "../ui/SelectField";
 import { formatTime } from "../ui/format";
 import { RulePreviewPanel } from "./RulePreviewPanel";
 import { ReviewFeedbackPanel } from "./ReviewFeedbackPanel";
+import { UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 
 const emptyRule = (): ReviewRuleDocument => ({ include: [], exclude: [], rules: [] });
 const lines = (value: string) => value.split("\n").map((item) => item.trim()).filter(Boolean);
@@ -24,6 +25,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
 }) {
   const queryClient = useQueryClient();
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
+  // 规则草稿不随窗口聚焦重新加载；只在自身保存、删除或恢复后显式失效。
   const configurations = useQuery({ queryKey: ["review-rules"], queryFn: () => apiRequest<ReviewRuleConfiguration[]>(token, "/api/review-rules"), staleTime: Infinity });
   const [scope, setScope] = useState("global");
   const [form, setForm] = useState<ReviewRuleDocument>(emptyRule);
@@ -100,6 +102,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
   }
 
   return <div className={embedded ? "settings-content" : "page"}><PageHeader headingLevel={embedded ? 2 : 1} title="审核规则" subtitle="Open Code Review 逐文件规则" />
+    <UnsavedChangesGuard dirty={dirty} />
     <QueryState loading={repositories.isLoading || configurations.isLoading} error={repositories.error || configurations.error} />
     {!repositories.isLoading && !configurations.isLoading && !repositories.error && !configurations.error && <>
       <div className="rule-priority" aria-label="规则优先级"><strong>优先级</strong><span>项目页面规则</span><span>仓库 rule.json</span><span>全局页面规则</span><span>OCR 内置规则</span></div>
@@ -107,7 +110,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
         <div className="rule-scope"><SelectField label="配置范围" value={scope} onValueChange={changeScope} options={[{ value: "global", label: "全局规则" }, ...(repositories.data ?? []).map((repo) => ({ value: String(repo.id), label: repo.name }))]} />
           <div className="rule-scope-meta"><strong>{current ? "已配置" : "使用下一级规则"}</strong>{current && <span>更新于 {formatTime(current.updated_at)}</span>}</div>
         </div>
-        <form className="rule-form" onSubmit={submit}>
+        <form className="rule-form" onSubmit={submit}><fieldset className="form-fields" disabled={save.isPending || remove.isPending || restore.isPending}>
           <div className="section-head"><h2>规则条目</h2><button className="button button-secondary" type="button" onClick={() => setForm((value) => ({ ...value, rules: [...value.rules, { path: "", rule: "", merge_system_rule: true }] }))}><Plus size={16} />添加规则</button></div>
           {form.rules.length === 0 && <p className="rule-empty">当前范围尚无自定义条目</p>}
           <div className="rule-list">{form.rules.map((entry, index) => <div className="rule-item" key={index}>
@@ -120,7 +123,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
           {(localError || save.error || remove.error) && <p className="form-error" role="alert">{localError || save.error?.message || remove.error?.message}</p>}
           {feedback && <p className="form-success" role="status">{feedback}</p>}
           <div className="form-actions"><button className="button button-secondary" type="button" disabled={!current || remove.isPending} onClick={() => { if (window.confirm("确定删除当前范围的审核规则配置？")) remove.mutate(); }}><Trash2 size={16} />删除配置</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存规则</button></div>
-        </form>
+        </fieldset></form>
       </section>
       <ReviewFeedbackPanel token={token} repositoryId={repositoryId} />
       <RulePreviewPanel token={token} scopeRepositoryId={repositoryId} repositories={repositories.data ?? []} dirty={dirty} />

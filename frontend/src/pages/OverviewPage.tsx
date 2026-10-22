@@ -1,44 +1,51 @@
-/** @description 汇总仓库、评审任务和异常状态。 */
+/** @description 全量运行聚合与最近任务；未恢复异常和历史失败分开，不把截断列表当成队列总量。 */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
-import type { Health, Repository, ReviewJob } from "../api/types";
+import type { Health, ReviewJob } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
 import { formatTime, shortSha } from "../ui/format";
 import { ReviewEffectivenessSection } from "./ReviewEffectivenessSection";
 
-/** 展示当前队列压力和最近任务；数据始终以服务端状态为准。 */
-export function OverviewPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
-  // Worker 在 OCR 长任务期间仍持有单实例锁，定期刷新能区分繁忙与进程退出。
-  const health = useQuery({ queryKey: ["health"], queryFn: () => apiRequest<Health>(token, "/api/health"), refetchInterval: 5000 });
-  const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
-  const jobs = useQuery({ queryKey: ["jobs"], queryFn: () => apiRequest<ReviewJob[]>(token, "/api/jobs"), refetchInterval: 5000 });
-  const loading = repositories.isLoading || jobs.isLoading;
-  const error = repositories.error || jobs.error;
-  const items = jobs.data ?? [];
-  const queued = items.filter((item) => item.status === "queued" || item.status === "running").length;
-  const exceptions = items.filter((item) => item.status === "failed" || item.status === "partial").length;
+interface Overview {
+  summary: { repositories: number; queued: number; running: number; complete: number;
+    attention: number; historical_failed: number; notification_failed: number; total: number };
+  recent: ReviewJob[];
+}
 
-  return <div className="page"><PageHeader title="运行概览" subtitle="GitLab 合并评审的当前状态" actions={
-    <><div className="worker-health" role="status">Worker <Status value={health.isError ? "unknown" : health.data?.worker ?? "unknown"} /></div><button className="icon-button" type="button" aria-label="刷新概览" title="刷新概览" onClick={() => { void health.refetch(); void repositories.refetch(); void jobs.refetch(); }}><RefreshCw size={18} /></button></>
-  } /><QueryState loading={loading} error={error} />{!loading && !error && <>
-    <section className="metrics" aria-label="运行指标">
-      <div className="metric"><span>已接入仓库</span><strong>{repositories.data?.length ?? 0}</strong><small>个 GitLab 项目</small></div>
-      <div className="metric"><span>排队与运行</span><strong>{queued}</strong><small>个逐提交任务</small></div>
-      <div className="metric"><span>需要关注</span><strong>{exceptions}</strong><small>个评审任务</small></div>
-      <div className="metric"><span>已完成评审</span><strong>{items.filter((item) => item.status === "complete").length}</strong><small>最近 200 个任务</small></div>
-    </section>
-  </>}
-  <ReviewEffectivenessSection token={token} />
-  {!loading && !error && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
-      <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
-        {items.slice(0, 8).map((job) => <tr key={job.id}><td data-label="任务">#{job.id}</td><td data-label="仓库">{repositories.data?.find((repo) => repo.id === job.repository_id)?.name ?? `仓库 #${job.repository_id}`}</td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="状态"><Status value={job.status} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td></tr>)}
-        {items.length === 0 && <tr><td colSpan={6} className="empty-row">暂无评审任务</td></tr>}
+/** 首页只读展示；点击指标直接进入相同口径的筛选列表。 */
+export function OverviewPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
+  const client = useQueryClient();
+  const health = useQuery({ queryKey: ["health"], queryFn: () => apiRequest<Health>(token, "/api/health"), refetchInterval: 10000 });
+  const overview = useQuery({ queryKey: ["overview"], queryFn: () => apiRequest<Overview>(token, "/api/overview"),
+    refetchInterval: (query) => query.state.data?.summary.running || query.state.data?.summary.queued ? 5000 : 30000 });
+  const summary = overview.data?.summary;
+  function refresh() {
+    void health.refetch();
+    void overview.refetch();
+    void client.invalidateQueries({ queryKey: ["review-effectiveness"] });
+  }
+  return <div className="page"><PageHeader title="运行概览" subtitle="先看当前待办，再查看评审结果" actions={
+    <><div className="worker-health" role="status">Worker <Status value={health.isError ? "unknown" : health.data?.worker ?? "unknown"} /></div><button className="icon-button" aria-label="刷新概览" onClick={refresh}><RefreshCw size={18} /></button></>
+  } /><QueryState loading={overview.isLoading} error={overview.error} onRetry={() => void overview.refetch()} />
+    {health.data?.worker === "stopped" && <p className="attention-note" role="alert">Worker 未运行，已接收任务会等待处理。请先启动 Worker，不要反复重新评审。</p>}
+    {summary && <><section className="metrics" aria-label="运行指标">
+      <Link to="/repositories" className="metric metric-link"><span>已接入仓库</span><strong>{summary.repositories}</strong><small>查看项目接入状态 →</small></Link>
+      <Link to="/jobs?view=active" className="metric metric-link"><span>排队与运行</span><strong>{summary.queued + summary.running}</strong><small>排队 {summary.queued} · 运行 {summary.running}</small></Link>
+      <Link to="/jobs?view=attention" className="metric metric-link"><span>待关注评审</span><strong>{summary.attention}</strong><small>失败或部分完成，未被后续完整结果覆盖</small></Link>
+      <Link to="/jobs?status=complete" className="metric metric-link"><span>已完成评审</span><strong>{summary.complete}</strong><small>全部 {summary.total} 个历史任务</small></Link>
+    </section><div className="overview-links"><span>失败任务 {summary.historical_failed} 条（含历史记录），不等于当前待办</span><Link to="/jobs?view=notification_failed">飞书发送失败 {summary.notification_failed} 条 · 查看并重发 →</Link></div></>}
+    <ReviewEffectivenessSection token={token} />
+    {overview.data && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
+      <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库 / 来源</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
+        {overview.data.recent.map((job) => <tr key={job.id}><td data-label="任务">#{job.id}</td><td data-label="仓库 / 来源">{job.repository_name}<small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="状态"><Status value={job.status} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td></tr>)}
+        {overview.data.recent.length === 0 && <tr><td colSpan={6} className="empty-row">暂无任务，先在项目配置中完成接入。</td></tr>}
       </tbody></table></div>
-  </section>}</div>;
+    </section>}
+  </div>;
 }

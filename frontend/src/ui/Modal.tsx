@@ -3,11 +3,12 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
+/** 约束可见控件的键盘焦点，关闭请求交给调用方判断草稿和保存状态。 */
 export function Modal({ titleId, onClose, children, className = "" }: {
-  titleId: string;
-  onClose: () => void;
-  children: ReactNode;
-  className?: string;
+  /** 可见标题元素的标识。 */ titleId: string;
+  /** Escape 或调用方关闭按钮触发，由调用方执行确认。 */ onClose: () => void;
+  /** 弹窗内可访问内容。 */ children: ReactNode;
+  /** 可选布局类，不改变关闭语义。 */ className?: string;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -18,8 +19,8 @@ export function Modal({ titleId, onClose, children, className = "" }: {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const controls = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>(
-      "button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]",
-    ) ?? []);
+      "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]",
+    ) ?? []).filter((element) => element.getClientRects().length > 0);
     (dialog.current?.querySelector<HTMLElement>("input:not(:disabled)") ?? controls()[0] ?? dialog.current)?.focus();
 
     // 焦点只在当前弹窗内循环，关闭后还给触发操作的按钮。

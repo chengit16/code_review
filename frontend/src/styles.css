@@ -145,7 +145,7 @@ tbody tr:hover { background: #fafcfb; }
 .attempt-filters > label input { width: 112px; }
 .attempt-filters .select-field, .finding-filters .select-field { min-width: 0; }
 input { min-height: 44px; width: 100%; border: 1px solid #bdcdc3; border-radius: 5px; background: #fff; color: #243d33; padding: 0 11px; outline: none; font-size: 14px; }
-.repo-toggle { width: 18px; min-height: 18px; height: 18px; padding: 0; accent-color: #147864; cursor: pointer; }
+.repo-toggle { width: 18px; min-height: 18px; height: 18px; margin: 0; padding: 0; accent-color: #147864; cursor: pointer; }
 .toggle-hit { display: inline-grid; place-items: center; width: 44px; height: 44px; cursor: pointer; }
 input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72; outline-offset: 2px; }
 .select-field { display: grid; gap: 7px; min-width: 0; }
@@ -372,9 +372,10 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .hook-project span, .hook-last { overflow: hidden; text-overflow: ellipsis; color: #586d60; font-size: 12px; white-space: nowrap; }
 .hook-form { padding: 10px 24px 24px; }
 .hook-form .checkbox-label { display: flex; align-items: center; gap: 8px; }
-.form-grid .checkbox-label { flex-direction: row; align-items: center; }
-.checkbox-label { min-height: 44px; cursor: pointer; }
-.checkbox-label input[type="checkbox"] { flex: none; width: 20px; min-height: 20px; height: 20px; padding: 0; accent-color: #147864; }
+.form-grid .checkbox-label { flex-direction: row; align-items: center; gap: 8px; }
+/* 页面独立开关与表单内复选框共用布局，避免依赖父级表单才能对齐。 */
+.checkbox-label { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; max-width: 100%; min-height: 44px; line-height: 20px; cursor: pointer; }
+.checkbox-label input[type="checkbox"] { flex: none; width: 20px; min-height: 20px; height: 20px; margin: 0; padding: 0; accent-color: #147864; }
 .connection-checks { display: grid; gap: 11px; padding-top: 18px; }
 .modal > .connection-checks { margin: 0 24px 24px; border-top: 1px solid #e3e9e5; }
 .connection-checks-heading { color: #52695e; font-size: 12px; font-weight: 700; }
@@ -393,7 +394,7 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .issue-batch-bar { display: grid; gap: 14px; margin: 0 0 18px; padding: 16px; border: 1px solid #dce5df; border-radius: 6px; background: #f0f6f3; }
 .issue-batch-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; color: #52675a; font-size: 13px; }
 .issue-select-all { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: #344a43; font-weight: 700; }
-.issue-select-all input, .issue-checkbox { flex: none; width: 18px; min-height: 18px; height: 18px; padding: 0; accent-color: #147864; cursor: pointer; }
+.issue-select-all input, .issue-checkbox { flex: none; width: 18px; min-height: 18px; height: 18px; margin: 0; padding: 0; vertical-align: middle; accent-color: #147864; cursor: pointer; }
 .issue-select-all input:disabled, .issue-checkbox:disabled { cursor: not-allowed; }
 .issue-batch-selection small { margin-left: auto; font-size: 12px; }
 .issue-batch-selection .text-link:disabled { color: #87978e; cursor: not-allowed; }
@@ -452,6 +453,7 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
   .issue-batch-actions .button { width: 100%; }
   .issue-batch-selection small { width: 100%; margin-left: 0; }
   .issue-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .issue-filters .select-field { display: grid; gap: 6px; }
   .issue-filters .select-trigger { width: 100%; }
   .issue-actions, .issue-action-buttons { align-items: stretch; flex-direction: column; }
   .issue-actions label, .issue-actions .button { width: 100%; }
@@ -538,4 +540,92 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 
 @media (prefers-reduced-motion: reduce) {
   .button, .icon-button, .sidebar { transition: none; }
+}
+
+/* 工作台优先展示可处理事实，技术详情按需展开，沿用既有绿灰视觉。 */
+.unsaved-note, .attention-note, .result-note { margin: 16px 0; padding: 13px 16px; border: 1px solid #e8d6ac; border-left: 3px solid #ba8a31; border-radius: 6px; background: #fff9ed; color: #775a26; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.result-note { border-color: #bed7c9; border-left-color: #147864; background: #edf6f0; color: #24634d; }
+.query-state-error { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; overflow-wrap: anywhere; }
+.query-state-error small { flex-basis: 100%; }
+.metric-link { transition: border-color .15s ease; }
+.metric-link:hover { border-color: #147864; }
+.overview-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-bottom: 20px; color: #5b7062; font-size: 12px; }
+.overview-links a, .diagnosis-checklist a, .diagnosis-events a { color: #087660; font-weight: 600; }
+.quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 21px; }
+.filter-chip { min-height: 36px; padding: 7px 14px; border: 1px solid #d4dfd8; border-radius: 20px; background: #fff; color: #52675a; font-size: 12px; }
+.filter-chip[aria-pressed="true"] { background: #203f37; border-color: #203f37; color: #fff; }
+.task-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; padding-top: 18px; margin-bottom: 18px; }
+.task-filters .select-trigger { width: 100%; }
+.task-filters .filter-actions { min-height: 44px; }
+.advanced-panel { min-width: 0; margin: 18px 0; border: 1px solid #dce5df; border-radius: 7px; background: #fff; }
+.advanced-panel > summary { padding: 15px 18px; color: #425d50; font-size: 13px; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+.advanced-panel[open] > summary { border-bottom: 1px solid #e4eae6; }
+.advanced-panel > :not(summary) { margin: 16px; }
+.advanced-panel > .section { border: 0; }
+.advanced-panel .task-command-grid { margin: 0; padding: 16px; }
+.task-selection-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 18px 0; padding: 12px 16px; border: 1px solid #d4e3da; border-radius: 6px; background: #edf4ef; color: #365748; font-size: 13px; }
+.task-selection-bar small { margin-left: 12px; color: #61776a; }
+.task-selection-bar > ul, .task-selection-bar > p { flex-basis: 100%; margin-block: 0; overflow-wrap: anywhere; }
+.issue-search, .premerge-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; margin: 18px 0; }
+.issue-search label, .premerge-filters label, .merge-search label { display: grid; min-width: 0; gap: 7px; color: #52675a; font-size: 13px; }
+.issue-search label { flex: 1 1 280px; max-width: 620px; }
+.issue-search input, .premerge-filters input[type="number"], .merge-search input { width: 100%; min-width: 0; min-height: 40px; padding: 9px 12px; border: 1px solid #cdd9d3; border-radius: 6px; background: #fff; font: inherit; color: #263332; }
+.issue-summary { min-width: 230px; max-width: 390px; white-space: normal; }
+.issue-summary-button { display: grid; gap: 5px; width: 100%; padding: 0; border: 0; background: none; color: #263332; text-align: left; font: inherit; cursor: pointer; }
+.issue-summary-button span { color: #688273; font-size: 12px; }
+.issue-summary-button strong { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.issue-summary-button:hover strong { color: #087660; }
+.modal-backdrop:has(.issue-drawer) { display: flex; justify-content: flex-end; align-items: stretch; padding: 0; }
+.issue-drawer { width: min(760px, 100%); height: 100dvh; max-height: 100dvh; border-radius: 0; }
+.issue-drawer .modal-heading { position: sticky; top: 0; z-index: 1; background: #fff; }
+.issue-drawer-body { padding: 22px 26px 40px; overflow-wrap: anywhere; }
+.issue-drawer-body h3 { margin: 26px 0 14px; font-size: 14px; }
+.issue-full-content { margin-block: 20px; padding: 17px 18px; border-left: 3px solid #739e8b; background: #f4f8f5; white-space: pre-wrap; font-size: 14px; line-height: 1.9; }
+.issue-occurrences { display: grid; gap: 10px; }
+.issue-occurrences > div { display: grid; gap: 7px; padding: 14px; border: 1px solid #dce5df; border-radius: 6px; font-size: 12px; color: #52675a; }
+.issue-occurrences a { color: #087660; font-weight: 600; }
+.merge-search { display: grid; gap: 14px; }
+.merge-search .select-trigger { width: 100%; }
+.premerge-filters form { display: flex; align-items: end; gap: 8px; }
+.premerge-detail { padding: 20px; }
+.premerge-detail .finding { margin-block: 12px; }
+.diagnosis-checklist { display: grid; gap: 0; margin-block: 18px; border: 1px solid #dce5df; border-radius: 7px; overflow: hidden; }
+.diagnosis-checklist > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 15px; padding: 16px; border-bottom: 1px solid #e3eae6; background: #fafcfb; }
+.diagnosis-checklist > div:last-child { border-bottom: 0; }
+.diagnosis-checklist dt { font-size: 13px; font-weight: 700; color: #365748; }
+.diagnosis-checklist dd { display: grid; gap: 6px; margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.diagnosis-checklist small { color: #61776a; line-height: 1.7; }
+.diagnosis-events article { display: grid; gap: 8px; padding-block: 14px; border-bottom: 1px solid #e3eae6; font-size: 13px; }
+.diagnosis-events article > span { color: #61776a; font-size: 12px; }
+.diagnosis-events article p { margin: 0; line-height: 1.7; }
+.job-footer-grid > .advanced-panel { align-self: start; }
+.detail-error a { text-decoration: underline; }
+@media (max-width: 1100px) { .task-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  .task-filters { gap: 12px; }
+  .task-filters .filter-actions { grid-column: 1 / -1; }
+  .task-filters .filter-actions .button { flex: 1; }
+  .issue-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .issue-summary { min-width: 0; max-width: none; }
+  .responsive-table td.issue-summary { display: block; text-align: left; }
+  .responsive-table td.issue-summary::before { display: none; }
+  .task-selection-bar small { display: block; margin: 4px 0 0; }
+  .task-selection-bar > span { width: 100%; }
+  .issue-drawer-body { padding: 20px 16px 32px; }
+  .premerge-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .premerge-filters form { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .premerge-filters .select-trigger { width: 100%; }
+  .premerge-detail { padding: 16px; }
+  .diagnosis-checklist > div { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .repository-editor-tabs { gap: 18px; overflow-x: auto; flex-shrink: 0; }
+  .repository-editor-tab { flex-shrink: 0; }
+  .issue-drawer { max-height: 100dvh; }
+  .responsive-table td[data-label="评审结果"], .responsive-table td[data-label="仓库"] { flex-wrap: wrap; }
+}
+.form-fields { display: contents; }
+.file-path { overflow-wrap: anywhere; white-space: normal; }
+@media (min-width: 621px) {
+  .task-list-table th, .task-list-table td { padding-inline: 12px; }
+  .task-list-table th:last-child, .task-list-table td:last-child { position: sticky; right: 0; background: #fff; box-shadow: -5px 0 7px -7px #648575; }
+  .task-list-table th:last-child { background: #fafcfb; }
 }

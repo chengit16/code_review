@@ -197,15 +197,21 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
     def list_issues(repository_id: int | None = Query(None, gt=0),
                     status: Literal["open", "fixed", "ignored", "merged"] | None = None,
                     severity: str | None = Query(None, max_length=40),
+                    q: str | None = Query(None, max_length=200),
                     page: int = Query(1, ge=1),
                     page_size: int = Query(25, ge=1, le=100)) -> dict[str, Any]:
         """按仓库、状态和级别分页；默认隐藏已合并的重复项。"""
 
         where = """WHERE (? IS NULL OR i.repository_id=?)
             AND (? IS NOT NULL OR i.status!='merged')
-            AND (? IS NULL OR i.status=?) AND (? IS NULL OR i.severity=?)"""
-        params = (repository_id, repository_id, status, status, status, severity, severity)
+            AND (? IS NULL OR i.status=?) AND (? IS NULL OR i.severity=?)
+            AND (? IS NULL OR instr(lower(i.content),lower(?))>0
+                 OR instr(lower(i.path),lower(?))>0 OR CAST(i.id AS TEXT)=?)"""
+        keyword = q.strip() if q and q.strip() else None
+        params = (repository_id, repository_id, status, status, status, severity, severity,
+                  keyword, keyword, keyword, keyword)
         with store.connection() as db:
+            db.execute("BEGIN")
             total = db.execute(
                 f"SELECT COUNT(*) FROM review_issues i {where}", params
             ).fetchone()[0]

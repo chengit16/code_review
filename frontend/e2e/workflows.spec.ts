@@ -63,6 +63,7 @@ test("百练模型单价配置与评审详情用量", async ({ page }) => {
   await expect(page.getByText("¥3.0000")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByText("历史报告与对比", { exact: true }).first().click();
   const reportControls = await page.locator("section").filter({ has: page.getByRole("heading", { name: "历史报告与对比" }) }).evaluate((section) =>
     Array.from(section.querySelectorAll("button, input")).map((element) => {
       const box = element.getBoundingClientRect();
@@ -154,6 +155,7 @@ test("部分结果、反馈与重审", async ({ page }) => {
   await page.locator(".findings-section").screenshot({ path: "test-results/finding-handled-desktop.png" });
   await fixed.click();
   await expect(issue).toContainText("待处理");
+  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重新评审" }).click();
   await expect(page.getByText("排队中").first()).toBeVisible();
 });
@@ -162,20 +164,25 @@ test("评审任务页集中补触发且不再展示事件页", async ({ page }) 
   await page.goto("/jobs");
   await expect(page.getByRole("heading", { name: "评审任务" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Token 消耗" })).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "实际消费" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "预估费用" })).toBeVisible();
   await expect(page.getByRole("link", { name: "GitLab 事件" })).toHaveCount(0);
   await expect(page.getByText("按合并时间补审", { exact: true })).toHaveCount(0);
+  await page.getByText("补触发与高级操作", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "批量重新评审" })).toBeVisible();
   const commandBarTops = await page.locator(".task-command-grid > .task-command-bar").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
   expect(commandBarTops).toHaveLength(2);
   expect(Math.max(...commandBarTops) - Math.min(...commandBarTops)).toBeLessThan(2);
-  const filterControlTops = await page.locator(".task-filters .select-trigger, .task-filters input, .task-filters button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
-  expect(Math.max(...filterControlTops) - Math.min(...filterControlTops)).toBeLessThan(2);
+  const filterControlBoxes = await page.locator(".task-filters .select-trigger, .task-filters input, .task-filters button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  for (const [index, first] of filterControlBoxes.entries()) {
+    for (const second of filterControlBoxes.slice(index + 1)) {
+      expect(first.right <= second.left || second.right <= first.left || first.bottom <= second.top || second.bottom <= first.top).toBe(true);
+    }
+  }
   await page.screenshot({ path: "test-results/job-list-desktop.png", fullPage: true });
 
   await page.getByRole("combobox", { name: "仓库" }).click();
   await page.getByRole("option", { name: "验收任务项目" }).click();
-  await page.getByLabel("MR IID").fill("27");
+  await page.locator(".task-command-grid").getByLabel("MR IID").fill("27");
   await page.getByRole("button", { name: "补触发 MR", exact: true }).click();
   await expect(page.getByText("MR !27：已加入队列")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
