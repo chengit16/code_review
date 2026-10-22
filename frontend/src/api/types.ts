@@ -256,6 +256,8 @@ export interface ReviewJobDetail extends ReviewJob {
   feedback: Record<number, "helpful" | "false_positive" | "fixed">;
   /** 当前尝试中每条发现关联的跨评审问题。 */
   issue_ids: Record<number, number>;
+  /** 关联问题的持久化处理状态，不由反馈标记推断。 */
+  issue_statuses?: Record<number, "open" | "fixed" | "ignored" | "merged">;
   changed_files?: string | null;
   attempt_history: Array<{
     id: number;

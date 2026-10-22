@@ -43,7 +43,7 @@ def finish_with_finding(store: Store, repository_id: int, mr_iid: int,
 def test_issue_lifecycle_tracks_occurrences_without_inferred_fix(
     client: TestClient, settings: Settings,
 ) -> None:
-    """相同开放问题跨 MR 复用；反馈和后续结果不能自动关闭旧问题。"""
+    """相同开放问题跨 MR 复用；认可反馈和后续结果不推断修复。"""
 
     repository_id = create_repository(client)
     store = Store(settings.data_dir / "app.db")
@@ -56,7 +56,7 @@ def test_issue_lifecycle_tracks_occurrences_without_inferred_fix(
     assert client.get(f"/api/jobs/{second}", headers=ADMIN).json()["issue_ids"] == {
         "0": issue_id}
     assert client.put(f"/api/jobs/{first}/feedback/0", headers=ADMIN,
-                      json={"verdict": "fixed"}).status_code == 200
+                      json={"verdict": "helpful"}).status_code == 200
     assert client.get(f"/api/review-issues/{issue_id}", headers=ADMIN).json()[
         "status"] == "open"
     assert client.patch(f"/api/review-issues/{issue_id}", json={"status": "fixed"}

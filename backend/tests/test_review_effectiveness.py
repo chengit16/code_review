@@ -44,7 +44,7 @@ def _finding(store: Store, repository_id: int, mr_iid: int, category: str) -> in
 def test_effectiveness_separates_generated_published_and_feedback(
     client: TestClient, settings: Settings,
 ) -> None:
-    """GitLab 成功发布不由生成数推断；误报只占人工反馈的分母。"""
+    """GitLab 发布与反馈分别统计；误报关闭跟进但不计入修复。"""
 
     first = _repository(client, "first", 41)
     second = _repository(client, "second", 42)
@@ -67,7 +67,8 @@ def test_effectiveness_separates_generated_published_and_feedback(
             ("generated", "published", "feedback_marked", "false_positive")} == {
                 "generated": 2, "published": 1, "feedback_marked": 2, "false_positive": 1}
     assert data["categories"] == [{"category": "security", "generated": 2,
-                                    "issues": 2, "open_issues": 2}]
+                                    "issues": 2, "open_issues": 1}]
+    assert data["summary"]["ignored"] == 1 and data["summary"]["fixed"] == 0
     assert len(data["projects"]) == 1 and data["projects"][0]["id"] == first
     assert client.get("/api/review-effectiveness", headers=ADMIN).json()[
         "summary"]["generated"] == 3

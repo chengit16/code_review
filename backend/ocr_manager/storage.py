@@ -16,6 +16,7 @@ from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.auth import AUTH_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
+from ocr_manager.feedback_issues import sync_feedback_issue
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
@@ -810,15 +811,17 @@ class Store:
                 GROUP BY r.id ORDER BY r.name, r.id"""
             )]
 
-    def set_review_feedback(self, job_id: int, comment_index: int, verdict: str) -> None:
-        """仅允许对终态任务中真实存在的发现反馈；同一发现可修改结论。"""
+    def set_review_feedback(
+        self, job_id: int, comment_index: int, verdict: str, actor: str = "系统",
+    ) -> None:
+        """终态发现反馈与关联问题处理同事务提交；操作者由管理接口可信身份提供。"""
 
         if verdict not in {"helpful", "false_positive", "fixed"}:
             raise ValueError("反馈类型无效")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT status, result_json FROM review_jobs WHERE id=?", (job_id,)
+                "SELECT status, result_json, attempts FROM review_jobs WHERE id=?", (job_id,)
             ).fetchone()
             if row is None:
                 raise LookupError("任务不存在")
@@ -838,15 +841,23 @@ class Store:
                 verdict=excluded.verdict, updated_at=CURRENT_TIMESTAMP""",
                 (job_id, comment_index, verdict),
             )
+            sync_feedback_issue(db, job_id, row["attempts"], comment_index, verdict, actor)
 
-    def clear_review_feedback(self, job_id: int, comment_index: int) -> bool:
-        """撤销人工标记，恢复该发现的未反馈状态。"""
+    def clear_review_feedback(
+        self, job_id: int, comment_index: int, actor: str = "系统",
+    ) -> bool:
+        """撤销反馈及本卡片的关闭决定；其他入口的后续处理不会被重新打开。"""
 
         with self.connection() as db:
-            return db.execute(
+            db.execute("BEGIN IMMEDIATE")
+            deleted = db.execute(
                 "DELETE FROM review_feedback WHERE job_id=? AND comment_index=?",
                 (job_id, comment_index),
             ).rowcount == 1
+            row = db.execute("SELECT attempts FROM review_jobs WHERE id=?", (job_id,)).fetchone()
+            if deleted and row is not None:
+                sync_feedback_issue(db, job_id, row["attempts"], comment_index, None, actor)
+            return deleted
 
     def record_webhook(self, repository_id: int) -> None:
         """合法鉴权投递可用于判断 GitLab 回调连接是否仍在工作。"""
@@ -1425,11 +1436,16 @@ class Store:
             result["publications"] = [dict(item) for item in db.execute(
                 "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
                 (job_id,))]
+            issues = db.execute("""SELECT o.comment_index,o.issue_id,i.status
+                FROM review_issue_occurrences o JOIN review_issues i ON i.id=o.issue_id
+                WHERE o.job_id=? AND o.attempt_number=?""",
+                (job_id, result["attempts"])).fetchall()
             result["issue_ids"] = {
                 int(row["comment_index"]): int(row["issue_id"])
-                for row in db.execute("""SELECT comment_index,issue_id
-                    FROM review_issue_occurrences WHERE job_id=? AND attempt_number=?""",
-                    (job_id, result["attempts"]))
+                for row in issues
+            }
+            result["issue_statuses"] = {
+                int(row["comment_index"]): str(row["status"]) for row in issues
             }
             return result
 

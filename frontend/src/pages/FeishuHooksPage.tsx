@@ -21,7 +21,11 @@ interface TargetForm {
 
 const emptyForm: TargetForm = { name: "", webhookUrl: "", signingSecret: "", clearSigning: false };
 
-export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
+/** 维护通知通道及连接测试；服务端负责配置写入权限校验。 */
+export function FeishuHooksPage({ token, embedded = false }: {
+  /** 内存中的管理口令。 */ token: string;
+  /** 嵌入系统设置时使用二级标题和内容布局。 */ embedded?: boolean;
+}) {
   const queryClient = useQueryClient();
   const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
@@ -87,8 +91,8 @@ export function FeishuHooksPage({ token }: { /** 内存中的管理口令。 */ 
     ? repositories.data?.find((repository) => repository.feishu_target_id === editing.id)
     : undefined;
 
-  return <div className="page">
-    <PageHeader title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
+  return <div className={embedded ? "settings-content" : "page"}>
+    <PageHeader headingLevel={embedded ? 2 : 1} title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
     <QueryState loading={targets.isLoading} error={targets.error} />

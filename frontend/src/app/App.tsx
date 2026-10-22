@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, BarChart3, Bot, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
+import { Activity, GitPullRequest, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
@@ -13,12 +13,9 @@ import { OverviewPage } from "../pages/OverviewPage";
 import { OperationsPage } from "../pages/OperationsPage";
 import { PremergePage } from "../pages/PremergePage";
 import { RepositoriesPage } from "../pages/RepositoriesPage";
-import { ReviewRulesPage } from "../pages/ReviewRulesPage";
 import { ReviewIssuesPage } from "../pages/ReviewIssuesPage";
-import { ReviewEffectivenessPage } from "../pages/ReviewEffectivenessPage";
-import { SettingsPage } from "../pages/SettingsPage";
+import { SystemSettingsPage } from "../pages/SystemSettingsPage";
 import { UsersPage } from "../pages/UsersPage";
-import { FeishuHooksPage } from "../pages/FeishuHooksPage";
 import { apiRequest } from "../api/client";
 import type { Health } from "../api/types";
 
@@ -27,16 +24,11 @@ const navigation = [
     { to: "/", label: "运行概览", icon: LayoutDashboard, end: true },
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
-    { to: "/effectiveness", label: "评审效果", icon: BarChart3 },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
-    { to: "/operations", label: "运行监控", icon: Activity },
   ] },
   { heading: "接入配置", links: [
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
-    { to: "/feishu", label: "飞书配置", icon: MessageSquare },
-    { to: "/settings", label: "Agent 模型", icon: Bot },
-    { to: "/review-rules", label: "审核规则", icon: ListChecks },
-    { to: "/config-history", label: "配置历史", icon: History },
+    { to: "/settings", label: "系统设置", icon: Settings2 },
     { to: "/users", label: "访问权限", icon: Users },
   ] },
 ];
@@ -99,7 +91,7 @@ function Workspace({ token, role, username, onLogout }: {
           <nav aria-label="主导航">
             {navigation.filter((group) => role === "admin" || group.heading === "工作台").map((group) => <div className="nav-group" key={group.heading}>
               <div className="nav-caption">{group.heading}</div>
-              {group.links.filter((link) => role === "admin" || link.to !== "/operations").map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} title={label} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
+              {group.links.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} title={label} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
                 <Icon size={18} aria-hidden="true" /><span>{label}</span>
               </NavLink>)}
             </div>)}
@@ -114,16 +106,16 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/" element={<OverviewPage token={token} />} />
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
-            <Route path="/feishu" element={role === "admin" ? <FeishuHooksPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/feishu" element={role === "admin" ? <Navigate to="/settings?tab=feishu" replace /> : <Navigate to="/" replace />} />
             <Route path="/events" element={<Navigate to="/jobs" replace />} />
             <Route path="/jobs" element={<JobsPage token={token} canEdit={role === "admin"} />} />
             <Route path="/issues" element={<ReviewIssuesPage token={token} canEdit={role === "admin"} />} />
-            <Route path="/effectiveness" element={<ReviewEffectivenessPage token={token} />} />
+            <Route path="/effectiveness" element={<Navigate to={{ pathname: "/", search: location.search }} replace />} />
             <Route path="/premerge" element={<PremergePage token={token} />} />
             <Route path="/jobs/:id" element={<JobDetailPage token={token} canEdit={role === "admin"} />} />
             <Route path="/operations" element={role === "admin" ? <OperationsPage token={token} /> : <Navigate to="/" replace />} />
-            <Route path="/settings" element={role === "admin" ? <SettingsPage token={token} /> : <Navigate to="/" replace />} />
-            <Route path="/review-rules" element={role === "admin" ? <ReviewRulesPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/settings" element={role === "admin" ? <SystemSettingsPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/review-rules" element={role === "admin" ? <Navigate to="/settings?tab=rules" replace /> : <Navigate to="/" replace />} />
             <Route path="/config-history" element={role === "admin" ? <ConfigHistoryPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/users" element={role === "admin" ? <UsersPage token={token} /> : <Navigate to="/" replace />} />
           </Routes>

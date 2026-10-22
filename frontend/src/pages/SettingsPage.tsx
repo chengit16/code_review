@@ -27,7 +27,11 @@ interface ModelForm {
 
 const initial: ModelForm = { name: "", provider: "dashscope", model: "", base_url: "", api_key: "", price_currency: "CNY", input_price_per_million: "", output_price_per_million: "" };
 
-export function SettingsPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
+/** 维护模型配置、连接测试与操作审计；密钥仅保留在当前编辑表单。 */
+export function SettingsPage({ token, embedded = false }: {
+  /** 内存中的管理口令。 */ token: string;
+  /** 嵌入系统设置时省略独立页面留白；服务端仍负责授权。 */ embedded?: boolean;
+}) {
   const queryClient = useQueryClient();
   const profiles = useQuery({ queryKey: ["model-profiles"], queryFn: () => apiRequest<ModelConfiguration[]>(token, "/api/model-profiles") });
   const [auditPage, setAuditPage] = useState(1);
@@ -75,8 +79,8 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
   }
   const active = profiles.data?.find((profile) => profile.enabled);
   const auditPages = Math.max(1, Math.ceil((audit.data?.total ?? 0) / (audit.data?.page_size ?? 20)));
-  return <div className="page">
-    <PageHeader title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
+  return <div className={embedded ? "settings-content" : "page"}>
+    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />

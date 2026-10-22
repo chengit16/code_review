@@ -45,7 +45,11 @@ function JobDetail({ token, canEdit }: {
   const resend = useMutation({ mutationFn: () => apiRequest<unknown>(token, `/api/jobs/${id}/notification/retry`, { method: "POST" }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", id] }) });
   const feedback = useMutation({
     mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["review-feedback-summary"] }); },
+    onSuccess: async () => {
+      // 反馈可能关闭跨任务共享的问题，刷新所有详情、问题列表及成效统计。
+      await Promise.all(["job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness"].map((key) =>
+        queryClient.invalidateQueries({ queryKey: [key] })));
+    },
   });
   const job = query.data;
   const coverage = job?.result?.manifest?.coverage;
@@ -88,7 +92,7 @@ function JobDetail({ token, canEdit }: {
       {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
       {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><div className="table-scroll"><table><thead><tr><th>文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono file-path">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div></section>}
       <CoverageReasons job={job} />
-      <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />
+      <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} issueStatuses={job.issue_statuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />
       {canEdit && <GitLabPublications token={token} job={job} />}
       <div className="job-footer-grid">
         <section className="section delivery-card"><div className="section-head"><h2>飞书通知</h2></div><div className="delivery-summary"><Status value={job.delivery?.status ?? "未创建"} /><span>尝试 {job.delivery?.attempts ?? 0} 次</span>{job.delivery?.sent_at && <span>{formatTime(job.delivery.sent_at)}</span>}</div>{job.delivery?.error && <p className="form-error">{job.delivery.error}</p>}</section>

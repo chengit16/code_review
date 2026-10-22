@@ -1066,12 +1066,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/jobs/{job_id}/feedback/{comment_index}", dependencies=[admin])
     def put_review_feedback(
-        job_id: int, comment_index: int, payload: ReviewFeedbackInput
+        job_id: int, comment_index: int, payload: ReviewFeedbackInput, request: Request,
     ) -> dict[str, str]:
-        """仅接受已完成任务中实际存在的 OCR 评论序号。"""
+        """校验终态发现并同步问题处理；身份取自鉴权上下文而非请求体。"""
 
         try:
-            store.set_review_feedback(job_id, comment_index, payload.verdict)
+            store.set_review_feedback(
+                job_id, comment_index, payload.verdict, request.state.identity["username"],
+            )
         except LookupError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ValueError as error:
@@ -1079,10 +1081,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"verdict": payload.verdict}
 
     @app.delete("/api/jobs/{job_id}/feedback/{comment_index}", dependencies=[admin])
-    def delete_review_feedback(job_id: int, comment_index: int) -> dict[str, str]:
-        """撤销已有反馈；缺失记录明确返回 404。"""
+    def delete_review_feedback(
+        job_id: int, comment_index: int, request: Request,
+    ) -> dict[str, str]:
+        """撤销已有反馈及其拥有的问题处理；缺失记录明确返回 404。"""
 
-        if not store.clear_review_feedback(job_id, comment_index):
+        if not store.clear_review_feedback(
+            job_id, comment_index, request.state.identity["username"],
+        ):
             raise HTTPException(status_code=404, detail="反馈不存在")
         return {"status": "deleted"}
 

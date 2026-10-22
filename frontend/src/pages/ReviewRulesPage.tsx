@@ -17,7 +17,11 @@ import { ReviewFeedbackPanel } from "./ReviewFeedbackPanel";
 const emptyRule = (): ReviewRuleDocument => ({ include: [], exclude: [], rules: [] });
 const lines = (value: string) => value.split("\n").map((item) => item.trim()).filter(Boolean);
 
-export function ReviewRulesPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
+/** 编排规则编辑、预览和版本恢复；规则写入保护由服务端执行。 */
+export function ReviewRulesPage({ token, embedded = false }: {
+  /** 内存中的管理口令。 */ token: string;
+  /** 嵌入系统设置时使用二级标题和内容布局。 */ embedded?: boolean;
+}) {
   const queryClient = useQueryClient();
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const configurations = useQuery({ queryKey: ["review-rules"], queryFn: () => apiRequest<ReviewRuleConfiguration[]>(token, "/api/review-rules"), staleTime: Infinity });
@@ -95,7 +99,7 @@ export function ReviewRulesPage({ token }: { /** 内存中的管理口令。 */ 
     setScope(value);
   }
 
-  return <div className="page"><PageHeader title="审核规则" subtitle="Open Code Review 逐文件规则" />
+  return <div className={embedded ? "settings-content" : "page"}><PageHeader headingLevel={embedded ? 2 : 1} title="审核规则" subtitle="Open Code Review 逐文件规则" />
     <QueryState loading={repositories.isLoading || configurations.isLoading} error={repositories.error || configurations.error} />
     {!repositories.isLoading && !configurations.isLoading && !repositories.error && !configurations.error && <>
       <div className="rule-priority" aria-label="规则优先级"><strong>优先级</strong><span>项目页面规则</span><span>仓库 rule.json</span><span>全局页面规则</span><span>OCR 内置规则</span></div>

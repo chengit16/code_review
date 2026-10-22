@@ -8,7 +8,9 @@ import sqlite3
 from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from ocr_manager.review_issue_actions import IssueStatus, update_review_issues
 
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
@@ -157,6 +159,37 @@ class IssueMerge(BaseModel):
     target_id: int = Field(gt=0)
 
 
+class IssueBatchTarget(BaseModel):
+    """批量处理携带勾选时的状态快照，防止覆盖其他入口后续作出的决定。"""
+
+    model_config = ConfigDict(extra="forbid")
+    id: int = Field(gt=0, strict=True)
+    expected_status: IssueStatus
+
+
+class IssueBatchUpdate(IssueUpdate):
+    """仅接收显式勾选的问题，不按筛选条件扩展到其他页。"""
+
+    targets: list[IssueBatchTarget] = Field(min_length=1, max_length=100)
+
+    @field_validator("targets")
+    @classmethod
+    def unique_targets(cls, targets: list[IssueBatchTarget]) -> list[IssueBatchTarget]:
+        """重复编号视为无效输入，不重复计数或生成审计。"""
+
+        if len({target.id for target in targets}) != len(targets):
+            raise ValueError("问题编号不能重复")
+        return targets
+
+
+class IssueBatchResult(BaseModel):
+    """已提交事务的处理数量，不将相同状态的项重复计为变更。"""
+
+    status: IssueStatus
+    updated: int
+    unchanged: int
+
+
 def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
     """只提供管理查询和人工状态修改；HTTP 请求不调用 OCR 或 GitLab。"""
 
@@ -184,6 +217,23 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
         return {"items": [dict(row) for row in rows], "total": total,
                 "page": page, "page_size": page_size}
 
+    @app.post("/api/review-issues/batch-update", dependencies=[admin],
+              response_model=IssueBatchResult)
+    def batch_update_issues(payload: IssueBatchUpdate, request: Request) -> IssueBatchResult:
+        """管理员批量确认处理；任一目标缺失或冲突时整批不更新。"""
+
+        try:
+            result = update_review_issues(
+                store, [(target.id, target.expected_status) for target in payload.targets],
+                payload.status, request.state.identity["username"], payload.note,
+            )
+        except LookupError as error:
+            raise HTTPException(404, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+        return IssueBatchResult(status=payload.status, updated=result["updated"],
+                                unchanged=result["unchanged"])
+
     @app.get("/api/review-issues/{issue_id}", dependencies=[admin])
     def issue_detail(issue_id: int) -> dict[str, Any]:
         """返回原始出现位置和人工决策历史，便于跨 MR 核查。"""
@@ -204,23 +254,13 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
     def update_issue(issue_id: int, payload: IssueUpdate, request: Request) -> dict[str, str]:
         """记录状态变化和操作者；重复保存不生成无意义事件。"""
 
-        with store.connection() as db:
-            db.execute("BEGIN IMMEDIATE")
-            issue = db.execute(
-                "SELECT status FROM review_issues WHERE id=?", (issue_id,)
-            ).fetchone()
-            if issue is None:
-                raise HTTPException(404, "问题不存在")
-            if issue["status"] == "merged":
-                raise HTTPException(409, "已合并的问题不能修改状态")
-            if issue["status"] != payload.status:
-                db.execute("""UPDATE review_issues SET status=?,
-                    closed_at=CASE WHEN ?='open' THEN NULL ELSE CURRENT_TIMESTAMP END
-                    WHERE id=?""", (payload.status, payload.status, issue_id))
-                actor = request.state.identity["username"]
-                db.execute("""INSERT INTO review_issue_events
-                    (issue_id,old_status,new_status,actor,note) VALUES(?,?,?,?,?)""",
-                    (issue_id, issue["status"], payload.status, actor, payload.note))
+        try:
+            update_review_issues(store, [(issue_id, None)], payload.status,
+                                 request.state.identity["username"], payload.note)
+        except LookupError as error:
+            raise HTTPException(404, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
         return {"status": payload.status}
 
     @app.post("/api/review-issues/{issue_id}/merge", dependencies=[admin])

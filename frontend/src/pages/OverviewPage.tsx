@@ -10,6 +10,7 @@ import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
 import { formatTime, shortSha } from "../ui/format";
+import { ReviewEffectivenessSection } from "./ReviewEffectivenessSection";
 
 /** 展示当前队列压力和最近任务；数据始终以服务端状态为准。 */
 export function OverviewPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
@@ -32,11 +33,12 @@ export function OverviewPage({ token }: { /** 内存中的管理口令。 */ tok
       <div className="metric"><span>需要关注</span><strong>{exceptions}</strong><small>个评审任务</small></div>
       <div className="metric"><span>已完成评审</span><strong>{items.filter((item) => item.status === "complete").length}</strong><small>最近 200 个任务</small></div>
     </section>
-    <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
+  </>}
+  <ReviewEffectivenessSection token={token} />
+  {!loading && !error && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
       <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
         {items.slice(0, 8).map((job) => <tr key={job.id}><td data-label="任务">#{job.id}</td><td data-label="仓库">{repositories.data?.find((repo) => repo.id === job.repository_id)?.name ?? `仓库 #${job.repository_id}`}</td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="状态"><Status value={job.status} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td></tr>)}
         {items.length === 0 && <tr><td colSpan={6} className="empty-row">暂无评审任务</td></tr>}
       </tbody></table></div>
-    </section>
-  </>}</div>;
+  </section>}</div>;
 }
