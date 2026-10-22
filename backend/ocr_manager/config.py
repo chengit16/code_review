@@ -30,6 +30,9 @@ class Settings:
     management_url: str = ""
     ocr_max_files: int = 0
     ocr_max_tokens_budget: int = 0
+    ocr_concurrency: int = 4
+    ocr_effort: str = "low"
+    review_language: str = "zh-CN"
 
     @property
     def webhook_base_url(self) -> str:
@@ -44,14 +47,18 @@ class Settings:
         return self.management_url or self.public_url
 
 
-def validate_service_url(value: str, name: str) -> str:
+def validate_service_url(value: str, name: str, allow_insecure_http: bool = False) -> str:
     """进程级地址只接受无凭据、无查询参数的 HTTPS 或本机 HTTP 地址。"""
 
     parsed = urlparse(value)
     if (
         not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
         or parsed.scheme not in {"http", "https"}
-        or parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or (
+            parsed.scheme == "http"
+            and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+            and not allow_insecure_http
+        )
     ):
         raise RuntimeError(f"{name} 必须是无凭据的 HTTPS 或本机 HTTP 地址")
     return value.rstrip("/")
@@ -84,6 +91,10 @@ def load_settings() -> Settings:
     if dev_mode_value not in {"0", "1", "false", "true", "no", "yes"}:
         raise RuntimeError("OCR_APP_DEV_MODE 必须是 0/1、true/false 或 yes/no")
     dev_mode = dev_mode_value in {"1", "true", "yes"}
+    allow_insecure_http_value = setting("OCR_APP_ALLOW_INSECURE_HTTP", "0").strip().lower()
+    if allow_insecure_http_value not in {"0", "1", "false", "true", "no", "yes"}:
+        raise RuntimeError("OCR_APP_ALLOW_INSECURE_HTTP 必须是 0/1、true/false 或 yes/no")
+    allow_insecure_http = allow_insecure_http_value in {"1", "true", "yes"}
     admin_token = setting("OCR_APP_ADMIN_TOKEN")
     master_key = setting("OCR_APP_MASTER_KEY")
     if not master_key:
@@ -91,11 +102,32 @@ def load_settings() -> Settings:
     if not dev_mode and not admin_token:
         raise RuntimeError("非开发模式必须配置 OCR_APP_ADMIN_TOKEN")
     legacy_url = setting("OCR_APP_PUBLIC_URL", "http://127.0.0.1:8781")
-    webhook_url = validate_service_url(setting("OCR_APP_WEBHOOK_URL", legacy_url),
-                                       "OCR_APP_WEBHOOK_URL")
-    management_url = validate_service_url(
-        setting("OCR_APP_MANAGEMENT_URL", "http://127.0.0.1:8781"), "OCR_APP_MANAGEMENT_URL"
+    webhook_url = validate_service_url(
+        setting("OCR_APP_WEBHOOK_URL", legacy_url),
+        "OCR_APP_WEBHOOK_URL",
+        allow_insecure_http,
     )
+    management_url = validate_service_url(
+        setting("OCR_APP_MANAGEMENT_URL", "http://127.0.0.1:8781"),
+        "OCR_APP_MANAGEMENT_URL",
+        allow_insecure_http,
+    )
+    review_language = setting("OCR_APP_REVIEW_LANGUAGE", "zh-CN").strip()
+    if (
+        not review_language
+        or len(review_language) > 50
+        or any(ord(character) < 32 for character in review_language)
+    ):
+        raise RuntimeError("OCR_APP_REVIEW_LANGUAGE 必须是有效的语言名称或区域代码")
+    try:
+        ocr_concurrency = int(setting("OCR_APP_OCR_CONCURRENCY", "4"))
+    except ValueError as error:
+        raise RuntimeError("OCR_APP_OCR_CONCURRENCY 必须是整数") from error
+    if not 1 <= ocr_concurrency <= 32:
+        raise RuntimeError("OCR_APP_OCR_CONCURRENCY 必须在 1 到 32 之间")
+    ocr_effort = setting("OCR_APP_OCR_EFFORT", "low").strip().lower()
+    if ocr_effort not in {"low", "medium", "high"}:
+        raise RuntimeError("OCR_APP_OCR_EFFORT 必须是 low、medium 或 high")
     return Settings(
         data_dir=Path(setting("OCR_APP_DATA_DIR", ".local-data")).resolve(),
         admin_token=admin_token,
@@ -112,4 +144,7 @@ def load_settings() -> Settings:
         ocr_base_url="",
         webhook_url=webhook_url,
         management_url=management_url,
+        ocr_concurrency=ocr_concurrency,
+        ocr_effort=ocr_effort,
+        review_language=review_language,
     )

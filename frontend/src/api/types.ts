@@ -165,13 +165,14 @@ export interface WebhookDiagnostic {
   created_at: string;
 }
 
-/** 逐提交评审任务列表数据。 */
+/** 单提交或 Push 范围评审任务列表数据。 */
 export interface ReviewJob {
   id: number;
   repository_id: number;
   event_id: number;
   mr_iid: number;
   commit_sha: string;
+  base_sha?: string | null;
   ordinal: number;
   status: string;
   error: string | null;
@@ -181,6 +182,14 @@ export interface ReviewJob {
   target_branch?: string;
   repository_name?: string;
   failure_stage?: string | null;
+  started_at?: string | null;
+  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } | null;
+  estimated_cost?: {
+    currency: "CNY" | "USD";
+    input: string;
+    output: string;
+    total: string;
+  } | null;
 }
 
 /** 服务端筛选后的任务总量与单页结果，不受旧版最近 200 条限制。 */
@@ -297,4 +306,12 @@ export interface AuditEntry {
   object_id: number | null;
   outcome: string;
   created_at: string;
+}
+
+/** 管理操作分页结果；审计内容不包含请求体或密钥。 */
+export interface AuditPage {
+  items: AuditEntry[];
+  total: number;
+  page: number;
+  page_size: number;
 }

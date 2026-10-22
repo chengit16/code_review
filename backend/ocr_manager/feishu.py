@@ -188,9 +188,11 @@ def build_review_card(job: dict[str, Any]) -> dict[str, Any]:
     header = " · ".join((title, *severity_counts))
     repository = str(job.get("path_with_namespace") or job["repository_name"])
     source = f"MR !{job['mr_iid']}" if job["mr_iid"] > 0 else "默认分支 Push"
+    author = " ".join(str(job.get("commit_author") or "").split())[:80]
+    author_text = f" · 提交人：{author}" if author else ""
     metadata = (
         f"{repository[:100]} · {job['target_branch']} · SHA {str(job['commit_sha'])[:10]}\n"
-        f"{source} · 任务 #{job['job_id']}"
+        f"{source}{author_text} · 任务 #{job['job_id']}"
     )
     elements: list[dict[str, Any]] = [
         _plain_section(metadata),

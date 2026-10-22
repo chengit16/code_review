@@ -3,10 +3,11 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
-export function Modal({ titleId, onClose, children }: {
+export function Modal({ titleId, onClose, children, className = "" }: {
   titleId: string;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -53,5 +54,5 @@ export function Modal({ titleId, onClose, children }: {
     };
   }, []);
 
-  return <div className="modal-backdrop" role="presentation"><div ref={dialog} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>{children}</div></div>;
+  return <div className="modal-backdrop" role="presentation"><div ref={dialog} className={["modal", className].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>{children}</div></div>;
 }

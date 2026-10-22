@@ -1,4 +1,4 @@
-"""消费 SQLite 中的合并事件、逐提交评审任务及飞书投递。"""
+"""消费 SQLite 中的合并事件、评审任务及飞书投递。"""
 
 from __future__ import annotations
 
@@ -142,8 +142,11 @@ def configuration_snapshot(
             "model_version": model_version,
             "command": command_fingerprint,
             "timeout_seconds": model_settings.ocr_timeout_seconds,
+            "review_language": model_settings.review_language,
             "max_files": model_settings.ocr_max_files,
             "max_tokens_budget": model_settings.ocr_max_tokens_budget,
+            "concurrency": model_settings.ocr_concurrency,
+            "effort": model_settings.ocr_effort,
             "model_profile_id": profile_id,
             "pricing": pricing_snapshot(profile),
             "rule_digest": rule_digest,
@@ -181,7 +184,7 @@ def is_temporary(error: Exception) -> bool:
 
 
 def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> None:
-    """按最终合并方式建立可追溯的逐提交评审任务。"""
+    """MR 按最终合并方式展开提交，默认分支 Push 固定为单个范围任务。"""
 
     repository = store.get_repository(event["repository_id"])
     if repository is None:
@@ -200,18 +203,17 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
             repository["project_id"], repository["target_branch"], repository["remote_url"]
         )
         if event["mr_iid"] < 0:
-            # Push 不存在 MR；仅在 Git 确认快进范围后建立逐提交任务。
+            # Push 不存在 MR；固定起止提交后只评审一次净差异，避免嵌套合并重复消耗模型。
             git = GitRepository(settings.data_dir, repository)
             git.fetch()
-            commits = git.push_commits(event["squash_sha"], event["merge_sha"])
-            push_snapshots = {
-                sha: (
-                    config_hash(store, settings, git.rule_digest(sha), repository["id"]),
-                    git.rule_digest(sha),
-                )
-                for sha in commits
+            before_sha, after_sha = git.push_range(event["squash_sha"], event["merge_sha"])
+            digest = git.rule_digest(after_sha)
+            push_snapshot = {
+                after_sha: (config_hash(store, settings, digest, repository["id"]), digest)
             }
-            store.finish_event(event["id"], commits, push_snapshots, None)
+            store.finish_event(
+                event["id"], [after_sha], push_snapshot, None, base_sha=before_sha
+            )
             return
         mr = gitlab.get_merge_request(repository["project_id"], event["mr_iid"])
         if (
@@ -290,12 +292,23 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         git.fetch()
         if cancellation_requested(store, job["id"]):
             raise ReviewCancelled("用户请求停止评审")
+        base_sha = job.get("base_sha")
         if not git.is_on_target(job["commit_sha"]):
             raise ValueError("待评审提交不再属于目标分支")
+        if base_sha is not None and not git.is_range_base(base_sha, job["commit_sha"]):
+            raise ValueError("待评审 Push 范围不再有效")
         git.checkout(job["commit_sha"], checkout)
+        changed_files = (
+            git.range_changed_files(base_sha, job["commit_sha"])
+            if base_sha is not None
+            else git.changed_files(job["commit_sha"])
+        )
+        commit_author = git.commit_author(job["commit_sha"])
         with store.connection() as db:
-            db.execute("UPDATE review_jobs SET changed_files=? WHERE id=?",
-                       (json.dumps(git.changed_files(job["commit_sha"])), job["id"]))
+            db.execute(
+                "UPDATE review_jobs SET changed_files=?, commit_author=? WHERE id=?",
+                (json.dumps(changed_files), commit_author, job["id"]),
+            )
         model_settings, _ = review_settings(store, settings, job["repository_id"])
         set_job_stage(store, job["id"], "ocr_configuration")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
@@ -303,6 +316,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
                 model_settings, checkout, run_dir, job["commit_sha"],
                 store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
                 lambda stage: set_job_stage(store, job["id"], stage),
+                **({"base_sha": base_sha} if base_sha is not None else {}),
             )
             check_cancellation()
         store.finish_job(job["id"], status, str(run_dir / "result.json"), result, None)

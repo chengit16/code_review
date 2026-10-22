@@ -41,13 +41,23 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
             f"""SELECT j.id, j.repository_id, j.event_id, j.mr_iid, j.commit_sha,
             j.ordinal, j.target_branch, j.status, j.error, j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
+            j.usage_json, j.config_snapshot,
             r.name AS repository_name FROM review_jobs j
             JOIN repositories r ON r.id=j.repository_id{where}
             ORDER BY j.id DESC LIMIT ? OFFSET ?""",
             [*values, page_size, (page - 1) * page_size],
         )
-        return {"items": [dict(row) for row in rows], "total": total,
-                "page": page, "page_size": page_size}
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            raw_usage = item.pop("usage_json")
+            raw_snapshot = item.pop("config_snapshot")
+            usage = json.loads(raw_usage) if raw_usage else None
+            snapshot = json.loads(raw_snapshot) if raw_snapshot else None
+            item["usage"] = usage
+            item["estimated_cost"] = estimate_cost(usage, snapshot)
+            items.append(item)
+        return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 def job_neighbors(store: Store, job_id: int, filters: dict[str, Any]) -> dict[str, int | None]:

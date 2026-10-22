@@ -324,6 +324,8 @@ def test_schema_migrates_existing_v1_database(tmp_path: Path) -> None:
         assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         columns = {row["name"] for row in db.execute("PRAGMA table_info(review_jobs)")}
         assert "retry_start_attempts" in columns
+        assert "base_sha" in columns
+        assert "commit_author" in columns
 
 
 def test_failed_migration_rolls_back_ddl_and_version(
@@ -368,6 +370,25 @@ def test_changed_model_creates_new_job_snapshot(tmp_path: Path) -> None:
     assert store.get_job(first["id"])["status"] == "complete"
     assert store.get_job(new_id)["status"] == "queued"
     assert store.get_job(new_id)["rule_digest"] == "rule-blob"
+
+
+def test_changed_model_preserves_push_range(tmp_path: Path) -> None:
+    """按当前配置重审 Push 时，新任务必须沿用原始范围起点。"""
+
+    store, repository_id = make_store(tmp_path)
+    before, after = "a" * 40, "b" * 40
+    store.add_push_event(repository_id, before, after, "push-delivery")
+    event = store.next_event()
+    assert event is not None
+    store.finish_event(
+        event["id"], [after], {after: ("old", "rule-blob")}, None, base_sha=before
+    )
+    first = store.next_job()
+    assert first is not None
+    store.finish_job(first["id"], "complete", None, {}, None)
+    new_id = store.retry_job(first["id"], "new")
+    assert new_id is not None and new_id != first["id"]
+    assert store.get_job(new_id)["base_sha"] == before
 
 
 def test_job_detail_does_not_expose_raw_model_thinking(tmp_path: Path) -> None:

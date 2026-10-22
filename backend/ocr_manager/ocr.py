@@ -1,4 +1,4 @@
-"""运行固定版本的 OCR CLI 并判定逐提交评审的覆盖状态。"""
+"""运行固定版本的 OCR CLI 并判定单提交或范围评审的覆盖状态。"""
 
 from __future__ import annotations
 
@@ -73,6 +73,21 @@ def _prepare_custom_provider(
         if code:
             raise RuntimeError("OCR 自定义模型端点配置失败")
     return provider
+
+
+def _prepare_review_language(
+    settings: Settings, env: dict[str, str], home: Path, timeout: int
+) -> None:
+    """通过 OCR 官方配置接口固定模型输出语言。"""
+
+    code, _stderr = run_ocr_command(
+        [settings.ocr_command, "config", "set", "language", settings.review_language],
+        env,
+        home,
+        timeout,
+    )
+    if code:
+        raise RuntimeError("OCR 评审输出语言配置失败")
 
 
 def classify_result(result: dict[str, Any], commit_sha: str,
@@ -303,6 +318,7 @@ def run_review(
         global_dir.mkdir(exist_ok=True, mode=0o700)
         (global_dir / "rule.json").write_text(global_rule, encoding="utf-8")
     env = _ocr_environment(settings, isolated_home)
+    _prepare_review_language(settings, env, isolated_home, settings.ocr_timeout_seconds)
     provider = _prepare_custom_provider(settings, env, isolated_home, settings.ocr_timeout_seconds)
     base = [
         settings.ocr_command,
@@ -314,6 +330,10 @@ def run_review(
         "json",
         "--provider",
         provider,
+        "--concurrency",
+        str(settings.ocr_concurrency),
+        "--effort",
+        settings.ocr_effort,
     ]
     if settings.ocr_model:
         base.extend(["--model", settings.ocr_model])

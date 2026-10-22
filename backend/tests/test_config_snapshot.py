@@ -22,5 +22,14 @@ def test_config_hash_changes_for_rule_and_ocr_upgrade(settings: Settings, tmp_pa
     original = config_hash(store, config, "first-rule")
     assert original != config_hash(store, config, "second-rule")
     assert original != config_hash(store, replace(config, ocr_timeout_seconds=60), "first-rule")
+    assert original != config_hash(
+        store, replace(config, review_language="en-US"), "first-rule"
+    )
+    assert original != config_hash(
+        store, replace(config, ocr_concurrency=2), "first-rule"
+    )
+    assert original != config_hash(
+        store, replace(config, ocr_effort="medium"), "first-rule"
+    )
     command.write_text("#!/bin/sh\nexit 11\n", encoding="utf-8")
     assert original != config_hash(store, config, "first-rule")

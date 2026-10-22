@@ -51,26 +51,49 @@ function JobDetail({ token, canEdit }: {
   const coverage = job?.result?.manifest?.coverage;
   const comments = job?.result?.comments ?? [];
   const excluded = job?.result?.preview?.files.filter((file) => !file.will_review) ?? [];
-  return <div className="page"><JobNavigation token={token} id={Number(id)} back={back} /><PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
-    job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{canEdit && ["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending} onClick={() => retry.mutate()}><RotateCcw size={16} />重新评审</button></>}</>
-  } /><QueryState loading={query.isLoading} error={query.error} />{(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
-  {job && <><section className="detail-summary"><div><span>评审状态</span><Status value={job.status} /></div><div><span>尝试次数</span><strong>{job.attempts}</strong></div><div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div><div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div></section>
-    {canEdit && <TaskStop token={token} id={job.id} status={job.status} stopping={Boolean(job.cancel_requested)} />}
-    {canEdit && job.status === "cancelled" && <button className="button button-secondary" onClick={() => retry.mutate()} disabled={retry.isPending}><RotateCcw size={16} />重新评审</button>}
-    {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
-    {job.failure_stage && <p className="detail-line">{job.status === "running" ? "当前阶段" : "失败阶段"}：{({ configuration: "配置校验", git: "Git 拉取与提交准备", ocr_configuration: "OCR 模型配置", preview: "范围预览", review: "模型评审", validation: "结果校验" } as Record<string, string>)[job.failure_stage] ?? job.failure_stage}</p>}
-    <JobFiles job={job} />
-    <AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} />
-    <ModelUsage result={job.result} />
-    {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
-    {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
-    {job.error && <div className="detail-error" role="alert">{job.error}</div>}
-    <section className="section"><div className="section-head"><h2>覆盖情况</h2></div>{coverage ? <div className="coverage-grid"><div><strong>{coverage.selected.length}</strong><span>选中文件</span></div><div><strong>{coverage.completed.length + coverage.reused.length}</strong><span>完成 / 复用</span></div><div><strong>{coverage.failed.length}</strong><span>失败</span></div><div><strong>{coverage.waived.length}</strong><span>豁免</span></div></div> : <p className="empty-inline">尚无 OCR 覆盖结果</p>}</section>
-    {job.result?.preview && <section className="section"><div className="section-head"><h2>范围预览</h2><span>{job.result.preview.reviewable_count} 个可审查文件 · {excluded.length} 个排除文件</span></div>{excluded.length ? <div className="table-scroll"><table><thead><tr><th>排除文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div> : <p className="empty-inline">没有被排除的文件</p>}</section>}
-    <CoverageReasons job={job} />
-    <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />
-    <section className="section"><div className="section-head"><h2>飞书通知</h2></div><div className="detail-line"><Status value={job.delivery?.status ?? "未创建"} /><span>尝试 {job.delivery?.attempts ?? 0} 次</span><span>{job.delivery?.sent_at ? formatTime(job.delivery.sent_at) : ""}</span></div>{job.delivery?.error && <p className="form-error">{job.delivery.error}</p>}</section>
-    {canEdit && <GitLabPublications token={token} job={job} />}
-    <section className="section"><div className="section-head"><h2>执行记录</h2></div><div className="table-scroll"><table><thead><tr><th>次数</th><th>状态</th><th>结束时间</th><th>诊断</th></tr></thead><tbody>{job.attempt_history.map((attempt) => <tr key={attempt.id}><td>#{attempt.attempt_number}</td><td><Status value={attempt.status} /></td><td>{formatTime(attempt.finished_at)}</td><td className="diagnostic" title={attempt.error ?? ""}>{attempt.error ?? "—"}</td></tr>)}{job.attempt_history.length === 0 && <tr><td colSpan={4} className="empty-row">暂无执行记录</td></tr>}</tbody></table></div></section>
-  </>}</div>;
+  return <div className="page job-detail-page">
+    <JobNavigation token={token} id={Number(id)} back={back} />
+    <PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
+      job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{canEdit && ["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending} onClick={() => retry.mutate()}><RotateCcw size={16} />重新评审</button></>}</>
+    } />
+    <QueryState loading={query.isLoading} error={query.error} />
+    {(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
+    {job && <>
+      <section className="detail-summary job-summary-card">
+        <div><span>评审状态</span><Status value={job.status} /></div>
+        <div><span>尝试次数</span><strong>{job.attempts}</strong></div>
+        <div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div>
+        <div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div>
+      </section>
+      <div className="job-action-row">
+        <div className="job-state-actions">
+          {canEdit && <TaskStop token={token} id={job.id} status={job.status} stopping={Boolean(job.cancel_requested)} />}
+          {canEdit && job.status === "cancelled" && <button className="button button-secondary" onClick={() => retry.mutate()} disabled={retry.isPending}><RotateCcw size={16} />重新评审</button>}
+          {job.failure_stage && <p className="detail-line">{job.status === "running" ? "当前阶段" : "失败阶段"}：{({ configuration: "配置校验", git: "Git 拉取与提交准备", ocr_configuration: "OCR 模型配置", preview: "范围预览", review: "模型评审", validation: "结果校验" } as Record<string, string>)[job.failure_stage] ?? job.failure_stage}</p>}
+        </div>
+        {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
+      </div>
+      {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
+      {job.error && <div className="detail-error" role="alert">{job.error}</div>}
+      <JobFiles job={job} />
+      <AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} />
+      <div className="job-insight-grid">
+        <ModelUsage result={job.result} />
+        <section className="section detail-insight-card coverage-section">
+          <div className="section-head"><h2>覆盖情况</h2></div>
+          {coverage ? <div className="coverage-grid"><div><strong>{coverage.selected.length}</strong><span>选中文件</span></div><div><strong>{coverage.completed.length + coverage.reused.length}</strong><span>完成 / 复用</span></div><div><strong>{coverage.failed.length}</strong><span>失败</span></div><div><strong>{coverage.waived.length}</strong><span>豁免</span></div></div> : <p className="empty-inline">尚无 OCR 覆盖结果</p>}
+          {job.result?.preview && <p className="coverage-note">范围预览：{job.result.preview.reviewable_count} 个可审查文件，{excluded.length ? `排除 ${excluded.length} 个文件` : "没有排除文件"}</p>}
+        </section>
+      </div>
+      {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
+      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><div className="table-scroll"><table><thead><tr><th>文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono file-path">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div></section>}
+      <CoverageReasons job={job} />
+      <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />
+      {canEdit && <GitLabPublications token={token} job={job} />}
+      <div className="job-footer-grid">
+        <section className="section delivery-card"><div className="section-head"><h2>飞书通知</h2></div><div className="delivery-summary"><Status value={job.delivery?.status ?? "未创建"} /><span>尝试 {job.delivery?.attempts ?? 0} 次</span>{job.delivery?.sent_at && <span>{formatTime(job.delivery.sent_at)}</span>}</div>{job.delivery?.error && <p className="form-error">{job.delivery.error}</p>}</section>
+        <section className="section attempt-history-card"><div className="section-head"><h2>执行记录</h2><span>{job.attempt_history.length} 次</span></div><div className="table-scroll"><table><thead><tr><th>次数</th><th>状态</th><th>结束时间</th><th>诊断</th></tr></thead><tbody>{job.attempt_history.map((attempt) => <tr key={attempt.id}><td>#{attempt.attempt_number}</td><td><Status value={attempt.status} /></td><td>{formatTime(attempt.finished_at)}</td><td className="diagnostic" title={attempt.error ?? ""}>{attempt.error ?? "—"}</td></tr>)}{job.attempt_history.length === 0 && <tr><td colSpan={4} className="empty-row">暂无执行记录</td></tr>}</tbody></table></div></section>
+      </div>
+    </>}
+  </div>;
 }

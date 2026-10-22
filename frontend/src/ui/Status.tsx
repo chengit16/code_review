@@ -21,6 +21,8 @@ const labels: Record<string, string> = {
   duplicate: "重复投递",
   ignored: "已忽略",
   rejected: "已拒绝",
+  enabled: "已启用",
+  disabled: "已停用",
 };
 
 /** 对状态使用稳定尺寸和颜色，避免动态内容改变表格行高。 */

@@ -57,6 +57,8 @@ def main() -> None:
         store.finish_event(event["id"], commits, {sha: ("navigation", "") for sha in commits}, None)
         with store.connection() as db:
             db.execute("UPDATE review_jobs SET target_branch='develop' WHERE id IN (3, 5)")
+        for index in range(25):
+            store.record_audit("PATCH /api/test/{item_id}", "synthetic", index, "success")
         uvicorn.run(app, host="127.0.0.1", port=8791)
 
 

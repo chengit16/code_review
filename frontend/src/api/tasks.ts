@@ -3,9 +3,25 @@
 import { apiRequest } from "./client";
 import type { TaskPage } from "./types";
 
+/** 单个 MR 补触发请求的入队结果。 */
+export interface MrEnqueueResult {
+  /** MR IID。 */
+  id: number;
+  /** queued 表示已创建后台事件，其他状态表示重复或拒绝。 */
+  status: string;
+}
+
 /** 筛选和页码是查询键的一部分，取消离开的请求，防止旧结果覆盖新视图。 */
 export function searchTasks(token: string, params: URLSearchParams, signal?: AbortSignal) {
   return apiRequest<TaskPage>(token, `/api/task-search?${params}`, { signal });
+}
+
+/** 按仓库和 IID 补触发已合并 MR；请求只创建后台事件，不在页面请求内访问 GitLab。 */
+export function enqueueMergedMrs(token: string, repositoryId: string, ids: number[]) {
+  return apiRequest<MrEnqueueResult[]>(token, `/api/repositories/${repositoryId}/mrs/batch-enqueue`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
 }
 
 /** 按列表筛选获取邻项，页码不限制导航范围；仅返回编号且支持取消旧请求。 */

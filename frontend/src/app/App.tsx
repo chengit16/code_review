@@ -1,13 +1,12 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, BarChart3, Bot, GitMerge, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
+import { Activity, BarChart3, Bot, GitPullRequest, History, LayoutDashboard, ListChecks, LogOut, Menu, MessageSquare, RefreshCw, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { AccessScreen } from "./AccessScreen";
 import { ConfigHistoryPage } from "../pages/ConfigHistoryPage";
-import { EventsPage } from "../pages/EventsPage";
 import { JobsPage } from "../pages/JobsPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { OverviewPage } from "../pages/OverviewPage";
@@ -26,7 +25,6 @@ import type { Health } from "../api/types";
 const navigation = [
   { heading: "工作台", links: [
     { to: "/", label: "运行概览", icon: LayoutDashboard, end: true },
-    { to: "/events", label: "GitLab 事件", icon: GitMerge },
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
     { to: "/effectiveness", label: "评审效果", icon: BarChart3 },
@@ -117,7 +115,7 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
             <Route path="/feishu" element={role === "admin" ? <FeishuHooksPage token={token} /> : <Navigate to="/" replace />} />
-            <Route path="/events" element={<EventsPage token={token} canEdit={role === "admin"} />} />
+            <Route path="/events" element={<Navigate to="/jobs" replace />} />
             <Route path="/jobs" element={<JobsPage token={token} canEdit={role === "admin"} />} />
             <Route path="/issues" element={<ReviewIssuesPage token={token} canEdit={role === "admin"} />} />
             <Route path="/effectiveness" element={<ReviewEffectivenessPage token={token} />} />

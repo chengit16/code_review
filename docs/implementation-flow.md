@@ -6,19 +6,19 @@
 
 ## 1. 目标与边界
 
-系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并或默认分支快进 Push 后，通过项目 webhook 通知平台；平台确认提交范围，按提交 SHA 调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面管理 Agent 模型、项目及其 GitLab Webhook、飞书配置和评审任务。第一版不定时轮询 Git 仓库。
+系统部署在一台 Mac mini 上。GitLab 项目的 Merge Request 合并或默认分支快进 Push 后，通过项目 webhook 通知平台；平台确认评审范围，MR 按提交 SHA、默认分支 Push 按 `before..after` 净差异调用 Alibaba Open Code Review（以下简称 OCR），保存原始结果和覆盖情况，再向对应的飞书群发送摘要。管理员通过 Web 页面管理 Agent 模型、项目及其 GitLab Webhook、飞书配置和评审任务。第一版不定时轮询 Git 仓库。
 
 第一版按以下约束实施：
 
 | 项目 | 第一版决定 |
 | --- | --- |
 | 评审引擎 | OCR 默认模式，直接调用配置的 LLM；不调用 Codex。 |
-| 评审单位 | 单个 Git commit，调用 `ocr review --commit <sha>`。 |
+| 评审单位 | MR 使用单个 Git commit；默认分支一次 Push 使用固定的 `before..after` 范围。 |
 | 触发方式 | GitLab Merge Request 的 `merge` 事件和可选的默认分支快进 Push；页面支持按 MR 手动补触发和任务重跑。 |
 | 部署范围 | 单台 Mac mini、单管理员、多个仓库、多份模型配置且同一时间启用一份。 |
 | 通知方式 | 独立飞书群机器人配置可由多个仓库共享；一个仓库可关联一个通知目标。 |
 | 结果保留 | SQLite 保存索引和状态，文件系统保存 OCR 原始 JSON、预览结果及诊断日志。 |
-| 默认并发 | SQLite 持久化队列、单 Worker、同时只运行一个 OCR 任务；OCR 内部并发由 `--concurrency` 控制。 |
+| 默认并发 | SQLite 持久化队列、单 Worker、同时只运行一个 OCR 任务；单次 OCR 内部默认四路并发。 |
 
 第一版不实现自动修改代码、自动提交、向 Git 平台回写行内评论、多用户权限或对公网开放管理页。这些能力需要额外的权限、审计和产品规则，待基础链路稳定后再决定。
 
@@ -71,11 +71,11 @@ Mac mini 数据目录/
 | `MergeEvent` | 项目 ID、MR IID 或 Push 标识、投递 ID、目标分支、提交范围、接收时间、处理状态 | 持久化合并或 Push 事件及其处理证据。 |
 | `ModelProfile` | 配置名称、OCR provider、model、可选 Base URL、加密密钥、启用状态 | 可保存多份，同一时间只启用一份；不保存明文 API key。 |
 | `NotificationTarget` | 飞书配置名称、加密 webhook 与可选签名密钥 | 定义可共享消息去向；不保存明文 webhook。 |
-| `ReviewJob` | 仓库、MR IID、commit SHA、MR 内顺序、配置快照摘要、入队时间、下次可运行时间、评审状态、结果分类 | 一个需要评审的不可变输入；可从 MR 追溯。 |
+| `ReviewJob` | 仓库、MR IID、目标 commit SHA、提交人、可选 base SHA、MR 内顺序、配置快照摘要、入队时间、下次可运行时间、评审状态、结果分类 | 一个需要评审的不可变输入；可从 MR 或 Push 事件追溯。 |
 | `ReviewAttempt` | job、开始/结束时间、OCR 版本、退出码、工件路径、错误类别 | 记录每次尝试，保留失败证据。 |
 | `NotificationDelivery` | job、目标、发送状态、尝试次数、响应码、最后错误 | 通知失败可独立重试，不重新消费模型额度。 |
 
-webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-Key`；缺少投递 ID 时，MR 使用 `repository_id + mr_iid`，默认分支 Push 使用 `repository_id + after SHA` 去重。评审任务以 `repository_id + mr_iid + commit_sha + config_snapshot_hash` 去重：重复投递不重复评审，两个不同 MR 即使包含同一 SHA 也各自保留评审与通知关系。配置快照至少包含 OCR 版本、provider、model、项目规则文件内容摘要和评审参数。管理员点击“重新评审”时创建新的尝试并保留旧结果；按当前配置重新评审旧提交则形成新的任务快照。
+webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-Key`；缺少投递 ID 时，MR 使用 `repository_id + mr_iid`，默认分支 Push 使用 `repository_id + after SHA` 去重。MR 评审任务以 `repository_id + mr_iid + commit_sha + config_snapshot_hash` 去重；Push 任务额外持久化 `base_sha`，由事件的 `before` 和 `after` 唯一确定输入范围。重复投递不重复评审，两个不同 MR 即使包含同一 SHA 也各自保留评审与通知关系。配置快照至少包含 OCR 版本、provider、model、项目规则文件内容摘要和评审参数。管理员点击“重新评审”时创建新的尝试并保留旧结果；按当前配置重新评审旧输入则形成新的任务快照并保留原范围。
 
 评审状态建议为 `queued`、`running`、`complete`、`partial`、`failed`、`skipped`；飞书投递状态单独记录为 `pending`、`sending`、`sent`、`retryable_failure`、`permanent_failure`。这样“评审成功但飞书发送失败”不会被误认为需要重新评审。
 
@@ -94,7 +94,7 @@ webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-K
 
 1. 管理员填写项目数字 ID、命名空间、仓库名称、无凭据 HTTPS Clone URL、目标分支、项目访问令牌、MR 与默认分支 Push 开关，并可选择已保存的飞书通知配置。新项目使用每仓库独立 GitLab Token；部署环境不再提供全局项目令牌。
 2. 后端验证 Clone URL 与 GitLab 实例同源、命名空间一致并加密保存令牌。管理员在仓库设置页发起 Git 与 GitLab API 连接测试；测试请求先入 SQLite，由 Worker 验证目标分支的只读访问并初始化独立的本地仓库目录。HTTPS Git 通过临时 `GIT_ASKPASS` 使用令牌；命令参数和 Clone URL 不包含凭据。
-3. 项目配置页展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；GitLab 事件页提供按 MR IID 手动补触发入口。
+3. 项目配置页展示统一 HTTPS 回调 URL 和各仓库由服务端生成的 Secret；管理员主动查看或复制单个 Secret，列表查询不返回明文。最近一次通过鉴权的 webhook 投递时间用于核对接入状态。**默认不补审历史 MR**；评审任务页提供按 MR IID 手动补触发入口。
 4. 管理员可以对某个已合并 MR 手动试评审，核对提交范围、模型结果与飞书卡片。
 
 审核规则可在管理台按全局或项目范围配置。项目页面规则通过 OCR `--rule` 生效，优先于仓库版本化的 `.opencodereview/rule.json`；全局页面规则放入每次评审的隔离 HOME，低于仓库文件，高于内置规则。编辑器支持文件路径条目、`include`、`exclude` 与 `merge_system_rule`，并沿用 OCR 原生 `rule.json` 格式。有未完成评审任务时不能修改其适用规则，以保证入队配置快照。
@@ -123,11 +123,13 @@ webhook 投递按 `repository_id + webhook-id` 去重，也接受 `Idempotency-K
 | Squash merge | 若生成了 merge commit，评审该 merge commit 相对第一父提交的最终差异；否则评审 `squash_commit_sha`。不重复评审两者。 |
 | Fast-forward 且未 squash | 从 GitLab MR commits API 取得合并后的提交列表，逐个验证其属于目标分支并按拓扑顺序入队。 |
 
+默认分支 Push 不按其中的每个普通提交或 merge commit 分别建任务。Worker 验证 `before` 是 `after` 的祖先且 `after` 属于目标分支后，只建立一个任务，以 `before` 为 `base_sha`、`after` 为目标 SHA，调用 OCR 的 `--from/--to` 模式评审该次 Push 的最终净差异。空范围、首次建分支、删除分支和非快进改写均不进入自动评审。
+
 如果合并 SHA 缺失、提交不再可达、浅克隆缺失历史、MR API 与本地 Git 状态不一致，事件进入 `needs_attention`，保留原因并供管理员手动补触发；不能退化为“审查收到事件时的目标分支 HEAD”。第一版仍是逐提交 OCR：merge commit 相对第一父提交的 diff 可能与来源提交重复，页面和飞书均标明 MR 与提交类型，在试运行中评估重复成本。
 
 ### 4.5 多任务排队与并发
 
-多个 MR 在短时间内合并时，接收端仍只把每条 webhook 写入 `MergeEvent` 后响应。Worker 确认合并范围，将每个待审提交作为 `ReviewJob` 按 MR 内拓扑顺序持久化到 SQLite；`queued`、`running`、重试等待和终态都能在管理页查询。事件已入库但尚未展开任务时也显示在事件队列中，不因进程重启丢失。
+多个 MR 或 Push 在短时间内到达时，接收端仍只把每条 webhook 写入 `MergeEvent` 后响应。Worker 确认范围后，将 MR 的每个待审提交或 Push 的单个净差异作为 `ReviewJob` 持久化到 SQLite；`queued`、`running`、重试等待和终态都能在管理页查询。事件收件箱只作为后台持久化队列，不提供独立管理页面，也不会因进程重启丢失。
 
 第一版只有一个 Worker 实例，同时最多启动一个 OCR 子进程。领取时保持**同一仓库按事件接收顺序、同一 MR 按提交顺序**；不同仓库以轮转方式选择下一个可运行任务，避免某个仓库的连续合并长期占满队列。领取、状态变更和尝试记录在短事务中完成；运行 OCR 时不持有数据库事务。任务失败按错误类别设置有限重试和 `next_run_at`，等待期间可处理其他仓库；达到上限后进入可见失败状态。同一 MR 的后续提交等待前一个提交完成或最终失败，再继续执行。
 
@@ -137,8 +139,8 @@ OCR 结果确认后，飞书投递进入独立队列，发送失败只重试投�
 
 1. Worker 从队列领取最早的 `queued` 任务，写入尝试记录并设为 `running`。超时或进程异常退出后，启动恢复逻辑检查该尝试是否仍有活进程；无活进程则标记为可重试失败。
 2. 为目标 commit 创建隔离的只读审查目录，使工作区文件与目标 SHA 一致；关闭不需要的 Git hooks，并禁止执行被审查仓库的构建、测试及安装脚本。Git fetch 与任务执行使用不同锁，避免工作目录被并发修改。
-3. 运行 `ocr review --repo <dir> --commit <sha> --preview --format json`，保存预览文件。预览不调用 LLM。若没有可审查文件，任务进入 `skipped`，保留排除原因。
-4. 运行正式 `ocr review --repo <dir> --commit <sha> --format json --audience agent --output <run>/result.json`。仅在需要需求背景时传一个 `--background` 或 `--background-file`；当前 OCR 实现两者同时传入时会忽略前者。
+3. MR 任务运行 `ocr review --repo <dir> --commit <sha> --preview --format json`；Push 任务改用 `--from <base-sha> --to <head-sha>`。保存预览文件且不调用 LLM。若没有可审查文件，任务进入 `skipped`，保留排除原因。
+4. 正式评审沿用同一单提交或范围参数，并增加 `--audience agent --output <run>/result.json`。仅在需要需求背景时传一个 `--background` 或 `--background-file`；当前 OCR 实现两者同时传入时会忽略前者。
 5. 给 OCR 进程设置整体运行截止时间，同时配置 OCR 的每组子任务超时和内部并发。超时后先请求终止，仍未退出再强制结束；保留 stderr 和部分工件。
 6. 解析 JSON、校验结果，将结论及发现写入数据库，再生成一个待发送的飞书投递任务。清理隔离目录时保留 JSON 与诊断日志。
 
@@ -149,7 +151,12 @@ ocr review --repo "$REPO_DIR" --commit "$COMMIT_SHA" \
   --preview --format json --output "$RUN_DIR/preview.json"
 
 ocr review --repo "$REPO_DIR" --commit "$COMMIT_SHA" \
-  --format json --audience agent --output "$RUN_DIR/result.json"
+  --format json --audience agent --concurrency 4 --effort low \
+  --output "$RUN_DIR/result.json"
+
+ocr review --repo "$REPO_DIR" --from "$BEFORE_SHA" --to "$AFTER_SHA" \
+  --format json --audience agent --concurrency 4 --effort low \
+  --output "$RUN_DIR/result.json"
 ```
 
 ### 4.7 判定评审结果
@@ -169,7 +176,7 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 
 ### 4.8 飞书投递
 
-1. Worker 根据 `NotificationTarget` 生成一张摘要卡片：仓库、目标分支、MR 链接、commit 短 SHA 与链接、评审状态、完成/失败/跳过文件数、严重性计数、最多三条重点发现，以及管理页详情链接。
+1. Worker 根据 `NotificationTarget` 生成一张摘要卡片：仓库、目标分支、MR 链接、commit 短 SHA 与链接、提交人、评审状态、完成/失败/跳过文件数、严重性计数、最多三条重点发现，以及管理页详情链接。
 2. 默认把 `critical`、`high`、`medium` 发现放入卡片；`low` 仍保存在管理页。无发现、`partial` 和 `failed` 应使用不同的状态文案。
 3. 对自定义机器人 webhook 发送 JSON，检查 HTTP 状态及响应体 `code == 0` 后标记 `sent`。在发送前按飞书当前接口限制校验消息大小与卡片结构；超限时缩短发现列表，详细评论始终保留在管理页。
 4. 网络错误、限流或临时服务异常采用指数退避重试；配置错误、无权限等持久错误进入 `permanent_failure`，供页面处理。OCR 结果不因通知失败而重新运行。
@@ -182,13 +189,12 @@ OCR 的退出码只能说明命令执行情况，不能单独证明所有文件�
 
 | 页面 | 必要信息 | 主要操作 |
 | --- | --- | --- |
-| 概览 | 已接入仓库数、事件与任务积压、各仓库排队数、最近投递与评审失败、模型和飞书连接状态 | 进入异常事件、任务或仓库。 |
+| 概览 | 已接入仓库数、任务积压、最近评审失败和 Worker 状态 | 进入任务或仓库。 |
 | 项目配置 | GitLab 项目 ID、命名空间、Clone URL、目标分支、飞书关联、Webhook 回调与 Secret、事件开关、启停状态 | 添加、编辑、删除、测试 Git 和 GitLab API，查看或轮换 Webhook Secret。 |
 | 飞书配置 | 通道名称、签名状态和关联项目 | 添加、编辑、删除并发送测试消息。 |
 | Agent 模型 | OCR provider、模型、Base URL、启用状态 | 添加、编辑、启用、删除和测试模型。 |
 | 审核规则 | 全局及项目范围的路径规则、纳入和排除模式、OCR 内置规则合并选项 | 保存、编辑、删除规则配置。 |
-| 合并事件 | MR、合并方式、接收时间、处理状态、关联任务 | 筛选、查看失败原因、按 MR 补触发。 |
-| 评审任务 | 状态、提交、覆盖、发现数、耗时、模型、通知状态 | 筛选、查看、重跑、重发通知。 |
+| 评审任务 | 状态、提交、覆盖、发现数、耗时、消费、模型、通知状态 | 筛选、按 MR 补触发、查看、重跑、重发通知。 |
 | 任务详情 | 提交信息、预览文件、发现列表、覆盖明细、尝试记录、日志摘要 | 按严重性/文件筛选，打开 Git 提交链接。 |
 
 API 由管理服务提供，前端只访问本服务。配置资源使用 `/api/repositories`、`/api/model-profiles`、`/api/notification-targets`，业务记录使用 `/api/events` 和 `/api/jobs`；新项目的 GitLab 回调统一使用 `POST /api/webhooks/gitlab`。执行型管理接口提供按 MR 补触发、手动重审、重发通知和连接测试。所有修改配置及触发任务的动作写入审计日志，记录时间、动作、对象和结果，不记录密钥。
@@ -226,7 +232,7 @@ API 由管理服务提供，前端只访问本服务。配置资源使用 `/api/
 
 ### 阶段三：管理页面
 
-- 实现项目配置、飞书 Hook、Agent 模型、合并事件、任务和详情页面，加入连接测试、按 MR 补触发、重跑与重发入口；项目与通知配置允许分开保存。
+- 实现项目配置、飞书 Hook、Agent 模型、任务和详情页面，加入连接测试、按 MR 补触发、重跑与重发入口；项目与通知配置允许分开保存。
 - 验收：管理员无需查看服务器日志即可定位失败原因、核对覆盖情况和执行恢复操作。
 
 ### 阶段四：多仓库试运行

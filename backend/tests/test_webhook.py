@@ -138,7 +138,10 @@ def test_generated_secret_token_can_be_revealed_and_used(
     store = Store(settings.data_dir / "app.db")
     assert token not in store.get_repository(repository_id)["webhook_secret"]
     audit = client.get("/api/audit-logs", headers=admin)
-    assert audit.json()[0]["action"] == "GET /api/repositories/{repository_id}/webhook-token"
+    assert (
+        audit.json()["items"][0]["action"]
+        == "GET /api/repositories/{repository_id}/webhook-token"
+    )
     assert token not in audit.text
 
     response = client.post(
@@ -574,10 +577,18 @@ def test_audit_records_management_outcomes_without_secrets(client: TestClient) -
     )
     audit = client.get("/api/audit-logs", headers=admin)
     assert audit.status_code == 200
-    entries = audit.json()
+    entries = audit.json()["items"]
     assert entries[0]["action"] == "PATCH /api/repositories/{repository_id}"
     assert entries[0]["object_id"] == repository_id
     assert entries[0]["outcome"] == "http_422"
     assert entries[1]["action"] == "POST /api/repositories"
     assert entries[1]["outcome"] == "success"
     assert "local-secret-token-123" not in audit.text
+
+    first_page = client.get("/api/audit-logs?page=1&page_size=1", headers=admin).json()
+    second_page = client.get("/api/audit-logs?page=2&page_size=1", headers=admin).json()
+    assert first_page["total"] == 2
+    assert first_page["page"] == 1
+    assert first_page["page_size"] == 1
+    assert first_page["items"] == [entries[0]]
+    assert second_page["items"] == [entries[1]]

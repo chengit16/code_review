@@ -63,6 +63,7 @@ def test_review_card_keeps_coverage_and_no_thinking(monkeypatch: pytest.MonkeyPa
             "target_branch": "main",
             "mr_iid": 7,
             "commit_sha": "a" * 40,
+            "commit_author": "张三",
             "job_id": 12,
             "review_status": "partial",
             "review_error": None,
@@ -98,6 +99,7 @@ def test_review_card_keeps_coverage_and_no_thinking(monkeypatch: pytest.MonkeyPa
     assert body["card"]["header"]["template"] == "orange"
     assert body["card"]["header"]["title"]["content"].startswith("评审未完成")
     assert "team/example · main · SHA aaaaaaaaaa" in card_text(body)
+    assert "MR !7 · 提交人：张三 · 任务 #12" in card_text(body)
     assert "已审查 1/2 个文件 · 失败 1" in card_text(body)
     assert "main.py:42" in card_text(body)
     actions = body["card"]["elements"][-1]["actions"]

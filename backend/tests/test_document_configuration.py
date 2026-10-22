@@ -344,6 +344,8 @@ def test_legacy_environment_cannot_supply_project_or_model_credentials(
 def test_default_branch_push_only_queues_matching_authenticated_event(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """一次多提交 Push 只建立并执行一个固定 before..after 范围任务。"""
+
     repository_id, secret = configured_repository(client)
     before, after = "a" * 40, "b" * 40
     payload = {
@@ -380,12 +382,34 @@ def test_default_branch_push_only_queues_matching_authenticated_event(
         def fetch(self) -> None:
             pass
 
-        def push_commits(self, old: str, new: str) -> list[str]:
+        def push_range(self, old: str, new: str) -> tuple[str, str]:
             assert (old, new) == (before, after)
-            return [after]
+            return old, new
 
         def rule_digest(self, _sha: str) -> str:
             return ""
+
+        def is_on_target(self, sha: str) -> bool:
+            return sha == after
+
+        def is_range_base(self, base: str, head: str) -> bool:
+            return (base, head) == (before, after)
+
+        def checkout(self, sha: str, target: Path) -> None:
+            assert sha == after
+            target.mkdir(parents=True)
+
+        def range_changed_files(
+            self, base: str, head: str
+        ) -> list[dict[str, str | int | None]]:
+            assert (base, head) == (before, after)
+            return [{"path": "app.py", "added": 3, "deleted": 1}]
+
+        def commit_author(self, _sha: str) -> str:
+            return "张三"
+
+        def remove_checkout(self, _target: Path) -> None:
+            pass
 
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
@@ -394,6 +418,26 @@ def test_default_branch_push_only_queues_matching_authenticated_event(
     assert len(jobs) == 1
     assert jobs[0]["mr_iid"] < 0
     assert jobs[0]["commit_sha"] == after
+    assert jobs[0]["base_sha"] == before
+
+    reviewed_ranges: list[tuple[str | None, str]] = []
+
+    def fake_review(
+        *_args: Any, base_sha: str | None = None, **_kwargs: Any
+    ) -> tuple[str, dict[str, Any]]:
+        reviewed_ranges.append((base_sha, after))
+        return "complete", {"comments": [], "manifest": {}}
+
+    monkeypatch.setattr(worker, "run_review", fake_review)
+    job = store.next_job()
+    assert job is not None
+    worker.review_job(store, settings, job)
+    detail = store.get_job(job["id"])
+    assert detail is not None
+    assert detail["status"] == "complete"
+    assert reviewed_ranges == [(before, after)]
+    assert detail["changed_files"] == '[{"path": "app.py", "added": 3, "deleted": 1}]'
+    assert detail["commit_author"] == "张三"
 
 
 def test_model_profiles_activate_without_revealing_key(client: TestClient) -> None:

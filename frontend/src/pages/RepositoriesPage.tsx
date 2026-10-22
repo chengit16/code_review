@@ -19,6 +19,7 @@ import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
 import { PremergeSetting } from "./PremergeSetting";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
+type RepositoryEditSection = "connection" | "review" | "publication";
 
 const initial: RepositoryInput = {
   name: "", gitlab_url: "", project_id: 0, remote_url: "", target_branch: "main",
@@ -36,6 +37,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   const [form, setForm] = useState<RepositoryInput>(initial);
   const [editing, setEditing] = useState<Repository | null>(null);
   const [editForm, setEditForm] = useState<RepositoryUpdateInput>({});
+  const [editSection, setEditSection] = useState<RepositoryEditSection>("connection");
   const [feedback, setFeedback] = useState("");
   const [callbackCopied, setCallbackCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
@@ -93,7 +95,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       queryClient.setQueryData<Repository[]>(["repositories"], (current) =>
         current?.filter((repository) => repository.id !== repositoryId),
       );
-      for (const queryKey of ["repositories", "events", "jobs", "connection-checks"]) {
+      for (const queryKey of ["repositories", "jobs", "connection-checks"]) {
         void queryClient.invalidateQueries({ queryKey: [queryKey] });
       }
     },
@@ -115,6 +117,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
 
   function beginEdit(repo: Repository) {
     setEditing(repo);
+    setEditSection("connection");
     setEditForm({
       name: repo.name,
       gitlab_url: repo.gitlab_url,
@@ -186,8 +189,14 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <div className="form-actions wide"><button type="button" className="button button-secondary" onClick={() => setOpen(false)}>取消</button><button type="submit" className="button button-primary" disabled={mutation.isPending}>保存仓库</button></div>
     </form>
   </Modal>}
-  {editing && <Modal titleId="edit-repo-title" onClose={() => setEditing(null)}><div className="modal-heading"><h2 id="edit-repo-title">编辑 {editing.name}</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setEditing(null)}><X size={19} /></button></div>
-    <form onSubmit={submitEdit} className="form-grid">
+  {editing && <Modal titleId="edit-repo-title" className="modal-wide repository-editor-modal" onClose={() => setEditing(null)}><div className="modal-heading"><h2 id="edit-repo-title">编辑 {editing.name}</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={() => setEditing(null)}><X size={19} /></button></div>
+    <div className="repository-editor-tabs" role="tablist" aria-label="仓库设置">
+      <button className={`repository-editor-tab${editSection === "connection" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "connection"} onClick={() => setEditSection("connection")}>基础接入</button>
+      <button className={`repository-editor-tab${editSection === "review" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "review"} onClick={() => setEditSection("review")}>评审参数</button>
+      <button className={`repository-editor-tab${editSection === "publication" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "publication"} onClick={() => setEditSection("publication")}>发布审查</button>
+    </div>
+    <div className="repository-editor-body">
+    {editSection === "connection" && <form onSubmit={submitEdit} className="form-grid repository-main-form">
       <label>仓库名称<input value={editForm.name ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} required /></label>
       <label>项目数字 ID<input type="number" min="1" value={editForm.project_id || ""} onChange={(event) => setEditForm((current) => ({ ...current, project_id: Number(event.target.value) }))} required /></label>
       <label>GitLab 地址<input type="url" value={editForm.gitlab_url ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, gitlab_url: event.target.value }))} required /></label>
@@ -204,13 +213,13 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <div className="webhook-editor wide"><div className="webhook-editor-callback"><span>回调地址</span><code>{editing.webhook_url}</code></div><div><span>当前 Token</span><WebhookTokenCell key={`${editing.id}-${tokenRevision}`} token={token} repositoryId={editing.id} repositoryName={editing.name} /></div><button className="button button-secondary" type="button" disabled={rotate.isPending || editing.auth_kind !== "secret"} onClick={() => rotateToken(editing)}><RotateCcw size={16} />重新生成 Secret</button></div>
       {rotate.error && <p className="form-error wide" role="alert">{rotate.error.message}</p>}
       {rotate.isSuccess && <p className="form-success wide" role="status">Secret 已更新，请同步修改 GitLab Webhook</p>}
+      <div className="repository-form-checks wide"><ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} /></div>
       {update.error && <p className="form-error wide" role="alert">{update.error.message}</p>}
-      <div className="form-actions wide"><button type="button" className="button button-secondary" onClick={() => setEditing(null)}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存设置</button></div>
-    </form>
-    <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} />
-    <ProjectReviewLimits token={token} repositoryId={editing.id} />
-    <GitLabPublicationSetting token={token} repositoryId={editing.id} />
-    <PremergeSetting token={token} repositoryId={editing.id} />
+      <div className="form-actions repository-form-actions wide"><button type="button" className="button button-secondary" onClick={() => setEditing(null)}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存设置</button></div>
+    </form>}
+    {editSection === "review" && <div className="repository-editor-panel"><ProjectReviewLimits token={token} repositoryId={editing.id} /></div>}
+    {editSection === "publication" && <div className="repository-editor-panel repository-editor-stack"><GitLabPublicationSetting token={token} repositoryId={editing.id} /><PremergeSetting token={token} repositoryId={editing.id} /></div>}
+    </div>
   </Modal>}
   </div>;
 }

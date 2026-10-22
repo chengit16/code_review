@@ -1,12 +1,12 @@
 /** @description 管理 OCR 模型配置，只有一个配置可处于启用状态。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Plus, Settings2, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
-import type { AuditEntry, ModelConfiguration } from "../api/types";
+import type { AuditPage, ModelConfiguration } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
@@ -30,7 +30,8 @@ const initial: ModelForm = { name: "", provider: "dashscope", model: "", base_ur
 export function SettingsPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
   const queryClient = useQueryClient();
   const profiles = useQuery({ queryKey: ["model-profiles"], queryFn: () => apiRequest<ModelConfiguration[]>(token, "/api/model-profiles") });
-  const audit = useQuery({ queryKey: ["audit-logs"], queryFn: () => apiRequest<AuditEntry[]>(token, "/api/audit-logs"), refetchInterval: 10000 });
+  const [auditPage, setAuditPage] = useState(1);
+  const audit = useQuery({ queryKey: ["audit-logs", auditPage], queryFn: () => apiRequest<AuditPage>(token, `/api/audit-logs?page=${auditPage}&page_size=20`), refetchInterval: 10000 });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ModelConfiguration | null>(null);
   const [form, setForm] = useState<ModelForm>(initial);
@@ -73,6 +74,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
     setOpen(true);
   }
   const active = profiles.data?.find((profile) => profile.enabled);
+  const auditPages = Math.max(1, Math.ceil((audit.data?.total ?? 0) / (audit.data?.page_size ?? 20)));
   return <div className="page">
     <PageHeader title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
@@ -89,7 +91,7 @@ export function SettingsPage({ token }: { /** 内存中的管理口令。 */ tok
       </tbody></table></div>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </section>}
-    <section className="section"><div className="section-head"><h2>管理操作</h2><span>最近 100 条</span></div><QueryState loading={audit.isLoading} error={audit.error} /><div className="table-scroll"><table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody>{audit.data?.map((entry) => <tr key={entry.id}><td>{formatTime(entry.created_at)}</td><td>{entry.actor_name ?? "旧记录"}</td><td className="mono">{entry.action}</td><td>{entry.object_type}{entry.object_id !== null ? ` #${entry.object_id}` : ""}</td><td>{entry.outcome === "success" ? "成功" : entry.outcome}</td></tr>)}{audit.data?.length === 0 && <tr><td colSpan={5} className="empty-row">暂无管理操作</td></tr>}</tbody></table></div></section>
+    <section className="section"><div className="section-head"><h2>管理操作</h2><span>{audit.data?.total ?? 0} 条</span></div><QueryState loading={audit.isLoading} error={audit.error} /><div className="table-scroll responsive-table"><table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>结果</th></tr></thead><tbody>{audit.data?.items.map((entry) => <tr key={entry.id}><td data-label="时间">{formatTime(entry.created_at)}</td><td data-label="操作者">{entry.actor_name ?? "旧记录"}</td><td data-label="操作" className="mono">{entry.action}</td><td data-label="对象">{entry.object_type}{entry.object_id !== null ? ` #${entry.object_id}` : ""}</td><td data-label="结果">{entry.outcome === "success" ? "成功" : entry.outcome}</td></tr>)}{audit.data?.items.length === 0 && <tr><td colSpan={5} className="empty-row">暂无管理操作</td></tr>}</tbody></table></div><div className="pagination" aria-label="管理操作分页"><span aria-live="polite">共 {audit.data?.total ?? 0} 条 · 第 {auditPage} / {auditPages} 页</span><button className="icon-button" type="button" aria-label="管理操作上一页" title="上一页" disabled={auditPage <= 1 || audit.isFetching} onClick={() => setAuditPage((page) => page - 1)}><ChevronLeft size={18} /></button><button className="icon-button" type="button" aria-label="管理操作下一页" title="下一页" disabled={auditPage >= auditPages || audit.isFetching} onClick={() => setAuditPage((page) => page + 1)}><ChevronRight size={18} /></button></div></section>
     {open && <Modal titleId="model-title" onClose={() => setOpen(false)}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={() => setOpen(false)}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}>

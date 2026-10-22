@@ -47,3 +47,33 @@ def test_service_url_rejects_credentials_and_unsafe_protocols(value: str) -> Non
 
     with pytest.raises(RuntimeError):
         validate_service_url(value, "OCR_APP_MANAGEMENT_URL")
+
+
+def test_public_http_requires_explicit_deployment_override() -> None:
+    """公网明文入口只在部署者显式确认风险后接受。"""
+
+    value = "http://tunnel.example.test/"
+    assert validate_service_url(value, "OCR_APP_WEBHOOK_URL", True) == (
+        "http://tunnel.example.test"
+    )
+
+
+def test_review_speed_defaults_and_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """默认使用低 effort 和四路并发，非法覆盖值在启动时失败。"""
+
+    monkeypatch.delenv("OCR_APP_CONFIG_FILE", raising=False)
+    monkeypatch.setenv("OCR_APP_MASTER_KEY", "synthetic-master")
+    monkeypatch.setenv("OCR_APP_DEV_MODE", "1")
+    monkeypatch.delenv("OCR_APP_OCR_CONCURRENCY", raising=False)
+    monkeypatch.delenv("OCR_APP_OCR_EFFORT", raising=False)
+    config = load_settings()
+    assert config.ocr_concurrency == 4
+    assert config.ocr_effort == "low"
+
+    monkeypatch.setenv("OCR_APP_OCR_CONCURRENCY", "0")
+    with pytest.raises(RuntimeError, match="1 到 32"):
+        load_settings()
+    monkeypatch.setenv("OCR_APP_OCR_CONCURRENCY", "4")
+    monkeypatch.setenv("OCR_APP_OCR_EFFORT", "maximum")
+    with pytest.raises(RuntimeError, match="low、medium 或 high"):
+        load_settings()

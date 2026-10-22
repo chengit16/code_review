@@ -14,7 +14,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from cryptography.fernet import InvalidToken
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -667,10 +667,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "rotated"}
 
     @app.get("/api/audit-logs", dependencies=[admin])
-    def list_audit_logs() -> list[dict[str, Any]]:
-        """展示近期管理写操作及 HTTP 结果，不返回请求内容。"""
+    def list_audit_logs(
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=100),
+    ) -> dict[str, Any]:
+        """分页展示管理写操作及 HTTP 结果，不返回请求内容。"""
 
-        return store.list_audit()
+        return store.list_audit(page, page_size)
 
     @app.get("/api/notification-targets", dependencies=[admin])
     def list_notification_targets() -> list[dict[str, Any]]:
@@ -1031,7 +1034,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/jobs", dependencies=[admin])
     def list_jobs() -> list[dict[str, Any]]:
-        """展示近期逐提交评审任务。"""
+        """展示近期评审任务。"""
 
         return store.list_jobs()
 

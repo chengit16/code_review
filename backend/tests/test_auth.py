@@ -116,7 +116,7 @@ def test_login_lockout_and_actor_audit(client: TestClient, settings: Settings) -
         "username": "charlie", "password": "testing-password-123", "role": "reader",
     })
     assert created.status_code == 201
-    audit = client.get("/api/audit-logs", headers=headers).json()
+    audit = client.get("/api/audit-logs", headers=headers).json()["items"]
     assert audit[0]["actor_name"] == "alice"
     assert audit[0]["actor_id"] == session["user"]["id"]
     assert "testing-password-123" not in str(audit)

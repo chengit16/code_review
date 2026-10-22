@@ -81,6 +81,7 @@ def test_private_config_file_loads_without_environment_secrets(
     assert settings.admin_token == "admin-secret"
     assert settings.data_dir == tmp_path / "data"
     assert settings.public_url == "http://127.0.0.1:8781"
+    assert settings.review_language == "zh-CN"
     os.chmod(config, 0o644)
     with pytest.raises(RuntimeError, match="0600"):
         load_settings()

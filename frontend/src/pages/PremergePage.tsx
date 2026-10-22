@@ -7,6 +7,7 @@ import { useState } from "react";
 import { apiRequest } from "../api/client";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
+import { formatSeverity } from "../ui/format";
 import { formatTime } from "../ui/format";
 
 interface PremergeReview {
@@ -47,7 +48,7 @@ export function PremergePage({ token }: { /** 内存口令。 */ token: string }
       {detail.data.status !== "superseded" && (() => {
         const result = detail.data.result_json ? JSON.parse(detail.data.result_json) as { comments?: { path?: string; start_line?: number; severity?: string; content?: string }[] } : null;
         const files = detail.data.changed_files ? JSON.parse(detail.data.changed_files) as { path: string }[] : [];
-        return <><h3>变更文件</h3><ul>{files.map((file) => <li key={file.path} className="mono">{file.path}</li>)}</ul><h3>发现</h3>{result?.comments?.length ? <ul>{result.comments.map((item, index) => <li key={index}><strong>{item.severity ?? "问题"}</strong> {item.path ?? ""}{item.start_line ? `:${item.start_line}` : ""}<p>{item.content}</p></li>)}</ul> : <p>暂无发现</p>}</>;
+        return <><h3>变更文件</h3><ul>{files.map((file) => <li key={file.path} className="mono">{file.path}</li>)}</ul><h3>发现</h3>{result?.comments?.length ? <ul>{result.comments.map((item, index) => <li key={index}><strong>{formatSeverity(item.severity)}</strong> {item.path ?? ""}{item.start_line ? `:${item.start_line}` : ""}<p>{item.content}</p></li>)}</ul> : <p>暂无发现</p>}</>;
       })()}</>}
     </section>}
   </div>;

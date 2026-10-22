@@ -1,4 +1,4 @@
-"""管理 SQLite 迁移、事件收件箱、逐提交队列与通知状态。"""
+"""管理 SQLite 迁移、事件收件箱、评审队列与通知状态。"""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from ocr_manager.review_effectiveness import EFFECTIVENESS_MIGRATION
 from ocr_manager.review_issues import ISSUES_MIGRATION, backfill_existing_issues, capture_findings
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 33
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -241,6 +241,12 @@ CREATE TABLE webhook_diagnostics (
 );
 CREATE INDEX idx_webhook_diagnostics_recent ON webhook_diagnostics(id DESC);
 """
+SCHEMA_V32 = """
+ALTER TABLE review_jobs ADD COLUMN base_sha TEXT;
+"""
+SCHEMA_V33 = """
+ALTER TABLE review_jobs ADD COLUMN commit_author TEXT;
+"""
 
 
 class Store:
@@ -303,6 +309,8 @@ class Store:
                 (29, ISSUES_MIGRATION),
                 (30, EFFECTIVENESS_MIGRATION),
                 (31, PREMERGE_CONTEXT_MIGRATION),
+                (32, SCHEMA_V32),
+                (33, SCHEMA_V33),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -371,14 +379,22 @@ class Store:
                 (action, object_type, object_id, outcome, actor_id, actor_name),
             )
 
-    def list_audit(self) -> list[dict[str, Any]]:
-        """返回最近的管理动作供操作追溯。"""
+    def list_audit(self, page: int, page_size: int) -> dict[str, Any]:
+        """分页返回管理动作，计数与当前页在同一读事务中保持一致。"""
 
         with self.connection() as db:
-            return [
-                dict(row)
-                for row in db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 100")
-            ]
+            db.execute("BEGIN")
+            total = db.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+            rows = db.execute(
+                "SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?",
+                (page_size, (page - 1) * page_size),
+            ).fetchall()
+        return {
+            "items": [dict(row) for row in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
     def add_repository(self, values: dict[str, Any]) -> int:
         """持久化项目配置；调用方负责在写入前加密凭据。"""
@@ -958,9 +974,12 @@ class Store:
         commits: list[str] | None,
         snapshots: dict[str, tuple[str, str]],
         error: str | None,
+        base_sha: str | None = None,
     ) -> None:
         """在同一事务写入所有提交任务及事件末态；项目已删除时直接结束。"""
 
+        if base_sha is not None and (commits is None or len(commits) != 1):
+            raise ValueError("范围评审必须且只能对应一个目标提交")
         with self.connection() as db:
             if commits is not None:
                 event = db.execute("SELECT * FROM merge_events WHERE id=?", (event_id,)).fetchone()
@@ -974,9 +993,9 @@ class Store:
                     allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
                     db.execute(
                         """INSERT OR IGNORE INTO review_jobs
-                        (id, repository_id, event_id, mr_iid, commit_sha, ordinal,
+                        (id, repository_id, event_id, mr_iid, commit_sha, base_sha, ordinal,
                          config_hash, rule_digest, target_branch, notification_min_severity)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
                           (SELECT target_branch FROM repositories WHERE id=?),
                           COALESCE((SELECT minimum_severity FROM project_policies
                             WHERE repository_id=?), 'medium'))""",
@@ -986,6 +1005,7 @@ class Store:
                             event_id,
                             event["mr_iid"],
                             commit_sha,
+                            base_sha,
                             ordinal,
                             snapshot_hash,
                             rule_digest,
@@ -1326,7 +1346,7 @@ class Store:
             return [
                 dict(row)
                 for row in db.execute(
-                    """SELECT id, repository_id, event_id, mr_iid, commit_sha, ordinal,
+                    """SELECT id, repository_id, event_id, mr_iid, commit_sha, base_sha, ordinal,
                 status, error, attempts, created_at, finished_at FROM review_jobs
                 ORDER BY id DESC LIMIT 200"""
                 )
@@ -1435,9 +1455,10 @@ class Store:
                 allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
                 cursor = db.execute(
                     """INSERT OR IGNORE INTO review_jobs
-                    (id, repository_id, event_id, mr_iid, commit_sha, ordinal,
-                     config_hash, rule_digest, target_branch, notification_min_severity)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
+                    (id, repository_id, event_id, mr_iid, commit_sha, commit_author,
+                     base_sha, ordinal, config_hash, rule_digest, target_branch,
+                     notification_min_severity)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                       (SELECT minimum_severity FROM project_policies WHERE repository_id=?),
                       'medium'))""",
                     (
@@ -1446,6 +1467,8 @@ class Store:
                         old["event_id"],
                         old["mr_iid"],
                         old["commit_sha"],
+                        old["commit_author"],
+                        old["base_sha"],
                         old["ordinal"],
                         config_hash,
                         old["rule_digest"],
@@ -1475,7 +1498,8 @@ class Store:
 
         with self.connection() as db:
             row = db.execute(
-                """SELECT d.*, j.repository_id, j.commit_sha, j.mr_iid, j.status AS review_status,
+                """SELECT d.*, j.repository_id, j.commit_sha, j.commit_author, j.mr_iid,
+                j.status AS review_status,
                 j.result_json, j.error AS review_error, j.notification_min_severity,
                 r.name AS repository_name, r.path_with_namespace, r.target_branch,
                 r.gitlab_url, r.remote_url

@@ -83,6 +83,9 @@ def test_bailian_pricing_estimate_uses_run_snapshot(
     assert detail["result"]["estimated_cost"] == {
         "currency": "CNY", "input": "1", "output": "2", "total": "3",
     }
+    listed = client.get("/api/task-search", headers=ADMIN).json()["items"][0]
+    assert listed["usage"] == detail["result"]["usage"]
+    assert listed["estimated_cost"] == detail["result"]["estimated_cost"]
     response = client.patch(f"/api/model-profiles/{profile_id}", headers=ADMIN, json={
         "input_price_per_million": "20", "output_price_per_million": "80",
     })

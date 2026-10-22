@@ -131,7 +131,7 @@ class GitRepository:
         return files
 
     def is_range_base(self, base_sha: str, head_sha: str) -> bool:
-        """确认 GitLab 所称差异基准确为当前 MR 头与目标分支的共同祖先。"""
+        """确认评审范围起点属于目标分支，并且是目标提交的祖先。"""
 
         base, head = self._commit_sha(base_sha), self._commit_sha(head_sha)
         return self.is_on_target(base) and self._git("merge-base", base, head) == base
@@ -184,16 +184,18 @@ class GitRepository:
             "rev-list", "--reverse", "--topo-order", f"{merge_sha}^1..{merge_sha}"
         ).splitlines()
 
-    def push_commits(self, before_sha: str, after_sha: str) -> list[str]:
-        """只审查默认分支单次快进 Push 引入的提交，拒绝重写历史。"""
+    def push_range(self, before_sha: str, after_sha: str) -> tuple[str, str]:
+        """规范化默认分支单次快进 Push 的起止提交，拒绝空范围和历史重写。"""
 
         before = self._commit_sha(before_sha)
         after = self._commit_sha(after_sha)
+        if before == after:
+            raise ValueError("默认分支 Push 范围为空")
         if not self.is_on_target(after):
             raise ValueError("Push 提交不在目标分支上")
         if self._git("merge-base", before, after) != before:
             raise ValueError("默认分支 Push 不是快进更新")
-        return self._git("rev-list", "--reverse", "--topo-order", f"{before}..{after}").splitlines()
+        return before, after
 
     def order_commits(self, commits: list[str]) -> list[str]:
         """将 fast-forward 的 MR 提交按祖先顺序排列并去重。"""
@@ -209,6 +211,11 @@ class GitRepository:
 
         sha = self._commit_sha(sha)
         return self._git("ls-tree", "--object-only", sha, "--", ".opencodereview/rule.json")
+
+    def commit_author(self, sha: str) -> str:
+        """读取固定提交的作者姓名，供任务事实和外部通知稳定复用。"""
+
+        return self._git("show", "-s", "--format=%an", self._commit_sha(sha), "--")
 
     def read_context_file(self, sha: str, path: str, max_chars: int) -> str:
         """从已拉取提交读取受限普通文本文件，不跟随工作区符号链接。"""

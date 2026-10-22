@@ -109,6 +109,8 @@ def test_ocr_receives_global_fallback_and_project_override(
 
     def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
         commands.append(command)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         output = Path(command[command.index("--output") + 1])
         if "--preview" in command:
             output.write_text(json.dumps({"reviewable_count": 1, "files": [{}]}), encoding="utf-8")
@@ -135,14 +137,17 @@ def test_ocr_receives_global_fallback_and_project_override(
     assert status == "complete"
     assert (tmp_path / "run/home/.opencodereview/rule.json").read_text() == content
     assert (tmp_path / "run/managed-rule.json").read_text() == content
-    assert len(commands) == 2
-    assert all("--rule" in command for command in commands)
-    assert all(str(tmp_path / "run/managed-rule.json") in command for command in commands)
+    review_commands = [command for command in commands if command[1] == "review"]
+    assert len(review_commands) == 2
+    assert all("--rule" in command for command in review_commands)
+    assert all(
+        str(tmp_path / "run/managed-rule.json") in command for command in review_commands
+    )
     commands.clear()
     assert run_review(
         settings, tmp_path, tmp_path / "fallback", "a" * 40, global_rule=content
     )[0] == "complete"
-    assert all("--rule" not in command for command in commands)
+    assert all("--rule" not in command for command in commands if command[1] == "review")
     assert (tmp_path / "fallback/home/.opencodereview/rule.json").read_text() == content
 
 

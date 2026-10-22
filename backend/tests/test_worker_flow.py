@@ -97,10 +97,13 @@ def test_merged_mr_runs_review_and_notification(
         def changed_files(self, _sha: str) -> list[dict[str, str | int | None]]:
             return [{"path": "app.py", "added": 2, "deleted": 1}]
 
+        def commit_author(self, _sha: str) -> str:
+            return "张三"
+
         def remove_checkout(self, _target: Path) -> None:
             pass
 
-    sent: list[tuple[str, int, str, str, str]] = []
+    sent: list[tuple[str, int, str, str, str, str]] = []
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
     monkeypatch.setattr(
@@ -110,7 +113,8 @@ def test_merged_mr_runs_review_and_notification(
         worker,
         "send_review",
         lambda url, job: sent.append(
-            (url, job["job_id"], job["mr_url"], job["commit_url"], job["detail_url"])
+            (url, job["job_id"], job["mr_url"], job["commit_url"], job["detail_url"],
+             job["commit_author"])
         ),
     )
     store = Store(settings.data_dir / "app.db")
@@ -122,6 +126,7 @@ def test_merged_mr_runs_review_and_notification(
     assert sent[0][2].endswith("/team/repo/-/merge_requests/7")
     assert sent[0][3].endswith("/team/repo/-/commit/" + "a" * 40)
     assert sent[0][4] == f"https://internal.example.test/jobs/{sent[0][1]}"
+    assert sent[0][5] == "张三"
     detail = client.get(f"/api/jobs/{sent[0][1]}", headers=admin).json()
     assert detail["status"] == "complete"
     assert detail["delivery"]["status"] == "sent"

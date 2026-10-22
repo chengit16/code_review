@@ -21,7 +21,7 @@ export function ModelUsage({ result }: { /** 当前尝试的服务端安全结�
     });
   };
   const costText = cost ? formatMoney(cost.total) : null;
-  return <section className="section model-usage"><div className="section-head"><h2>模型用量</h2></div>
+  return <section className="section detail-insight-card model-usage"><div className="section-head"><h2>模型用量</h2></div>
     <div className="model-usage-grid">
       <div><span>输入 Token</span><strong>{formatTokens(usage?.input_tokens)}</strong></div>
       <div><span>输出 Token</span><strong>{formatTokens(usage?.output_tokens)}</strong></div>

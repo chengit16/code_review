@@ -52,6 +52,8 @@ def test_invalid_commit_ref_never_reaches_git(tmp_path: Path) -> None:
         git.order_commits(["a" * 40, "--help"])
     with pytest.raises(ValueError, match="SHA"):
         git.checkout("bad", tmp_path / "checkout")
+    with pytest.raises(ValueError, match="SHA"):
+        git.commit_author("--help")
 
 
 def test_rule_digest_tracks_content_at_each_commit(tmp_path: Path) -> None:
@@ -86,6 +88,7 @@ def test_rule_digest_tracks_content_at_each_commit(tmp_path: Path) -> None:
         tmp_path,
         {"id": 1, "remote_url": "git@example.test:team/repo.git", "target_branch": "main"},
     )
+    assert git.commit_author(third) == "Test"
     assert git.rule_digest(first) == ""
     assert git.rule_digest(second) != git.rule_digest(third)
     assert git.rule_digest(second) == command("rev-parse", f"{second}:.opencodereview/rule.json")
@@ -129,8 +132,10 @@ def test_context_file_reads_fixed_commit_and_rejects_symlink_or_large_file(
         git.read_context_file(second, "../secret.md", 1600)
 
 
-def test_push_commits_uses_fast_forward_range_and_rejects_rewrite(tmp_path: Path) -> None:
-    """默认分支 Push 只审查本次新增提交，分叉旧 SHA 不能冒充快进更新。"""
+def test_push_range_uses_endpoints_and_rejects_empty_or_rewritten_history(
+    tmp_path: Path,
+) -> None:
+    """多提交 Push 只返回一组起止点，空范围和分叉旧 SHA 均不能进入评审。"""
 
     root = tmp_path / "repositories" / "1"
     root.mkdir(parents=True)
@@ -159,11 +164,14 @@ def test_push_commits_uses_fast_forward_range_and_rejects_rewrite(tmp_path: Path
         tmp_path,
         {"id": 1, "remote_url": "git@example.test:team/repo.git", "target_branch": "main"},
     )
-    assert git.push_commits(initial, third) == [second, third]
+    assert second != third
+    assert git.push_range(initial, third) == (initial, third)
+    with pytest.raises(ValueError, match="范围为空"):
+        git.push_range(third, third)
     command("checkout", "-q", "side")
     (root / "side.txt").write_text("side", encoding="utf-8")
     command("add", "side.txt")
     command("commit", "-qm", "side")
     side = command("rev-parse", "HEAD")
     with pytest.raises(ValueError, match="不是快进"):
-        git.push_commits(side, third)
+        git.push_range(side, third)

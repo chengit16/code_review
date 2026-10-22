@@ -142,6 +142,8 @@ def test_empty_preview_skips_model_and_preserves_exclusions(
 
     def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
         commands.append(command)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         output = Path(command[command.index("--output") + 1])
         output.write_text(json.dumps(preview), encoding="utf-8")
         return 0, ""
@@ -149,11 +151,37 @@ def test_empty_preview_skips_model_and_preserves_exclusions(
     monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
     status, payload = run_review(settings, tmp_path, tmp_path / "run", SHA)
     assert status == "skipped"
-    assert len(commands) == 1
-    assert "--preview" in commands[0]
+    assert commands[0][-2:] == ["language", "zh-CN"]
+    assert len(commands) == 2
+    assert "--preview" in commands[1]
     assert payload["source"] == "preview"
     assert payload["preview"]["files"][0]["exclude_reason"] == "provider_directory"
     assert (tmp_path / "run" / "result.json").exists()
+
+
+def test_review_uses_diff_fast_mode_and_bounded_concurrency(
+    settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """正式入口保持差异评审，并显式限制模型 effort 与并发。"""
+
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
+        commands.append(command)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
+        Path(command[command.index("--output") + 1]).write_text(
+            json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8"
+        )
+        return 0, ""
+
+    monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
+    assert run_review(settings, tmp_path, tmp_path / "fast", SHA)[0] == "skipped"
+    command = next(item for item in commands if item[1] == "review")
+    assert command[command.index("--commit") + 1] == SHA
+    assert command[command.index("--concurrency") + 1] == "4"
+    assert command[command.index("--effort") + 1] == "low"
+    assert "scan" not in command
 
 
 def test_background_uses_single_file_argument(
@@ -165,15 +193,18 @@ def test_background_uses_single_file_argument(
 
     def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
         commands.append(command)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         output = Path(command[command.index("--output") + 1])
         output.write_text(json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8")
         return 0, ""
 
     monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
     run_review(settings, tmp_path, tmp_path / "run", SHA, background="合成业务背景")
-    assert len(commands) == 1
-    assert "--background" not in commands[0]
-    path = Path(commands[0][commands[0].index("--background-file") + 1])
+    review_commands = [command for command in commands if command[1] == "review"]
+    assert len(review_commands) == 1
+    assert "--background" not in review_commands[0]
+    path = Path(review_commands[0][review_commands[0].index("--background-file") + 1])
     assert path.read_text(encoding="utf-8") == "合成业务背景"
 
 
@@ -186,6 +217,8 @@ def test_range_command_uses_from_to_without_commit(
 
     def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
         commands.append(command)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         Path(command[command.index("--output") + 1]).write_text(
             json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8")
         return 0, ""
@@ -193,10 +226,11 @@ def test_range_command_uses_from_to_without_commit(
     monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
     status, payload = run_review(settings, tmp_path, tmp_path / "range", SHA,
                                  base_sha="b" * 40)
+    review_command = next(command for command in commands if command[1] == "review")
     assert status == "skipped"
-    assert commands[0][commands[0].index("--from") + 1] == "b" * 40
-    assert commands[0][commands[0].index("--to") + 1] == SHA
-    assert "--commit" not in commands[0]
+    assert review_command[review_command.index("--from") + 1] == "b" * 40
+    assert review_command[review_command.index("--to") + 1] == SHA
+    assert "--commit" not in review_command
     assert payload["manifest"]["input"]["mode"] == "range"
 
 
@@ -210,6 +244,8 @@ def test_invalid_preview_does_not_start_model(
     def fake_run(command: list[str], *_args: Any) -> tuple[int, str]:
         nonlocal calls
         calls += 1
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         output = Path(command[command.index("--output") + 1])
         output.write_text('{"files":[]}', encoding="utf-8")
         return 0, ""
@@ -217,7 +253,7 @@ def test_invalid_preview_does_not_start_model(
     monkeypatch.setattr(ocr, "run_ocr_command", fake_run)
     with pytest.raises(RuntimeError, match="预览字段"):
         run_review(settings, tmp_path, tmp_path / "run", SHA)
-    assert calls == 1
+    assert calls == 2
 
 
 def test_non_dashscope_review_does_not_set_dashscope_key(
@@ -229,6 +265,8 @@ def test_non_dashscope_review_does_not_set_dashscope_key(
 
     def fake_run(command: list[str], env: dict[str, str], *_args: Any) -> tuple[int, str]:
         seen.append(env)
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         output = Path(command[command.index("--output") + 1])
         output.write_text(json.dumps({"reviewable_count": 0, "files": []}), encoding="utf-8")
         return 0, ""
@@ -286,6 +324,8 @@ def test_preview_and_review_share_one_deadline(
     def fake_run(
         command: list[str], _env: dict[str, str], _checkout: Path, timeout: float
     ) -> tuple[int, str]:
+        if command[1:4] == ["config", "set", "language"]:
+            return 0, ""
         remaining.append(timeout)
         output = Path(command[command.index("--output") + 1])
         if "--preview" in command:

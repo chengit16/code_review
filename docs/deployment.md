@@ -25,6 +25,9 @@ export OCR_APP_MASTER_KEY="请用 cryptography.fernet.Fernet.generate_key() 生�
 export OCR_APP_WEBHOOK_URL="https://hooks.example.com"
 export OCR_APP_MANAGEMENT_URL="http://127.0.0.1:8781"
 export OCR_APP_OCR_COMMAND="$PWD/.local-tools/node_modules/.bin/ocr"
+export OCR_APP_REVIEW_LANGUAGE="zh-CN"
+export OCR_APP_OCR_CONCURRENCY="4"
+export OCR_APP_OCR_EFFORT="low"
 uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
 ```
 
@@ -68,12 +71,17 @@ uv run python -m ocr_manager.worker
   "OCR_APP_DEV_MODE": "0",
   "OCR_APP_MASTER_KEY": "请替换为有效的 Fernet 主密钥",
   "OCR_APP_OCR_COMMAND": "/absolute/path/to/project/.local-tools/node_modules/.bin/ocr",
+  "OCR_APP_REVIEW_LANGUAGE": "zh-CN",
+  "OCR_APP_OCR_CONCURRENCY": "4",
+  "OCR_APP_OCR_EFFORT": "low",
   "OCR_APP_WEBHOOK_URL": "https://hooks.example.com",
   "OCR_APP_MANAGEMENT_URL": "http://127.0.0.1:8781"
 }
 ```
 
 文件属主须为实际运行的用户，权限不得宽于 `0600`。用以下命令生成 API、Worker 与每日备份三个不包含密钥的 plist；备份目录须位于业务数据目录之外：
+
+公网入口默认必须使用 HTTPS。仅在临时受控联调且入口确实不支持 HTTPS 时，才可在私有配置中设置 `OCR_APP_ALLOW_INSECURE_HTTP=1`；该开关允许 Webhook 和管理入口使用公网明文 HTTP，不应作为正式部署配置。
 
 ```bash
 uv run python -m ocr_manager.launchd \
