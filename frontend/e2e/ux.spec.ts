@@ -108,6 +108,7 @@ test("任务勾选重审必须确认且只提交当前页显式编号", async ({
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重审所选任务" }).click();
   await expect(page.getByText("#1：合成冲突：任务已在执行")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "选择任务 1", exact: true })).toBeChecked();
   expect(submitted).toEqual([[1]]);
 });
 

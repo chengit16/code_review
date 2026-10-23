@@ -22,6 +22,8 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await expect(page.getByLabel("仓库路径")).toHaveValue("team/demo");
   await page.getByLabel("仓库名称").fill("修改后仓库");
   await page.getByRole("button", { name: "保存设置" }).click();
+  await expect(page.getByText("基础接入配置已保存", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("button", { name: "编辑 修改后仓库" })).toBeVisible();
   await page.goto("/config-history");
   // 对象名称与版本分别加载，按对象单元格和新增版本定位，避免提前选中最新修改。

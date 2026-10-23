@@ -629,3 +629,27 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
   .task-list-table th:last-child, .task-list-table td:last-child { position: sticky; right: 0; background: #fff; box-shadow: -5px 0 7px -7px #648575; }
   .task-list-table th:last-child { background: #fafcfb; }
 }
+
+/* 配置页签保留内存草稿，隐藏面板不能参与布局或键盘导航。 */
+.repository-editor-body > [hidden] { display: none; }
+.configuration-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.configuration-fields:disabled { opacity: .72; }
+.configuration-fields.form-grid { width: 100%; }
+.task-more-filters { grid-column: 1 / -1; margin: 0; }
+.task-advanced-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.active-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.active-filters:empty { display: none; }
+.active-filters .filter-chip { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.task-selection-bar > div { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; }
+.pagination { flex-wrap: wrap; }
+.pagination-size, .pagination-jump, .pagination-jump label { display: flex; align-items: center; gap: 8px; }
+.pagination select, .pagination input { min-width: 0; min-height: 40px; padding: 7px 9px; border: 1px solid #cdd9d3; border-radius: 6px; background: #fff; color: inherit; font: inherit; }
+.pagination input { width: 65px; }
+.history-more { display: block; margin-top: 14px; text-align: left; }
+@media (max-width: 1100px) { .task-advanced-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) {
+  .pagination { justify-content: flex-start; gap: 10px; }
+  .pagination > span { flex-basis: 100%; }
+  .pagination-jump { flex-basis: 100%; }
+  .task-advanced-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,6 +1,6 @@
 /** @description 问题侧栏的处理、证据与重复项选择；只提交用户明确确认的目标，服务端校验状态和同仓库约束。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
@@ -28,11 +28,16 @@ export function IssueDetailDrawer({ token, id, canEdit, batchPending, onSelect }
   const client = useQueryClient();
   const [note, setNote] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [occurrenceLimit, setOccurrenceLimit] = useState(10);
+  const [eventLimit, setEventLimit] = useState(10);
+  // 搜索延迟提交，切换关键词立即清空目标，防止选中旧结果。
+  useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300); return () => window.clearTimeout(timer); }, [search]);
   const [target, setTarget] = useState("");
   const detail = useQuery({ queryKey: ["review-issue", id], queryFn: ({ signal }) => apiRequest<Issue>(token, `/api/review-issues/${id}`, { signal }) });
-  const candidates = useQuery({ queryKey: ["issue-merge-candidates", detail.data?.repository_id, search],
-    queryFn: ({ signal }) => apiRequest<{ items: Issue[] }>(token, `/api/review-issues?repository_id=${detail.data?.repository_id}&status=open&page_size=10&q=${encodeURIComponent(search.trim())}`, { signal }),
-    enabled: canEdit && detail.data?.status === "open" && Boolean(search.trim()) });
+  const candidates = useQuery({ queryKey: ["issue-merge-candidates", detail.data?.repository_id, debouncedSearch],
+    queryFn: ({ signal }) => apiRequest<{ items: Issue[] }>(token, `/api/review-issues?repository_id=${detail.data?.repository_id}&status=open&page_size=10&q=${encodeURIComponent(debouncedSearch)}`, { signal }),
+    enabled: canEdit && detail.data?.status === "open" && Boolean(debouncedSearch) && search.trim() === debouncedSearch });
   const refresh = () => { for (const key of ["review-issues", "review-issue", "job", "review-effectiveness", "issue-merge-candidates"]) void client.invalidateQueries({ queryKey: [key] }); };
   const change = useMutation({ mutationFn: (status: string) => apiRequest(token, `/api/review-issues/${id}`, { method: "PATCH", body: JSON.stringify({ status, note: note.trim() || null }) }), onSuccess: () => { setNote(""); refresh(); } });
   const merge = useMutation({ mutationFn: () => apiRequest(token, `/api/review-issues/${id}/merge`, { method: "POST", body: JSON.stringify({ target_id: Number(target) }) }), onSuccess: () => { setTarget(""); setSearch(""); refresh(); } });
@@ -47,9 +52,11 @@ export function IssueDetailDrawer({ token, id, canEdit, batchPending, onSelect }
         {canEdit && issue.status !== "merged" && <div className="issue-actions"><label>处理说明<input disabled={busy} value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} placeholder="可选，说明核查依据" /></label><div className="issue-action-buttons">{["open", "fixed", "ignored"].map((status) => <button key={status} className={issue.status === status ? "button button-primary" : "button button-secondary"} disabled={busy || issue.status === status} onClick={() => change.mutate(status)}>{labels[status]}</button>)}</div></div>}
         {(change.error || merge.error) && <p className="form-error" role="alert">{(change.error || merge.error)?.message}</p>}
         {change.isSuccess && <p role="status" className="form-success">问题状态已保存，关联任务同步更新。</p>}
-        {canEdit && issue.status === "open" && <details className="advanced-panel"><summary>合并重复问题</summary><div className="merge-search"><label>搜索重复问题<input disabled={busy} value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); setTarget(""); }} placeholder="输入问题摘要、文件路径或编号" /></label><QueryState loading={candidates.isFetching} error={candidates.error} /><SelectField label="合并目标" value={target} onValueChange={setTarget} options={options.map((item) => ({ value: String(item.id), label: `#${item.id} ${item.content.slice(0, 80)} · ${item.path}` }))} placeholder="选择同项目的待处理问题" /><button className="button button-secondary" disabled={!target || busy || candidates.isFetching} onClick={() => { if (window.confirm(`确认将问题 #${id} 合并到 #${target}？出现记录将归入目标问题，源问题保留合并历史。`)) merge.mutate(); }}>确认合并</button>{search.trim() && !candidates.isFetching && !candidates.error && !options.length && <p>未找到同项目的其他待处理问题，请更换关键词。</p>}</div></details>}
-        <h3>出现记录</h3><div className="issue-occurrences">{issue.occurrences.map((item) => <div key={item.id}><Link to={`/jobs/${item.job_id}`}>任务 #{item.job_id} · 第 {item.attempt_number} 次 →</Link><span>{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · {shortSha(item.commit_sha)}</span><span className="mono file-path">{item.path}{item.start_line ? `:${item.start_line}` : ""}</span><small>{formatTime(item.created_at)}</small></div>)}</div>
-        <h3>处理记录</h3><ul className="issue-history">{issue.events.map((item) => <li key={item.id}><span>{formatTime(item.created_at)} · {item.actor} · {labels[item.new_status]}</span>{item.note && <p>{item.note}</p>}</li>)}</ul>
+        {canEdit && issue.status === "open" && <details className="advanced-panel"><summary>合并重复问题</summary><div className="merge-search"><label>搜索重复问题<input disabled={busy} value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); setTarget(""); }} placeholder="输入问题摘要、文件路径或编号" /></label><QueryState loading={candidates.isFetching} error={candidates.error} /><SelectField label="合并目标" value={target} disabled={busy || search.trim() !== debouncedSearch} onValueChange={setTarget} options={options.map((item) => ({ value: String(item.id), label: `#${item.id} ${item.content.slice(0, 80)} · ${item.path}` }))} placeholder="选择同项目的待处理问题" /><button className="button button-secondary" disabled={!target || busy || candidates.isFetching || search.trim() !== debouncedSearch} onClick={() => { if (window.confirm(`确认将问题 #${id} 合并到 #${target}？出现记录将归入目标问题，源问题保留合并历史。`)) merge.mutate(); }}>确认合并</button>{search.trim() && search.trim() === debouncedSearch && !candidates.isFetching && !candidates.error && !options.length && <p>未找到同项目的其他待处理问题，请更换关键词。</p>}</div></details>}
+        <h3>出现记录</h3><div className="issue-occurrences">{issue.occurrences.slice(0, occurrenceLimit).map((item) => <div key={item.id}><Link to={`/jobs/${item.job_id}`}>任务 #{item.job_id} · 第 {item.attempt_number} 次 →</Link><span>{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · {shortSha(item.commit_sha)}</span><span className="mono file-path">{item.path}{item.start_line ? `:${item.start_line}` : ""}</span><small>{formatTime(item.created_at)}</small></div>)}</div>
+        {issue.occurrences.length > occurrenceLimit && <button className="text-link history-more" onClick={() => setOccurrenceLimit((value) => value + 10)}>再显示 10 条出现记录（已显示 {occurrenceLimit} / {issue.occurrences.length}）</button>}
+        <h3>处理记录</h3><ul className="issue-history">{issue.events.slice(0, eventLimit).map((item) => <li key={item.id}><span>{formatTime(item.created_at)} · {item.actor} · {labels[item.new_status]}</span>{item.note && <p>{item.note}</p>}</li>)}</ul>
+        {issue.events.length > eventLimit && <button className="text-link history-more" onClick={() => setEventLimit((value) => value + 10)}>再显示 10 条处理记录（已显示 {eventLimit} / {issue.events.length}）</button>}
       </>}
     </div>
   </Modal>;

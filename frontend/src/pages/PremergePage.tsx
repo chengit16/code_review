@@ -5,6 +5,7 @@ import { apiRequest } from "../api/client";
 import { parsePremergeResult, premergeLabels } from "../api/premerge";
 import type { PremergeReview } from "../api/premerge";
 import type { Repository } from "../api/types";
+import { Pagination } from "../ui/Pagination";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
@@ -19,7 +20,6 @@ export function PremergePage({ token }: { /** 内存凭据。 */ token: string }
     refetchInterval: (current) => current.state.data?.items.some((item) => ["queued", "running"].includes(item.status)) ? 10000 : 30000 });
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const page = reviews.data?.page ?? 1;
-  const pages = Math.max(1, Math.ceil((reviews.data?.total ?? 0) / (reviews.data?.page_size ?? 25)));
   const selected = Number(params.get("review")) || null;
   function filter(key: string, value: string) {
     const next = new URLSearchParams(params); next.delete("page"); next.delete("review");
@@ -40,6 +40,6 @@ export function PremergePage({ token }: { /** 内存凭据。 */ token: string }
       {reviews.data?.items.map((review) => { const result = parsePremergeResult(review.result_json); return <tr key={review.id}><td data-label="项目 / MR">{review.repository_name}<small className="table-sub">MR !{review.mr_iid}</small></td><td data-label="提交版本" className="mono" title={review.head_sha}>{review.head_sha.slice(0, 12)}</td><td data-label="状态">{premergeLabels[review.status]}</td><td data-label="发现">{review.status === "superseded" ? "旧版本" : result.valid ? `${result.comments.length} 条（以覆盖结论为准）` : "尚无有效结果"}</td><td data-label="接收时间">{formatTime(review.created_at)}</td><td data-label="操作"><button className="button button-secondary" onClick={() => select(review.id)}>详情 #{review.id}</button></td></tr>; })}
       {!reviews.isLoading && !reviews.error && reviews.data?.items.length === 0 && <tr><td colSpan={6} className="empty-row">当前条件下没有审查记录。需要接入时请在<Link to="/repositories">项目配置</Link>开启合并前审查。</td></tr>}
     </tbody></table></div></section>
-    <div className="pagination" aria-label="合并前审查分页"><span>共 {reviews.data?.total ?? 0} 条 · 第 {page} / {pages} 页</span><button className="button button-secondary" disabled={page <= 1 || reviews.isFetching} onClick={() => paginate(page - 1)}>上一页</button><button className="button button-secondary" disabled={page >= pages || reviews.isFetching} onClick={() => paginate(page + 1)}>下一页</button></div>
+    <Pagination label="合并前审查分页" total={reviews.data?.total ?? 0} page={page} pageSize={reviews.data?.page_size ?? 25} disabled={reviews.isFetching || Boolean(reviews.error)} onPage={paginate} onPageSize={(size) => filter("page_size", String(size))} />
   </div>;
 }

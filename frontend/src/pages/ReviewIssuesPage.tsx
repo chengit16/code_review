@@ -1,12 +1,13 @@
 /** @description 按项目跟进评审发现，原始出现记录与人工处理状态分开显示。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
+import { Pagination } from "../ui/Pagination";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
@@ -59,6 +60,7 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
   const status = params.get("status") ?? "open";
   const severity = params.get("severity") ?? "";
   const query = new URLSearchParams({ page: String(page) });
+  if (params.get("page_size")) query.set("page_size", params.get("page_size") ?? "25");
   if (repositoryId) query.set("repository_id", repositoryId);
   if (status && status !== "all") query.set("status", status);
   if (severity) query.set("severity", severity);
@@ -96,7 +98,6 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
     next.delete("issue");
     setParams(next);
   }
-  const pages = Math.max(1, Math.ceil((issues.data?.total ?? 0) / (issues.data?.page_size ?? 25)));
   return <div className="page">
     <PageHeader title="待跟进问题" subtitle="跨评审追踪问题与处理记录" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
     <div className="filter-bar issue-filters">
@@ -115,7 +116,7 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
       {issues.data?.items.map((item) => <tr key={item.id}>{canEdit && <td data-label="选择"><input className="issue-checkbox" type="checkbox" aria-label={`选择问题 ${item.id}`} checked={batch.targets.some((target) => target.id === item.id)} disabled={item.status === "merged" || batch.mutation.isPending || issues.isFetching} onChange={(event) => batch.toggle(item, event.target.checked)} /></td>}<td data-label="问题摘要" className="issue-summary"><button type="button" className="issue-summary-button" onClick={() => selectIssue(item.id)}><span className="mono">#{item.id}</span><strong>{item.content}</strong></button></td><td data-label="项目">{item.repository_name}</td><td data-label="位置" className="file-path mono" title={item.path}>{item.path}</td><td data-label="级别">{formatSeverity(item.severity)}</td><td data-label="状态">{labels[item.status]}</td><td data-label="出现">{item.occurrence_count} 次</td><td data-label="最近发现">{formatTime(item.last_seen_at)}</td><td data-label="操作"><button className="row-link" type="button" title={`查看问题 ${item.id}`} aria-label={`查看问题 ${item.id}`} onClick={() => selectIssue(item.id)}><ArrowUpRight size={16} /></button></td></tr>)}
       {!issues.isLoading && !issues.error && issues.data?.items.length === 0 && <tr><td colSpan={canEdit ? 9 : 8} className="empty-row">当前筛选下没有问题</td></tr>}
     </tbody></table></div></section>
-    <div className="pagination" aria-label="问题分页"><span>共 {issues.data?.total ?? 0} 条 · 第 {page} / {pages} 页</span><button className="icon-button" aria-label="上一页" title="上一页" disabled={page <= 1 || batch.mutation.isPending} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button><button className="icon-button" aria-label="下一页" title="下一页" disabled={page >= pages || batch.mutation.isPending} onClick={() => changePage(page + 1)}><ChevronRight size={18} /></button></div>
+    <Pagination label="问题分页" total={issues.data?.total ?? 0} page={page} pageSize={issues.data?.page_size ?? 25} disabled={issues.isFetching || batch.mutation.isPending || Boolean(issues.error)} onPage={changePage} onPageSize={(size) => updateFilter("page_size", String(size))} />
     {selectedId !== null && <IssueDetailDrawer key={selectedId} token={token} id={selectedId} canEdit={canEdit} batchPending={batch.mutation.isPending} onSelect={selectIssue} />}
   </div>;
 }
