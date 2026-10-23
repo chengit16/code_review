@@ -1,11 +1,11 @@
 # 本地部署与联调
 
-模型、共享飞书通道、HTTPS 仓库和统一 GitLab Webhook 的填写步骤见[后台配置与接入操作](./configuration-guide.md)。
+模型、共享飞书通道、HTTPS 仓库和统一 GitLab Webhook 的填写步骤见[后台配置与接入操作](./configuration-guide.md)。整体架构、当前页面与代码目录见[项目总览](project-overview.md)，全部资料见[文档索引](README.md)。
 
 ## 前置条件
 
 - Python 3.12、`uv`、Node.js、Git 2.41 或更新版本。
-- 固定版本的 Alibaba Open Code Review CLI，确认 `ocr version` 与 `ocr review --help` 可运行。当前开发机已将 `1.12.9` 安装在项目本地 `.local-tools/`，并验证空变更与单文件变更的 preview JSON；真实模型评审尚未联调。
+- 固定版本的 Alibaba Open Code Review CLI，确认 `ocr version` 与 `ocr review --help` 可运行。项目既有部署示例固定使用 `1.12.9` 并安装到 `.local-tools/`；升级前应重新核对参数和输出契约。历史联调记录见[实施进度](progress.md)，不代替新环境中的模型与真实评审验收。
 - GitLab 项目访问令牌、可从 GitLab 访问的 HTTPS 回调地址、飞书群机器人 webhook 和 OCR 模型 API key。
 
 本地固定端口为 `8781`，服务仅监听 `127.0.0.1:8781`，不占用 `8080`。内网穿透用于 GitLab 回调时，只向外转发 `/api/webhooks/gitlab`；开发模式没有管理鉴权，不可将整个管理台端口公开。新项目从管理台复制统一回调地址与自动生成的 Webhook Secret 到 GitLab，并按项目开关选择 Merge request events 和 Push events。
@@ -50,17 +50,26 @@ OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
   uv run python -m ocr_manager.worker
 ```
 
-`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_WEBHOOK_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。飞书卡片的详情使用 `OCR_APP_MANAGEMENT_URL`，群成员须能够访问该受控地址；只在服务机器查看时可保留本机值。运行监控页展示实际生效的两个地址。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
+`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_WEBHOOK_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。飞书卡片的详情使用 `OCR_APP_MANAGEMENT_URL`，群成员须能够访问该受控地址；只在服务机器查看时可保留本机值。原 `/operations` 管理员页面仍可核对生效地址，但已不在主导航中；不要把移除菜单理解为停止独立监控服务。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
 
-另一个终端使用相同环境变量启动独立 Worker：
+采用手动环境变量启动时，另一个终端使用相同配置启动独立 Worker（已有同数据目录 Worker 时不要重复启动）：
 
 ```bash
 uv run python -m ocr_manager.worker
 ```
 
+需要独立异常检测、告警投递与孤立工件维护时，在第三个终端使用同一私有配置启动 monitor：
+
+```bash
+OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
+  uv run python -m ocr_manager.alerts
+```
+
+monitor 与 Worker 为不同进程，移除运行监控菜单不会停止它。告警消息是否发送仍受已保存的告警开关与目标配置控制。
+
 访问 `GET /api/health` 可分别核对 API/SQLite、鉴权模式与 Worker：`status=ok` 表示管理进程和数据库可用，`auth_mode=dev` 表示本地开发模式不要求管理口令，`auth_mode=admin` 表示共享管理口令已启用，`auth_mode=users` 表示已在管理页切换为多人账号登录；`worker=running` 表示独立 Worker 正持有单实例锁，`worker=stopped` 时即使页面仍可访问，队列也不会继续消费。概览页会显示同一状态。
 
-开发前端可在 `frontend/` 运行 `npm run dev`，Vite 默认监听 `127.0.0.1:5173` 并代理 `/api` 到 `8781`。生产页面由 FastAPI 从 `frontend/dist` 提供。请在专用系统用户的环境中配置主密钥，限制数据目录权限，并在该用户会话验证 HTTPS Git、OCR 和飞书连接。两个进程可分别交给 `launchd` 守护；正式启用 webhook 前须确认重启后两个进程与环境变量均可恢复。
+开发前端可在 `frontend/` 运行 `npm run dev`，Vite 默认监听 `127.0.0.1:5173` 并代理 `/api` 到 `8781`。生产页面由 FastAPI 从 `frontend/dist` 提供。请在专用系统用户的环境中配置主密钥，限制数据目录权限，并在该用户会话验证 HTTPS Git、OCR 和飞书连接。API、Worker 和 monitor 可分别交给 `launchd` 守护；正式启用 webhook 前须确认重启后所需进程与环境变量均可恢复。
 
 使用 `launchd` 时可将进程配置保存为仅服务用户可读的 JSON 文件，所有配置键均使用上述环境变量原名，值必须为字符串。例如：
 
@@ -79,7 +88,7 @@ uv run python -m ocr_manager.worker
 }
 ```
 
-文件属主须为实际运行的用户，权限不得宽于 `0600`。用以下命令生成 API、Worker 与每日备份三个不包含密钥的 plist；备份目录须位于业务数据目录之外：
+文件属主须为实际运行的用户，权限不得宽于 `0600`。用以下命令生成 API、Worker、monitor 与每日备份四个不包含密钥的 plist；备份目录须位于业务数据目录之外：
 
 公网入口默认必须使用 HTTPS。仅在临时受控联调且入口确实不支持 HTTPS 时，才可在私有配置中设置 `OCR_APP_ALLOW_INSECURE_HTTP=1`；该开关允许 Webhook 和管理入口使用公网明文 HTTP，不应作为正式部署配置。
 
@@ -99,7 +108,7 @@ uv run python -m ocr_manager.launchd \
 
 当系统代理会处理内网 GitLab 请求时，`launchd` 不会继承终端的 `NO_PROXY`；用 `--no-proxy` 明确填写需要直连的 GitLab 主机和本机地址。遗漏时 GitLab API 可能在 TLS 握手阶段报 `UNEXPECTED_EOF_WHILE_READING`。若 Node.js 安装在 nvm 等用户目录，`--node-bin-dir` 应填写包含可执行 `node` 的绝对目录；`launchd` 不加载 shell 初始化文件，遗漏时 OCR 脚本可能无法运行。生成清单后须重新加载已运行的服务，单纯改写 plist 不会更新进程环境。
 
-生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。当前用户的本机实例可依次运行 `launchctl bootstrap gui/$(id -u) /absolute/path/to/ai.open-code-review.api.plist`、对应的 `worker.plist` 和 `backup.plist`；随后用 `launchctl print gui/$(id -u)/ai.open-code-review.api` 与 `/api/health` 核对进程。API 与 Worker 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。
+生成器不会自动执行 `launchctl`。部署者先核对 plist 的绝对路径、监听端口、备份时间与文件权限，再以专用服务用户安装并启用。当前用户的本机实例可依次运行 `launchctl bootstrap gui/$(id -u) /absolute/path/to/ai.open-code-review.api.plist`、对应的 `worker.plist`、`monitor.plist` 和 `backup.plist`；随后用 `launchctl print gui/$(id -u)/ai.open-code-review.api` 与 `/api/health` 核对进程。API、Worker 和 monitor 共享配置文件，Worker 通过数据目录的文件锁保证单实例；在同一个数据目录启动第二个 Worker 会失败。备份任务由 `StartCalendarInterval` 每日启动一次，也会在加载时执行一次，所以应先启动 API 完成数据库初始化再加载备份任务。停止 Worker 时会清理当前 OCR 进程组，重启时中断尝试计入有限重试次数。
 
 ## 质量检查
 
@@ -107,8 +116,12 @@ uv run python -m ocr_manager.launchd \
 uv run ruff check backend
 uv run mypy backend/ocr_manager
 uv run pytest -q
-cd frontend && npm run lint && npm run build
+npm --prefix frontend run lint
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
+
+浏览器回归命令、隔离服务说明和窄屏检查范围见[前端交互回归](frontend-interaction-checks.md)。这些命令是检查入口，不表示每次文档更新都执行过全部检查。
 
 模型设置可在管理台单向录入；已有 API key 不会回显。项目配置列表中的 Webhook Secret 默认遮罩，管理员可按需查看或复制；开发模式免管理员口令，因此只能在可信本机使用。模型配置、每仓库 GitLab Token、Webhook Secret 与飞书地址在 SQLite 中用环境主密钥加密。备份数据库时必须同时妥善备份主密钥。切换启用模型前必须先处理完队列中的事件和评审任务；重新评审在配置变化后会创建新的任务 ID，原结果仍保留。
 
@@ -116,7 +129,7 @@ cd frontend && npm run lint && npm run build
 
 仓库设置中的“测试 Git”“测试 GitLab API”、飞书配置中的连接测试和 Agent 模型中的“测试模型”会建立独立诊断任务，由 Worker 异步执行并显示最近结果。Git 测试实际拉取目标分支；GitLab API 测试读取项目与目标分支，并核对 HTTPS Clone URL 的仓库路径；模型测试调用 `ocr llm test`，可能消耗少量模型额度；飞书测试会向已保存的目标群发送“Open Code Review 连接测试”。先保存配置，再发起测试；连接测试状态不等同于真实 MR 评审验收。失败摘要不保存外部响应或凭据。
 
-在线备份命令如下，支持数据库以 WAL 模式运行时执行，并对副本做完整性检查。传入私有配置文件后，同批生成同名 `.private.json`，包含解密数据库凭据所需的主密钥。备份目录权限为 `0700`，快照文件权限为 `0600`；异机副本应加密保管。备份不自动删除旧文件，保留期应在正式部署时确定。
+在线备份命令如下，支持数据库以 WAL 模式运行时执行，并对副本做完整性检查。传入私有配置文件后，同批生成同名 `.private.json`，包含解密数据库凭据所需的主密钥。备份目录权限为 `0700`，快照文件权限为 `0600`；异机副本应加密保管。携带 `--config-file` 的成对备份默认保留 90 天且至少保留最近两份，可通过 `--retain-days` 调整。仅数据库备份不执行这组成对清理策略；正式部署应确认主密钥副本与保留期。
 
 ```bash
 uv run python -m ocr_manager.backup \
@@ -125,7 +138,15 @@ uv run python -m ocr_manager.backup \
   --output-dir "/path/to/review-backups"
 ```
 
-恢复演练时先停止 API 与 Worker，把选定数据库快照复制到新的空数据目录并设为服务用户所有、`0600` 权限；将同批 `.private.json` 放到受限位置，再用它启动服务并检查仓库、事件、任务与凭据可解密。不要直接覆盖正在运行的 `app.db`。每日备份清单不会自动清理历史副本；正式环境需根据磁盘容量确定保留期和异机副本位置，并定期执行恢复演练。
+恢复工具要求目标目录尚不存在，并使用同批数据库及私有配置快照生成恢复目录：
+
+```bash
+uv run python -m ocr_manager.backup \
+  --restore-from "/path/to/review-backups/app-YYYYMMDD-HHMMSS.db" \
+  --restore-to "/path/to/new-restore-data"
+```
+
+先核对新目录的 `app.db` 和 `private.json`，切换前停止 API、Worker 和 monitor，确保配置指向恢复后的数据目录，再按原主密钥启动并检查仓库、任务和凭据可解密。不要覆盖正在运行的 `app.db`。备份目录须在数据目录外，正式环境还应安排加密异机副本及定期恢复演练。
 
 ## 试点验收
 

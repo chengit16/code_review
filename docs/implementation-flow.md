@@ -1,5 +1,7 @@
 # 自动化 Code Review 管理平台实施流程
 
+> 阅读提示：本文保留设计依据和第一版范围；后续已扩展合并前审查、行内发布、账号权限与问题跟踪。当前功能和菜单以[项目总览](project-overview.md)及[操作指南](configuration-guide.md)为准。
+
 > 版本：实施方案 v1.3，2026-09-26。本文同时描述目标流程与分阶段验收；四块后台配置的实际填写方式见[配置指南](./configuration-guide.md)，本地启动方式见[部署说明](./deployment.md)。Open Code Review 的已确认能力和官方来源见[调研笔记](./open-code-review-research.md)。
 
 开发阶段的代码组织、注释和质量要求见[工程规范采用说明](./governance/README.md)。

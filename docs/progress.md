@@ -2,6 +2,8 @@
 
 > 更新于 2026-09-26。本文记录本地实现状态；“已实现”不代表真实 GitLab、OCR 模型或飞书环境已验收。
 
+> 2026-10-23 文档整理：下文保留早期阶段记录，包括当时的 SSH、菜单、测试数量和待办描述，不作为当前部署要求。当前功能与 HTTPS 接入方式见[项目总览](project-overview.md)、[操作指南](configuration-guide.md)和[部署说明](deployment.md)；后续能力亦可追溯[第二轮完善](enhancement-roadmap.md)与[评审闭环增强](kodus-enhancements.md)。
+
 ## 已实现
 
 - FastAPI 接收 GitLab Merge Request webhook，校验签名或 Secret token、项目、分支与合并动作，并把事件写入 SQLite。
