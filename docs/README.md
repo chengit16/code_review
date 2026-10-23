@@ -9,6 +9,7 @@
 3. [后台配置与接入操作](configuration-guide.md)：实际配置 GitLab、模型、飞书、审核规则和权限。
 4. [前端交互回归](frontend-interaction-checks.md)：复核近期页面与批量操作改动。
 5. [工程规范采用说明](governance/README.md)：开发前阅读前后端规范及根目录 [AGENTS.md](../AGENTS.md)。
+6. [项目完善实施路线](implementation-roadmap.md)：查看四轮优先级、当前进度与验收边界。
 
 ## 当前维护文档
 
@@ -18,6 +19,7 @@
 | [操作指南](configuration-guide.md) | 页面怎么配置、如何处理误报 / 已修复问题、如何批量处理。 |
 | [部署说明](deployment.md) | API、Worker、monitor、launchd、私有配置、备份和恢复。 |
 | [前端交互回归](frontend-interaction-checks.md) | 测试范围、执行命令、隔离数据和截图产物。 |
+| [项目完善实施路线](implementation-roadmap.md) | 第一至第四轮实施范围、原第十项归属与验收边界。 |
 | [后端代码规范](governance/backend-code-standards.md) | 后端分层、持久化、鉴权、重试与自动化验证。 |
 | [前端代码规范](governance/frontend-code-standards.md) | 组件、状态、异步反馈、草稿、布局、可访问性与验证。 |
 

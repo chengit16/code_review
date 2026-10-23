@@ -71,7 +71,7 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         repository_id: int | None = Query(None, gt=0),
         mr_iid: int | None = Query(None, gt=0),
         status: Literal["queued", "running", "complete", "partial", "failed",
-                        "skipped", "superseded"] | None = None,
+                        "skipped", "cancelled", "superseded"] | None = None,
         latest_only: bool = True,
         page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
     ) -> dict[str, Any]:

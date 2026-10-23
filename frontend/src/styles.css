@@ -653,3 +653,66 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
   .pagination-jump { flex-basis: 100%; }
   .task-advanced-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 工作台把异常动作前置，低频审计和事件筛选保持可折叠、可读。 */
+.todo-center { margin: 20px 0; padding: 19px; border: 1px solid #d9e4dc; border-radius: 8px; background: linear-gradient(125deg, #f7fbf8, #edf4ef 68%, #f4f6ef); }
+.todo-center .section-head { margin-bottom: 14px; }
+.todo-center .section-head h2 { margin: 0; font-size: 17px; }
+.todo-center .section-head p { margin: 5px 0 0; color: #62766a; font-size: 12px; }
+.todo-center .section-head > span { display: inline-flex; min-width: 38px; min-height: 30px; align-items: center; justify-content: center; padding: 0 9px; border-radius: 16px; background: #24463b; color: #fff; font-size: 12px; font-weight: 700; }
+.todo-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(195px, 1fr)); gap: 10px; }
+.todo-card { display: grid; gap: 7px; min-width: 0; padding: 14px 15px; border: 1px solid #d8e2dc; border-radius: 6px; background: rgba(255,255,255,.88); color: #33493f; text-decoration: none; transition: transform .16s ease, border-color .16s ease; }
+.todo-card:hover { transform: translateY(-2px); border-color: #7fa08e; }
+.todo-card span { color: #50695a; font-size: 12px; font-weight: 700; }
+.todo-card strong { color: #1f483b; font-size: 25px; font-variant-numeric: tabular-nums; }
+.todo-card small { color: #687b70; font-size: 11px; line-height: 1.5; }
+.todo-card--urgent { border-color: #e8cfc5; background: #fffaf8; }
+.todo-card--urgent strong { color: #9e483b; }
+.todo-empty { grid-column: 1 / -1; margin: 0; padding: 14px; border: 1px dashed #c6d4ca; border-radius: 6px; color: #4c6958; font-size: 13px; }
+.event-filters { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); align-items: end; gap: 13px; padding: 16px; }
+.event-filters > label, .event-backfill-fields > label { display: grid; min-width: 0; gap: 7px; color: #52675a; font-size: 13px; }
+.event-filters input, .event-backfill-fields input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #cdd9d3; border-radius: 6px; background: #fff; color: #263332; font: inherit; }
+.event-filters .select-field, .event-backfill-fields .select-field { min-width: 0; }
+.event-filters .filter-actions { display: flex; align-items: center; gap: 8px; }
+.event-backfill-card { padding: 17px 19px; border: 1px solid #dce5df; border-radius: 7px; background: #fff; }
+.event-backfill-card .form-note { margin-bottom: 14px; }
+.event-backfill-fields { display: grid; grid-template-columns: minmax(150px, 1.2fr) repeat(2, minmax(180px, 1fr)) auto; align-items: end; gap: 12px; }
+.event-backfill-fields > button { white-space: nowrap; }
+.task-mobile-summary { display: none; }
+.audit-log-note { margin-top: 0; }
+@media (max-width: 900px) {
+  .event-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .event-backfill-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .todo-center { padding: 15px; }
+  .todo-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .todo-card { padding: 12px; }
+  .event-filters, .event-backfill-fields { grid-template-columns: minmax(0, 1fr); }
+  .event-filters .filter-actions { display: grid; grid-template-columns: 1fr auto; }
+  .event-filters .filter-actions > * { justify-content: center; }
+  .event-backfill-fields > button { width: 100%; }
+  .task-list-table tbody tr { position: relative; }
+  .task-list-table td[data-label="选择"] { position: absolute; z-index: 1; top: 5px; right: 7px; display: block; min-height: 0; padding: 4px; }
+  .task-list-table td[data-label="选择"]::before { display: none; }
+  .task-list-table td[data-label="仓库"], .task-list-table td[data-label="提交"],
+  .task-list-table td[data-label="评审结果"], .task-list-table td[data-label="飞书通知"],
+  .task-list-table td[data-label="耗时 / 尝试"], .task-list-table td[data-label="预估费用"],
+  .task-list-table td[data-label="创建时间"] { display: none; }
+  .task-list-table td[data-label="任务 / 来源"] { display: block; min-height: 0; padding: 13px 14px; text-align: left; }
+  .task-list-table td[data-label="任务 / 来源"]::before { display: none; }
+  .task-mobile-summary { display: grid; gap: 6px; padding-right: 27px; }
+  .task-mobile-summary > strong { color: #263a31; font-size: 14px; }
+  .task-mobile-summary > small, .task-mobile-summary > span { color: #5e7467; font-size: 12px; line-height: 1.5; }
+  .task-mobile-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .task-mobile-heading a { color: #176b56; font-weight: 700; text-decoration: none; }
+  .task-mobile-summary details { margin-top: 2px; border-top: 1px solid #e7ede9; }
+  .task-mobile-summary details > summary { padding: 9px 0 2px; color: #466354; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .task-mobile-summary dl { display: grid; gap: 0; margin: 7px 0 0; }
+  .task-mobile-summary dl > div { display: flex; justify-content: space-between; gap: 14px; padding: 7px 0; border-top: 1px solid #edf1ee; font-size: 11px; }
+  .task-mobile-summary dt { color: #65796d; }
+  .task-mobile-summary dd { margin: 0; color: #2f453a; text-align: right; overflow-wrap: anywhere; }
+  .task-desktop-summary { display: none; }
+  .task-list-table td[data-label="操作"] { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .todo-card { transition: none; } }

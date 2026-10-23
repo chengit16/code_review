@@ -10,7 +10,7 @@ export interface PremergeReview {
 }
 
 /** 独立于合并后任务的版本状态。 */
-export const premergeLabels: Record<string, string> = { queued: "排队中", running: "审查中", complete: "完成", partial: "部分完成", skipped: "无可审查文件", failed: "失败", superseded: "已失效" };
+export const premergeLabels: Record<string, string> = { queued: "排队中", running: "审查中", complete: "完成", partial: "部分完成", skipped: "无可审查文件", failed: "失败", cancelled: "已取消", superseded: "已失效" };
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

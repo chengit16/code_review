@@ -44,6 +44,7 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
     else if (value) next.set("status", value);
     setParams(next);
   }
+  function detailPath(id: number) { return `/jobs/${id}${params.size ? `?${params}` : ""}`; }
   return <div className="page"><PageHeader title="评审任务" subtitle="快速定位评审结论、通知状态与待处理异常" actions={
     <button className="icon-button" type="button" aria-label="刷新任务" onClick={() => void jobs.refetch()}><RefreshCw size={18} /></button>
   } />
@@ -55,10 +56,15 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
     <section className="section"><div className="table-scroll responsive-table task-list-table"><table><thead><tr>{canEdit && <th><input className="issue-checkbox" type="checkbox" aria-label="全选本页可重审任务" checked={targets.length > 0 && targets.length === selectable.length} disabled={!selectable.length || jobs.isFetching || batchPending} onChange={(event) => setSelected(event.target.checked ? selectable : [])} /></th>}<th>任务 / 来源</th><th>仓库</th><th>提交</th><th>评审结果</th><th>飞书通知</th><th>耗时 / 尝试</th><th>预估费用</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
       {items.map((job) => <tr key={job.id}>
         {canEdit && <td data-label="选择"><input className="issue-checkbox" type="checkbox" aria-label={`选择任务 ${job.id}`} checked={targets.includes(job.id)} disabled={!selectable.includes(job.id) || jobs.isFetching || batchPending} onChange={(event) => setSelected(event.target.checked ? [...selected, job.id] : selected.filter((id) => id !== job.id))} /></td>}
-        <td data-label="任务 / 来源"><strong>#{job.id}</strong><small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></td>
+        <td data-label="任务 / 来源"><div className="task-mobile-summary">
+          <div className="task-mobile-heading"><Link to={detailPath(job.id)}>任务 #{job.id}</Link><Status value={job.status} /></div>
+          <strong>{job.repository_name}</strong><small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"} · {job.target_branch}</small>
+          <span>{["queued", "running"].includes(job.status) ? "等待最终结果" : `${job.finding_count ?? 0} 条发现${job.highest_severity ? ` · 最高：${formatSeverity(job.highest_severity)}` : ""}`}</span>
+          <details><summary>更多信息</summary><dl><div><dt>提交</dt><dd className="mono">{shortSha(job.commit_sha)}</dd></div><div><dt>飞书通知</dt><dd>{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}</dd></div><div><dt>耗时 / 尝试</dt><dd>{formatDuration(job.started_at, job.finished_at)} · {job.attempts} 次</dd></div><div><dt>预估费用</dt><dd className="mono">{formatCost(job.estimated_cost)}</dd></div><div><dt>创建时间</dt><dd>{formatTime(job.created_at)}</dd></div></dl></details>
+        </div><div className="task-desktop-summary"><strong>#{job.id}</strong><small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></div></td>
         <td data-label="仓库">{job.repository_name}<small className="table-sub">{job.target_branch}</small></td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td>
         <td data-label="评审结果"><Status value={job.status} /><small className="table-sub">{["queued", "running"].includes(job.status) ? "等待最终结果" : `${job.finding_count ?? 0} 条发现${job.highest_severity ? ` · 最高：${formatSeverity(job.highest_severity)}` : ""}`}</small></td>
-        <td data-label="飞书通知">{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}</td><td data-label="耗时 / 尝试">{formatDuration(job.started_at, job.finished_at)}<small className="table-sub">尝试 {job.attempts} 次</small></td><td data-label="预估费用" className="mono">{formatCost(job.estimated_cost)}</td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}${params.size ? `?${params}` : ""}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td>
+        <td data-label="飞书通知">{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}</td><td data-label="耗时 / 尝试">{formatDuration(job.started_at, job.finished_at)}<small className="table-sub">尝试 {job.attempts} 次</small></td><td data-label="预估费用" className="mono">{formatCost(job.estimated_cost)}</td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={detailPath(job.id)} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td>
       </tr>)}
       {!jobs.isLoading && !jobs.error && items.length === 0 && <tr><td colSpan={canEdit ? 10 : 9} className="empty-row">当前筛选下没有任务，可清空筛选或检查项目接入。</td></tr>}
     </tbody></table></div></section>

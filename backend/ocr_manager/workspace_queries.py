@@ -19,12 +19,30 @@ def overview_snapshot(store: Store) -> dict[str, Any]:
             FROM review_jobs""").fetchone())
         summary = {key: value or 0 for key, value in summary.items()}
         summary["repositories"] = db.execute("SELECT COUNT(*) FROM repositories").fetchone()[0]
+        todo = {"events_attention": db.execute(
+            """SELECT COUNT(*) FROM merge_events e JOIN repositories r ON r.id=e.repository_id
+            WHERE e.status='needs_attention' AND r.enabled=1"""
+        ).fetchone()[0], "premerge_failed": db.execute(
+            """SELECT COUNT(*) FROM premerge_reviews p
+            JOIN repositories r ON r.id=p.repository_id
+            JOIN premerge_settings s ON s.repository_id=p.repository_id
+            WHERE p.status='failed' AND r.enabled=1 AND s.enabled=1
+            AND NOT EXISTS (SELECT 1 FROM premerge_reviews n
+                WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)"""
+        ).fetchone()[0], "premerge_partial": db.execute(
+            """SELECT COUNT(*) FROM premerge_reviews p
+            JOIN repositories r ON r.id=p.repository_id
+            JOIN premerge_settings s ON s.repository_id=p.repository_id
+            WHERE p.status='partial' AND r.enabled=1 AND s.enabled=1
+            AND NOT EXISTS (SELECT 1 FROM premerge_reviews n
+                WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)"""
+        ).fetchone()[0]}
         for key, view in (("attention", "attention"),
                           ("notification_failed", "notification_failed")):
             summary[key] = db.execute(
                 f"SELECT COUNT(*) FROM review_jobs j WHERE {task_view_clause(view)}"
             ).fetchone()[0]
-    return {"summary": summary, "recent": search_jobs(store, {}, 1, 8)["items"]}
+    return {"summary": summary, "todo": todo, "recent": search_jobs(store, {}, 1, 8)["items"]}
 
 
 def search_premerge(store: Store, repository_id: int | None, mr_iid: int | None,

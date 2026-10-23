@@ -160,6 +160,51 @@ def premerge_is_current(store: Store, review_id: int) -> bool:
         return row is not None and row["status"] == "running"
 
 
+def cancel_premerge(store: Store, review_id: int) -> str | None:
+    """停止当前排队或运行版本；Worker 通过状态变化终止正在执行的 OCR。"""
+
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT status FROM premerge_reviews WHERE id=?",
+                         (review_id,)).fetchone()
+        if row is None or row["status"] not in {"queued", "running"}:
+            return None
+        db.execute("""UPDATE premerge_reviews SET status='cancelled',
+            error='用户请求停止合并前审查',finished_at=CURRENT_TIMESTAMP WHERE id=?""",
+                   (review_id,))
+        return "cancelled" if row["status"] == "queued" else "stopping"
+
+
+def retry_premerge(store: Store, review_id: int) -> int | None:
+    """只重试当前 MR 的最新终态版本，避免旧提交被重新解释为当前结论。"""
+
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("""SELECT p.*,r.enabled AS repository_enabled,
+            COALESCE(s.enabled,0) AS premerge_enabled
+            FROM premerge_reviews p JOIN repositories r ON r.id=p.repository_id
+            LEFT JOIN premerge_settings s ON s.repository_id=p.repository_id
+            WHERE p.id=?""", (review_id,)).fetchone()
+        if (row is None or not row["repository_enabled"] or not row["premerge_enabled"]):
+            return None
+        if row["status"] not in {"complete", "partial", "failed", "skipped", "cancelled"}:
+            return None
+        latest = db.execute("""SELECT id FROM premerge_reviews
+            WHERE repository_id=? AND mr_iid=? ORDER BY id DESC LIMIT 1""",
+                            (row["repository_id"], row["mr_iid"])).fetchone()
+        if latest is None or latest["id"] != review_id:
+            return None
+        db.execute("""UPDATE premerge_reviews SET status='superseded',
+            finished_at=COALESCE(finished_at,CURRENT_TIMESTAMP)
+            WHERE id=?""", (review_id,))
+        cursor = db.execute("""INSERT INTO premerge_reviews
+            (repository_id,mr_iid,head_sha,context_hint) VALUES(?,?,?,?)""",
+                            (row["repository_id"], row["mr_iid"], row["head_sha"],
+                             row["context_hint"]))
+        assert cursor.lastrowid is not None
+        return int(cursor.lastrowid)
+
+
 def finish_premerge(store: Store, review_id: int, status: str, base_sha: str | None,
                     result: dict[str, Any] | None, result_path: str | None,
                     changed_files: list[dict[str, Any]] | None, error: str | None,
@@ -279,3 +324,21 @@ def register_premerge(app: FastAPI, store: Store, admin: Any) -> None:
         if row is None:
             raise HTTPException(404, "合并前审查不存在")
         return dict(row)
+
+    @app.post("/api/premerge-reviews/{review_id}/cancel", dependencies=[admin])
+    def cancel_review(review_id: int) -> dict[str, str]:
+        """停止请求只写入 SQLite，不从管理请求直接操作 Worker 进程。"""
+
+        status = cancel_premerge(store, review_id)
+        if status is None:
+            raise HTTPException(409, "审查已结束、已失效或不存在")
+        return {"status": status}
+
+    @app.post("/api/premerge-reviews/{review_id}/retry", dependencies=[admin])
+    def retry_review(review_id: int) -> dict[str, int | str]:
+        """按相同 MR 版本重新排队；Worker 仍会向 GitLab 复核当前提交。"""
+
+        queued_id = retry_premerge(store, review_id)
+        if queued_id is None:
+            raise HTTPException(409, "只能重试当前 MR 的最新终态审查")
+        return {"status": "queued", "review_id": queued_id}

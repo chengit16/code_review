@@ -16,6 +16,7 @@ from ocr_manager.premerge import (
     finish_premerge,
     next_premerge,
     premerge_is_current,
+    retry_premerge,
 )
 from ocr_manager.storage import Store
 
@@ -117,6 +118,32 @@ def test_premerge_recover_and_current_result(client: TestClient, settings: Setti
     assert detail["status"] == "complete"
     assert json.loads(detail["result_json"])["comments"][0] == {
         "path": "src/a.py", "content": "检查边界", "severity": "high", "start_line": 2}
+
+
+def test_premerge_cancel_and_retry_latest_version(client: TestClient,
+                                                   settings: Settings) -> None:
+    """停止会使运行版本失效，只有最新终态版本可以建立新的审查记录。"""
+
+    repo_id = create_repository(client)
+    client.put(f"/api/repositories/{repo_id}/premerge", headers=ADMIN,
+               json={"enabled": True})
+    store = Store(settings.data_dir / "app.db")
+    assert enqueue_premerge(store, repo_id, 7, "a" * 40)
+    claimed = next_premerge(store)
+    assert claimed is not None
+    cancelled = client.post(f"/api/premerge-reviews/{claimed['id']}/cancel", headers=ADMIN)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "stopping"
+    assert not premerge_is_current(store, claimed["id"])
+
+    retried = client.post(f"/api/premerge-reviews/{claimed['id']}/retry", headers=ADMIN)
+    assert retried.status_code == 200
+    queued_id = retried.json()["review_id"]
+    assert queued_id != claimed["id"]
+    assert retry_premerge(store, claimed["id"]) is None
+    rows = client.get("/api/premerge-reviews", headers=ADMIN).json()
+    assert [(row["id"], row["status"]) for row in rows[:2]] == [
+        (queued_id, "queued"), (claimed["id"], "superseded")]
 
 
 def test_closed_mr_invalidates_without_postmerge_enabled(client: TestClient) -> None:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -37,7 +37,7 @@ def normalized_range(start: datetime, end: datetime) -> tuple[str, str]:
 
     if start.tzinfo is None or end.tzinfo is None:
         raise ValueError("时间必须包含时区")
-    if end <= start or (end - start).days > 31:
+    if end <= start or end.astimezone(UTC) - start.astimezone(UTC) > timedelta(days=31):
         raise ValueError("时间范围须大于零且不超过 31 天")
     return (start.astimezone(UTC).isoformat(), end.astimezone(UTC).isoformat())
 
@@ -48,8 +48,8 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
     @app.get("/api/event-search", dependencies=[admin])
     def search(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
                repository_id: int | None = Query(None, gt=0),
-               status: str | None = Query(None, max_length=30),
-               mr_iid: int | None = None,
+               status: Literal["queued", "running", "done", "needs_attention"] | None = None,
+               mr_iid: int | None = Query(None, gt=0),
                since: datetime | None = None, until: datetime | None = None) -> dict[str, Any]:
         """返回全量事件的稳定分页，任务数量和最新任务 ID 同事务读取。"""
 
@@ -64,16 +64,22 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
             if filter_value is not None:
                 conditions.append(f"e.{name}=?")
                 args.append(filter_value)
-        for operator, time_value in ((">=", since), ("<=", until)):
-            if time_value:
-                conditions.append(f"e.created_at {operator} ?")
-                args.append(time_value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"))
+        if since:
+            conditions.append("e.created_at >= ?")
+            args.append(since.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"))
+        if until:
+            # datetime-local 只有分钟精度，右边界按半开区间包含用户选中的整分钟。
+            conditions.append("e.created_at < ?")
+            args.append((until.astimezone(UTC) + timedelta(minutes=1)).strftime(
+                "%Y-%m-%d %H:%M:%S"))
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         with store.connection() as db:
             db.execute("BEGIN")
             total = db.execute(f"SELECT COUNT(*) FROM merge_events e{where}", args).fetchone()[0]
-            rows = db.execute(f"""SELECT e.*, COUNT(j.id) AS job_count, MAX(j.id) AS latest_job_id
-                FROM merge_events e LEFT JOIN review_jobs j ON j.event_id=e.id{where}
+            rows = db.execute(f"""SELECT e.*, r.name AS repository_name,
+                COUNT(j.id) AS job_count, MAX(j.id) AS latest_job_id
+                FROM merge_events e JOIN repositories r ON r.id=e.repository_id
+                LEFT JOIN review_jobs j ON j.event_id=e.id{where}
                 GROUP BY e.id ORDER BY e.id DESC LIMIT ? OFFSET ?""",
                 (*args, page_size, (page-1)*page_size)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total,
@@ -102,4 +108,5 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
 
         with store.connection() as db:
             return [dict(row) for row in db.execute(
-                "SELECT * FROM mr_backfills ORDER BY id DESC LIMIT 100")]
+                """SELECT b.*,r.name AS repository_name FROM mr_backfills b
+                JOIN repositories r ON r.id=b.repository_id ORDER BY b.id DESC LIMIT 100""")]

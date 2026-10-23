@@ -15,6 +15,7 @@ import { ReviewEffectivenessSection } from "./ReviewEffectivenessSection";
 interface Overview {
   summary: { repositories: number; queued: number; running: number; complete: number;
     attention: number; historical_failed: number; notification_failed: number; total: number };
+  todo: { events_attention: number; premerge_failed: number; premerge_partial: number };
   recent: ReviewJob[];
 }
 
@@ -40,6 +41,16 @@ export function OverviewPage({ token }: { /** 内存中的管理口令。 */ tok
       <Link to="/jobs?view=attention" className="metric metric-link"><span>待关注评审</span><strong>{summary.attention}</strong><small>失败或部分完成，未被后续完整结果覆盖</small></Link>
       <Link to="/jobs?status=complete" className="metric metric-link"><span>已完成评审</span><strong>{summary.complete}</strong><small>全部 {summary.total} 个历史任务</small></Link>
     </section><div className="overview-links"><span>失败任务 {summary.historical_failed} 条（含历史记录），不等于当前待办</span><Link to="/jobs?view=notification_failed">飞书发送失败 {summary.notification_failed} 条 · 查看并重发 →</Link></div></>}
+    {summary && overview.data && <section className="todo-center" aria-labelledby="todo-center-title"><div className="section-head"><div><h2 id="todo-center-title">待办中心</h2><p>优先处理会阻塞恢复或需要人工判断的异常</p></div><span>{summary.attention + summary.notification_failed + overview.data.todo.events_attention + overview.data.todo.premerge_failed + overview.data.todo.premerge_partial} 项</span></div>
+      <div className="todo-cards">
+        {overview.data.todo.events_attention > 0 && <Link className="todo-card todo-card--urgent" to="/events?status=needs_attention"><span>事件需要恢复</span><strong>{overview.data.todo.events_attention}</strong><small>重新核对 GitLab 并恢复入队 →</small></Link>}
+        {summary.attention > 0 && <Link className="todo-card todo-card--urgent" to="/jobs?view=attention"><span>评审结果待处理</span><strong>{summary.attention}</strong><small>失败或部分覆盖且未被完整结果覆盖 →</small></Link>}
+        {summary.notification_failed > 0 && <Link className="todo-card" to="/jobs?view=notification_failed"><span>飞书通知发送失败</span><strong>{summary.notification_failed}</strong><small>单独重发通知，不重跑评审 →</small></Link>}
+        {overview.data.todo.premerge_failed > 0 && <Link className="todo-card" to="/premerge?status=failed"><span>合并前审查失败</span><strong>{overview.data.todo.premerge_failed}</strong><small>查看最新 MR 版本与错误 →</small></Link>}
+        {overview.data.todo.premerge_partial > 0 && <Link className="todo-card" to="/premerge?status=partial"><span>合并前审查部分完成</span><strong>{overview.data.todo.premerge_partial}</strong><small>检查未覆盖文件 →</small></Link>}
+        {summary.attention + summary.notification_failed + overview.data.todo.events_attention + overview.data.todo.premerge_failed + overview.data.todo.premerge_partial === 0 && <p className="todo-empty">当前没有待处理异常，后台任务会继续由 Worker 自动执行。</p>}
+      </div>
+    </section>}
     <ReviewEffectivenessSection token={token} />
     {overview.data && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
       <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库 / 来源</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>

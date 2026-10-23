@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, GitPullRequest, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, X } from "lucide-react";
+import { Activity, ClipboardList, GitPullRequest, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, Wrench, X } from "lucide-react";
 import { createContext, lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createBrowserRouter, Navigate, NavLink, Route, RouterProvider, Routes, useLocation } from "react-router-dom";
 
@@ -14,6 +14,7 @@ import { PageErrorBoundary } from "../ui/PageErrorBoundary";
 
 // 较重的配置和详情按路由加载，避免首页一次下载全部表单与历史报告代码。
 const ConfigHistoryPage = lazy(() => import("../pages/ConfigHistoryPage").then((module) => ({ default: module.ConfigHistoryPage })));
+const EventCenterPage = lazy(() => import("../pages/EventCenterPage").then((module) => ({ default: module.EventCenterPage })));
 const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
 const OperationsPage = lazy(() => import("../pages/OperationsPage").then((module) => ({ default: module.OperationsPage })));
 const PremergePage = lazy(() => import("../pages/PremergePage").then((module) => ({ default: module.PremergePage })));
@@ -34,6 +35,11 @@ const navigation = [
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
+    { to: "/events", label: "合并事件", icon: ClipboardList },
+  ] },
+  { heading: "运维与审计", links: [
+    { to: "/operations", label: "运行监控", icon: Wrench },
+    { to: "/config-history", label: "配置历史", icon: History },
   ] },
   { heading: "接入配置", links: [
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
@@ -116,7 +122,7 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
             <Route path="/feishu" element={role === "admin" ? <Navigate to="/settings?tab=feishu" replace /> : <Navigate to="/" replace />} />
-            <Route path="/events" element={<Navigate to="/jobs" replace />} />
+            <Route path="/events" element={<EventCenterPage token={token} canEdit={role === "admin"} />} />
             <Route path="/jobs" element={<JobsPage token={token} canEdit={role === "admin"} />} />
             <Route path="/issues" element={<ReviewIssuesPage token={token} canEdit={role === "admin"} />} />
             <Route path="/effectiveness" element={<Navigate to={{ pathname: "/", search: location.search }} replace />} />

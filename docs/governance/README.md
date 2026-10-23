@@ -15,6 +15,6 @@
 | 工作区权限、文档导入、RAG、SSE、Tiptap、AG Grid、Celery、Redis、PostgreSQL 与 pgvector | 不适用；当前方案使用 FastAPI、SQLite、独立 Worker 和 React/Vite。 |
 | KnowSpace 的 `G-03`、`accept-feature`、CI、阶段验收报告及已经通过的门禁 | 不继承。开发时再为本仓库建立真实命令和验收记录。 |
 
-当前仓库已建立后端 Ruff、mypy、pytest 和前端 TypeScript 构建、ESLint 的本地检查命令，运行方式见[部署说明](../deployment.md)。CI 尚未接入；若实施流程或技术选型变化，同步修订本目录，不继续引用过期规则。
+当前仓库已建立后端 Ruff、mypy、pytest 和前端 TypeScript 构建、ESLint 的本地检查命令，并在 GitHub Actions 执行相同门禁，运行方式见[部署说明](../deployment.md)。浏览器回归作为本地可执行检查；CI 门禁通过不等于真实外部服务验收。
 
 注释章节保留源规范中的工作区、SSE、Outbox、文档等示例词汇，以保持规则完整；这些例子只有在当前项目实现相应能力时才要求按原场景执行。当前项目对应的复杂业务包括 GitLab webhook 鉴权、MR 合并范围、持久化队列、OCR 覆盖判定、飞书投递与恢复，同样按章节中的文件头、公开接口和复杂流程规则编写中文注释。

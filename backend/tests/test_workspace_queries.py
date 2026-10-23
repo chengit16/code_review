@@ -31,6 +31,8 @@ def test_overview_counts_entire_history_and_matches_views(
     assert result["summary"] == {"repositories": 1, "total": 251, "queued": 245,
                                  "running": 1, "complete": 1, "historical_failed": 3,
                                  "attention": 3, "notification_failed": 1}
+    assert result["todo"] == {"events_attention": 0, "premerge_failed": 0,
+                              "premerge_partial": 0}
     assert len(result["recent"]) == 8
     for view, count in (("attention", 3), ("active", 246), ("notification_failed", 1)):
         listing = client.get("/api/task-search", headers=ADMIN, params={"view": view}).json()
@@ -41,6 +43,27 @@ def test_overview_counts_entire_history_and_matches_views(
     with store.connection() as db:
         db.execute("UPDATE review_jobs SET base_sha=? WHERE id=251", ("b" * 40,))
     assert client.get("/api/overview", headers=ADMIN).json()["summary"]["attention"] == 4
+
+
+def test_overview_todo_only_counts_latest_premerge_versions(
+    client: TestClient, settings: Settings,
+) -> None:
+    """首页待办显示异常事件与每个 MR 的最新失败或部分完成版本。"""
+
+    store, repository_id = populate(client, settings, 1)
+    with store.connection() as db:
+        db.execute("UPDATE merge_events SET status='needs_attention' WHERE id=1")
+    assert client.put(f"/api/repositories/{repository_id}/premerge", headers=ADMIN,
+                      json={"enabled": True}).status_code == 200
+    enqueue_premerge(store, repository_id, 7, "a" * 40)
+    with store.connection() as db:
+        db.execute("UPDATE premerge_reviews SET status='failed' WHERE id=1")
+    enqueue_premerge(store, repository_id, 7, "b" * 40)
+    with store.connection() as db:
+        db.execute("UPDATE premerge_reviews SET status='partial' WHERE id=2")
+    result = client.get("/api/overview", headers=ADMIN).json()
+    assert result["todo"] == {"events_attention": 1, "premerge_failed": 0,
+                              "premerge_partial": 1}
 
 
 def test_task_summary_uses_current_attempt_and_independent_delivery(

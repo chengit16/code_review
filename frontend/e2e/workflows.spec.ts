@@ -162,12 +162,12 @@ test("部分结果、反馈与重审", async ({ page }) => {
   await expect(page.getByText("排队中").first()).toBeVisible();
 });
 
-test("评审任务页集中补触发且不再展示事件页", async ({ page }) => {
+test("评审任务与独立事件中心入口", async ({ page }) => {
   await page.goto("/jobs");
   await expect(page.getByRole("heading", { name: "评审任务" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Token 消耗" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "预估费用" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "GitLab 事件" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "合并事件" })).toBeVisible();
   await expect(page.getByText("按合并时间补审", { exact: true })).toHaveCount(0);
   await page.getByText("补触发与高级操作", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "批量重新评审" })).toBeVisible();
@@ -192,7 +192,12 @@ test("评审任务页集中补触发且不再展示事件页", async ({ page }) 
   await page.screenshot({ path: "test-results/job-trigger-mobile.png", fullPage: true });
 
   await page.goto("/events");
-  await expect(page).toHaveURL("/jobs");
+  await expect(page.getByRole("heading", { name: "合并事件" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "事件收件箱" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "按合并时间补审 MR" })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/event-center-mobile.png", fullPage: true });
 });
 
 test("窄屏导航与布局", async ({ page }) => {

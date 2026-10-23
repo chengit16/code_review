@@ -35,6 +35,19 @@ describe("配置与状态", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "请先停止任务" }), { status: 409 }));
     await expect(apiRequest("", "/api/test")).rejects.toMatchObject({ status: 409, message: "请先停止任务" });
   });
+  it("统一处理过期会话、网络失败、空响应和无效 JSON", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy.mockResolvedValueOnce(new Response("{}", { status: 401 }));
+    await expect(apiRequest("", "/api/test")).rejects.toMatchObject({
+      status: 401, message: "管理会话无效或已过期，请重新登录。",
+    });
+    fetchSpy.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(apiRequest("", "/api/test")).rejects.toMatchObject({ status: 0, code: "network" });
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(apiRequest<void>("", "/api/test")).resolves.toBeUndefined();
+    fetchSpy.mockResolvedValueOnce(new Response("not-json", { status: 200 }));
+    await expect(apiRequest("", "/api/test")).rejects.toMatchObject({ code: "invalid_response" });
+  });
   it("筛选后仍以原始发现索引提交反馈", async () => {
     const onFeedback = vi.fn();
     render(<FindingsPanel comments={[

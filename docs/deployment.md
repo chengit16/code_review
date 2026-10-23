@@ -50,7 +50,7 @@ OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
   uv run python -m ocr_manager.worker
 ```
 
-`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_WEBHOOK_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。飞书卡片的详情使用 `OCR_APP_MANAGEMENT_URL`，群成员须能够访问该受控地址；只在服务机器查看时可保留本机值。原 `/operations` 管理员页面仍可核对生效地址，但已不在主导航中；不要把移除菜单理解为停止独立监控服务。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
+`127.0.0.1` 只适合本机验证，GitLab 服务器无法访问它。真正接收 GitLab webhook 时，需要把 `OCR_APP_WEBHOOK_URL` 设置为 GitLab 可访问的 HTTPS 地址，并将该地址配置到项目 Webhook。飞书卡片的详情使用 `OCR_APP_MANAGEMENT_URL`，群成员须能够访问该受控地址；只在服务机器查看时可保留本机值。“运维与审计 → 运行监控”可核对生效地址和服务状态；移除管理页面不代表停止独立 monitor 进程。项目访问令牌、模型密钥、飞书 Webhook 与 GitLab Webhook Secret 均在管理台录入，不使用旧的全局 GitLab 或模型环境变量。
 
 采用手动环境变量启动时，另一个终端使用相同配置启动独立 Worker（已有同数据目录 Worker 时不要重复启动）：
 
@@ -65,7 +65,7 @@ OCR_APP_CONFIG_FILE="$PWD/.local-data/local/private.json" \
   uv run python -m ocr_manager.alerts
 ```
 
-monitor 与 Worker 为不同进程，移除运行监控菜单不会停止它。告警消息是否发送仍受已保存的告警开关与目标配置控制。
+monitor 与 Worker 为不同进程，隐藏或移动运行监控入口不会停止它。告警消息是否发送仍受已保存的告警开关与目标配置控制。
 
 访问 `GET /api/health` 可分别核对 API/SQLite、鉴权模式与 Worker：`status=ok` 表示管理进程和数据库可用，`auth_mode=dev` 表示本地开发模式不要求管理口令，`auth_mode=admin` 表示共享管理口令已启用，`auth_mode=users` 表示已在管理页切换为多人账号登录；`worker=running` 表示独立 Worker 正持有单实例锁，`worker=stopped` 时即使页面仍可访问，队列也不会继续消费。概览页会显示同一状态。
 

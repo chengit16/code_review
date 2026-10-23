@@ -25,7 +25,18 @@ def test_event_page_and_backfill(client: TestClient, settings: Settings,
     assert [item["id"] for item in listing["items"]] == [1]
     assert listing["items"][0]["job_count"] == 1
     assert listing["items"][0]["latest_job_id"] == 1
+    assert listing["items"][0]["repository_name"] == "检索项目"
     assert client.get("/api/event-search?mr_iid=2", headers=ADMIN).json()["total"] == 1
+    assert client.get("/api/event-search?status=needs_attention",
+                      headers=ADMIN).json()["total"] == 0
+    assert client.get("/api/event-search?status=unknown", headers=ADMIN).status_code == 422
+    assert client.get("/api/event-search?mr_iid=0", headers=ADMIN).status_code == 422
+    assert client.get("/api/event-search", headers=ADMIN).json()["items"][0]["repository_name"]
+    with store.connection() as db:
+        db.execute("UPDATE merge_events SET created_at='2026-09-01 12:34:59' WHERE id=1")
+    minute = client.get("/api/event-search?until=2026-09-01T12:34:00Z",
+                        headers=ADMIN).json()
+    assert any(item["id"] == 1 for item in minute["items"])
 
     with store.connection() as db:
         db.execute("UPDATE repositories SET gitlab_token_ciphertext=? WHERE id=?",
@@ -48,3 +59,11 @@ def test_event_page_and_backfill(client: TestClient, settings: Settings,
     assert (backfill["scanned"], backfill["enqueued"]) == (2, 1)
     invalid = {"since": "2026-09-03T00:00:00Z", "until": "2026-09-01T00:00:00Z"}
     assert client.post(path, headers=ADMIN, json=invalid).status_code == 422
+
+
+def test_event_search_rejects_oversized_utc_range(client: TestClient) -> None:
+    """跨时区的区间也按真实 UTC 时长限制为 31 天。"""
+
+    payload = {"since": "2026-09-01T00:00:00+14:00", "until": "2026-10-02T01:00:00-12:00"}
+    response = client.post("/api/repositories/1/mrs/backfill", headers=ADMIN, json=payload)
+    assert response.status_code == 422

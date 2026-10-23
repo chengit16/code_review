@@ -11,6 +11,7 @@
 - [后台配置与接入操作](docs/configuration-guide.md)：模型、飞书、项目、规则、问题处理与账号权限。
 - [本地部署与联调](docs/deployment.md)：依赖安装、API / Worker / monitor、主密钥、备份和恢复。
 - [前端交互回归](docs/frontend-interaction-checks.md)：草稿、批量操作、分页和窄屏布局检查。
+- [项目完善实施路线](docs/implementation-roadmap.md)：四轮优先级、实施进度及后续验收边界。
 - [工程规范](docs/governance/README.md)：前后端规范与项目执行约定。
 
 ## 核心功能

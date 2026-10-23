@@ -29,6 +29,13 @@ export interface Health {
   worker: "running" | "stopped";
 }
 
+/** 首页以最新事件和合并前版本统计的运维待办。 */
+export interface OverviewSummary {
+  events_attention: number;
+  premerge_failed: number;
+  premerge_partial: number;
+}
+
 /** 新仓库表单；Secret token 省略时由服务端生成。 */
 export interface RepositoryInput {
   name: string;
@@ -144,6 +151,7 @@ export interface MergeEvent {
   merge_sha: string | null;
   squash_sha: string | null;
   status: string;
+  repository_name?: string;
   error: string | null;
   attempts: number;
   next_run_at: string;
