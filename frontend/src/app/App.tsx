@@ -1,7 +1,7 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ClipboardList, GitPullRequest, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, Wrench, X } from "lucide-react";
+import { Activity, CheckCircle2, ClipboardList, GitPullRequest, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, Wrench, X } from "lucide-react";
 import { createContext, lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createBrowserRouter, Navigate, NavLink, Route, RouterProvider, Routes, useLocation } from "react-router-dom";
 
@@ -17,6 +17,7 @@ const ConfigHistoryPage = lazy(() => import("../pages/ConfigHistoryPage").then((
 const EventCenterPage = lazy(() => import("../pages/EventCenterPage").then((module) => ({ default: module.EventCenterPage })));
 const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
 const OperationsPage = lazy(() => import("../pages/OperationsPage").then((module) => ({ default: module.OperationsPage })));
+const OnboardingPage = lazy(() => import("../pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
 const PremergePage = lazy(() => import("../pages/PremergePage").then((module) => ({ default: module.PremergePage })));
 const RepositoriesPage = lazy(() => import("../pages/RepositoriesPage").then((module) => ({ default: module.RepositoriesPage })));
 const ReviewIssuesPage = lazy(() => import("../pages/ReviewIssuesPage").then((module) => ({ default: module.ReviewIssuesPage })));
@@ -42,6 +43,7 @@ const navigation = [
     { to: "/config-history", label: "配置历史", icon: History },
   ] },
   { heading: "接入配置", links: [
+    { to: "/onboarding", label: "首次接入引导", icon: CheckCircle2 },
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
     { to: "/settings", label: "系统设置", icon: Settings2 },
     { to: "/users", label: "访问权限", icon: Users },
@@ -120,6 +122,7 @@ function Workspace({ token, role, username, onLogout }: {
           <PageErrorBoundary key={location.pathname}><Suspense fallback={<div className="page" role="status">正在加载页面…</div>}><Routes>
             <Route path="/" element={<OverviewPage token={token} />} />
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/onboarding" element={role === "admin" ? <OnboardingPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />
             <Route path="/feishu" element={role === "admin" ? <Navigate to="/settings?tab=feishu" replace /> : <Navigate to="/" replace />} />
             <Route path="/events" element={<EventCenterPage token={token} canEdit={role === "admin"} />} />

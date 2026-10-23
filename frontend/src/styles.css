@@ -1,9 +1,26 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
 
 :root {
+  --color-ink: #263332;
+  --color-muted: #576b61;
+  --color-canvas: #f5f7f6;
+  --color-surface: #fff;
+  --color-border: #dce3df;
+  --color-border-strong: #cdd9d3;
+  --color-accent: #147864;
+  --color-accent-hover: #0e6252;
+  --color-accent-soft: #e8f1ed;
+  --color-danger: #a34c3b;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius-control: 6px;
+  --focus-ring: 0 0 0 3px rgb(20 120 100 / 24%);
   font-family: "DM Sans", "Noto Sans SC", sans-serif;
-  color: #263332;
-  background: #f5f7f6;
+  color: var(--color-ink);
+  background: var(--color-canvas);
   font-synthesis: none;
   letter-spacing: 0;
 }
@@ -13,6 +30,25 @@ body { margin: 0; min-width: 320px; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.onboarding-progress { display: grid; grid-template-columns: auto minmax(120px, 1fr); align-items: center; gap: 18px; margin: 24px 0 18px; padding: 18px 20px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.onboarding-progress > div { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+.onboarding-progress strong { color: var(--color-accent); font-size: 20px; }
+.onboarding-progress span { color: var(--color-muted); font-size: 13px; }
+.onboarding-progress progress { width: 100%; height: 9px; accent-color: var(--color-accent); }
+.onboarding-steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.onboarding-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 18px 20px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.onboarding-step-icon { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--color-border-strong); border-radius: 50%; color: #71847a; }
+.onboarding-steps li.is-complete { border-color: #bbd9ca; background: #fbfdfb; }
+.onboarding-steps li.is-complete .onboarding-step-icon { border-color: var(--color-accent); background: var(--color-accent); color: #fff; }
+.onboarding-step-copy { min-width: 0; }
+.onboarding-step-copy h2 { margin: 0; font-size: 15px; }
+.onboarding-step-copy p { margin: 5px 0 0; color: var(--color-muted); font-size: 13px; line-height: 1.5; }
+.onboarding-step-copy small { display: inline-block; margin-top: 6px; color: var(--color-accent); font-size: 12px; }
+.onboarding-action { flex: none; }
+.onboarding-note { display: flex; align-items: flex-start; gap: 8px; margin: 18px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.onboarding-note svg { flex: none; margin-top: 2px; }
 
 .app-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100dvh; }
 .mobile-topbar, .navigation-backdrop, .sidebar-close { display: none; }
@@ -72,6 +108,11 @@ td.file-path { white-space: normal; overflow-wrap: anywhere; }
 .inline-setting h2 { margin: 0; font-size: 16px; }
 @media (max-width: 1100px) { .task-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .task-command-grid, .alert-settings, .operations-health-grid, .operations-tools-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .task-filters { grid-template-columns: minmax(0, 1fr); } .page-actions { flex-wrap: wrap; } }
+@media (max-width: 640px) {
+  .onboarding-progress { grid-template-columns: 1fr; gap: 10px; padding: 15px; }
+  .onboarding-steps li { grid-template-columns: 28px minmax(0, 1fr); gap: 10px; padding: 15px; }
+  .onboarding-action { grid-column: 2; justify-self: start; min-height: 40px; }
+}
 .page { max-width: 1500px; min-height: 100dvh; margin: 0 auto; padding: 32px 38px 72px; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; padding-bottom: 27px; border-bottom: 1px solid #dce3df; }
 .page-header > div:first-child { min-width: 0; }
