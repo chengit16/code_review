@@ -69,6 +69,7 @@ function JobDetail({ token, canEdit }: {
         <div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div>
         <div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div>
       </section>
+      {job.correlation_id && <p className="job-correlation-id">关联编号：<code>{job.correlation_id}</code> · 可用于诊断包检索</p>}
       <div className="job-action-row">
         <div className="job-state-actions">
           {canEdit && <TaskStop token={token} id={job.id} status={job.status} stopping={Boolean(job.cancel_requested)} />}

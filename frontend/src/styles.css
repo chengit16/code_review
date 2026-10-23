@@ -78,6 +78,15 @@ td.file-path { white-space: normal; overflow-wrap: anywhere; }
 .revision-changes summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .operations-page .operations-metrics { padding-bottom: 22px; }
 .operations-page .operations-metrics .metric { min-height: 106px; }
+.reconciliation-card { margin-top: 14px; }
+.reconciliation-card .section-head { align-items: center; }
+.reconciliation-note, .reconciliation-timestamp { color: #576b61; font-size: 12px; line-height: 1.6; }
+.reconciliation-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px; margin: 13px 0; padding: 13px 15px; border: 1px solid #dce5df; border-radius: 6px; background: #f9fbfa; color: #576b61; font-size: 12px; }
+.reconciliation-summary strong { color: #a34c3b; font-size: 21px; }
+.reconciliation-issues { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.reconciliation-issues li { display: flex; align-items: baseline; gap: 10px; padding: 10px 12px; border: 1px solid #f0d9d2; border-radius: 5px; background: #fff8f5; color: #6d4037; font-size: 12px; line-height: 1.5; }
+.reconciliation-issues code { flex: none; color: #933f32; font-size: 11px; font-weight: 700; }
+.reconciliation-timestamp { margin-bottom: 0; }
 .operations-health-grid, .operations-tools-grid { display: grid; gap: 14px; margin-top: 14px; }
 .operations-health-grid { grid-template-columns: minmax(0, 1.2fr) minmax(420px, .8fr); }
 .operations-tools-grid { grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); }
@@ -234,6 +243,8 @@ input:focus, button:focus-visible, a:focus-visible { outline: 2px solid #258d72;
 .job-summary-card > div:last-child { border-right: 0; }
 .job-summary-card span:not(.status) { color: #65786e; font-size: 12px; }
 .job-summary-card strong { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.job-correlation-id { margin: 8px 0 0; color: #65786e; font-size: 12px; }
+.job-correlation-id code { color: #344a43; font-size: 11px; overflow-wrap: anywhere; }
 .job-action-row { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; min-height: 44px; margin-top: 10px; }
 .job-state-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; min-width: 0; }
 .job-state-actions .detail-line { margin: 0; }

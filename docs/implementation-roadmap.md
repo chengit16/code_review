@@ -1,6 +1,6 @@
 # 项目完善实施路线
 
-> 按已确认优先级拆分四轮实施。原排序第十项独立放入第四轮；第一至三轮已落地，第四轮待后续实施。
+> 按已确认优先级拆分四轮实施。原排序第十项独立放入第四轮；第一至四轮已落地。
 
 ## 第一轮：恢复与基础交互
 
@@ -24,10 +24,10 @@
 
 ## 第四轮：原第十项——对账与恢复可诊断性
 
-- [ ] 对账持久化事件、评审任务、通知投递和工件目录，报告孤儿、缺失及状态不一致，不自动修复业务事实。
-- [ ] 为 OpenAPI 契约增加前后端类型生成或一致性校验，提供本地和 CI 可执行命令。
-- [ ] 记录恢复演练的备份标识、数据库版本、校验结果和操作时间；演练仍只在隔离副本执行。
-- [ ] 贯穿请求、事件、任务、尝试和投递的关联 ID，并生成脱敏诊断包，避免包含凭据、原始代码及模型推理内容。
+- [x] 对账持久化事件、评审任务、通知投递和工件目录，报告孤儿、缺失及状态不一致，不自动修复业务事实。
+- [x] 为 OpenAPI 契约增加前后端路径一致性校验和提交的 schema 快照，提供本地和 CI 命令。
+- [x] 增加仅在临时隔离副本执行的恢复演练，记录备份标识、数据库版本、校验结果和操作时间；普通恢复同时写入本地 manifest。
+- [x] 贯穿请求、事件、任务、尝试和投递的关联 ID，并提供脱敏诊断包，不导出凭据、原始代码或模型推理。
 
 ## 验收边界
 
@@ -37,4 +37,6 @@
 
 第三轮新增首次接入引导页 `/onboarding`，状态根据服务端配置与近期连接测试计算，不在浏览器保存敏感信息。样式层新增基础颜色、间距、圆角和焦点变量，以及向导窄屏布局；既有各页面样式仍待后续分批迁移到变量。
 
-第一、二轮本地验收：`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、`uv run pytest -q`（222 项通过），以及 `cd frontend && npm run lint && npm test && npm run build`（28 项前端测试通过，构建成功）。第三轮验收结果待执行后补充。Playwright 页面回归此前因环境缺少对应 Chromium 未能通过；GitHub Actions 结果须在推送后确认。
+第四轮提供“运维与审计 → 数据对账”只读报告和脱敏诊断包；恢复演练命令为 `uv run python -m ocr_manager.backup --drill-from /path/to/app-YYYYMMDD-HHMMSS.db --output-dir /path/to/drill-records`，只在临时隔离副本执行。OpenAPI 快照及前端路径校验使用 `uv run python -m ocr_manager.openapi_contract`，运行时不读取本机私有配置。
+
+第一、二轮本地验收记录：`uv run ruff check backend`、`uv run mypy backend/ocr_manager`、`uv run pytest -q`（当时 222 项通过），以及前端 lint、28 项测试和构建通过。第四轮本地验收已执行：Ruff、mypy、227 项后端测试、OpenAPI 快照与前端路径校验、ESLint、30 项前端测试、TypeScript/Vite 构建及 `git diff --check` 均通过。第三轮检查未在本次重复执行。Playwright 页面回归此前因环境缺少对应 Chromium 未能通过；GitHub Actions 结果须在推送后确认。

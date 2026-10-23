@@ -11,6 +11,7 @@ import { formatTime } from "../ui/format";
 import { ServiceAddresses } from "./ServiceAddresses";
 import { AlertsPanel } from "./AlertsPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
+import { ReconciliationPanel } from "./ReconciliationPanel";
 
 interface Snapshot {
   jobs: Record<string, number>; events: Record<string, number>;
@@ -51,6 +52,7 @@ export function OperationsPage({ token }: { /** 内存中的管理口令。 */ t
       <ServiceAddresses token={token} />
     </div>
     <AlertsPanel token={token} />
+    <ReconciliationPanel token={token} />
     <AuditLogPanel token={token} />
   </div>;
 }

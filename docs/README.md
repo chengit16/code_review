@@ -20,6 +20,7 @@
 | [部署说明](deployment.md) | API、Worker、monitor、launchd、私有配置、备份和恢复。 |
 | [前端交互回归](frontend-interaction-checks.md) | 测试范围、执行命令、隔离数据和截图产物。 |
 | [项目完善实施路线](implementation-roadmap.md) | 第一至第四轮实施范围、原第十项归属与验收边界。 |
+| [OpenAPI 契约快照](openapi.json) | 管理 API 的提交版 schema；运行一致性命令检查是否漂移。 |
 | [后端代码规范](governance/backend-code-standards.md) | 后端分层、持久化、鉴权、重试与自动化验证。 |
 | [前端代码规范](governance/frontend-code-standards.md) | 组件、状态、异步反馈、草稿、布局、可访问性与验证。 |
 

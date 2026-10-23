@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
 
 import pytest
-from ocr_manager.backup import backup_database, main, prune_backups, restore_backup
+from cryptography.fernet import Fernet
+from ocr_manager.backup import (
+    backup_database,
+    backup_private_config,
+    main,
+    prune_backups,
+    recovery_drill,
+    restore_backup,
+)
+from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import SCHEMA_VERSION, Store
 
 
@@ -102,6 +112,13 @@ def test_restore_to_new_directory_and_retention(tmp_path: Path) -> None:
     restored = restore_backup(snapshots[-1], tmp_path / "restored")
     assert restored.joinpath("app.db").is_file()
     assert restored.joinpath("private.json").stat().st_mode & 0o777 == 0o600
+    manifest = json.loads(restored.joinpath("restore-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["backup_id"] == snapshots[-1].name
+    assert manifest["database_version"] == SCHEMA_VERSION
+    assert manifest["integrity_check"] == "ok"
+    assert manifest["operation"] == "restore_to_new_directory"
+    assert manifest["operation_at"].endswith("+00:00")
+    assert restored.joinpath("restore-manifest.json").stat().st_mode & 0o777 == 0o600
     with pytest.raises(FileExistsError):
         restore_backup(snapshots[-1], restored)
     old = 100 * 86400
@@ -109,3 +126,41 @@ def test_restore_to_new_directory_and_retention(tmp_path: Path) -> None:
     os.utime(snapshots[0].with_suffix(".private.json"), (old, old))
     assert prune_backups(backups, 7) == 1
     assert not snapshots[0].exists()
+
+
+def test_recovery_drill_validates_isolated_restore_and_credentials(tmp_path: Path) -> None:
+    """演练在临时隔离副本校验迁移与密文，记录只包含结果元数据。"""
+
+    data = tmp_path / "data"
+    store = Store(data / "app.db")
+    store.migrate()
+    key = Fernet.generate_key().decode("ascii")
+    box = SecretBox(key)
+    with store.connection() as db:
+        db.execute(
+            """INSERT INTO repositories
+            (name, gitlab_url, project_id, remote_url, target_branch, auth_kind,
+             webhook_secret, feishu_webhook) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("合成项目", "https://gitlab.example.test", 61,
+             "https://gitlab.example.test/team/repo.git", "main", "secret",
+             box.encrypt("synthetic-webhook-secret"), ""),
+        )
+    private = tmp_path / "private.json"
+    private.write_text(json.dumps({"OCR_APP_MASTER_KEY": key}), encoding="utf-8")
+    os.chmod(private, 0o600)
+    backups = tmp_path / "backups"
+    snapshot = backup_database(data / "app.db", backups)
+    backup_private_config(private, snapshot)
+
+    record_path = recovery_drill(snapshot, tmp_path / "drill-records")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    assert record["backup_id"] == snapshot.name
+    assert record["database_version"] == SCHEMA_VERSION
+    assert record["restored_database_version"] == SCHEMA_VERSION
+    assert record["checks"] == {
+        "integrity": "passed", "schema_migration": "passed",
+        "encrypted_credentials": "passed",
+    }
+    assert record["isolated_copy_only"] is True
+    assert record_path.stat().st_mode & 0o777 == 0o600
+    assert "synthetic-webhook-secret" not in record_path.read_text(encoding="utf-8")

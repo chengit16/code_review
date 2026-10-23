@@ -226,6 +226,13 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
         for column in ("price_currency", "input_price_per_million",
                        "output_price_per_million"):
             db.execute(f"ALTER TABLE model_profiles DROP COLUMN {column}")
+        db.execute("DROP INDEX idx_events_correlation")
+        db.execute("DROP INDEX idx_jobs_correlation")
+        for table in (
+            "audit_log", "merge_events", "review_jobs", "review_attempts",
+            "notification_deliveries",
+        ):
+            db.execute(f"ALTER TABLE {table} DROP COLUMN correlation_id")
         db.execute("PRAGMA user_version=17")
     store.migrate()
     assert store.get_repository(repository_id) is not None

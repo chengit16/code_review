@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,7 +28,7 @@ from ocr_manager.review_effectiveness import EFFECTIVENESS_MIGRATION
 from ocr_manager.review_issues import ISSUES_MIGRATION, backfill_existing_issues, capture_findings
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -248,6 +249,25 @@ ALTER TABLE review_jobs ADD COLUMN base_sha TEXT;
 SCHEMA_V33 = """
 ALTER TABLE review_jobs ADD COLUMN commit_author TEXT;
 """
+SCHEMA_V34 = """
+ALTER TABLE audit_log ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE merge_events ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE review_jobs ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE review_attempts ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE notification_deliveries ADD COLUMN correlation_id TEXT NOT NULL DEFAULT '';
+UPDATE merge_events SET correlation_id='legacy-event-' || id WHERE correlation_id='';
+UPDATE review_jobs SET correlation_id=COALESCE(
+  (SELECT correlation_id FROM merge_events WHERE id=event_id), 'legacy-job-' || id
+) WHERE correlation_id='';
+UPDATE review_attempts SET correlation_id=COALESCE(
+  (SELECT correlation_id FROM review_jobs WHERE id=job_id), 'legacy-attempt-' || id
+) WHERE correlation_id='';
+UPDATE notification_deliveries SET correlation_id=COALESCE(
+  (SELECT correlation_id FROM review_jobs WHERE id=job_id), 'legacy-delivery-' || id
+) WHERE correlation_id='';
+CREATE INDEX idx_events_correlation ON merge_events(correlation_id);
+CREATE INDEX idx_jobs_correlation ON review_jobs(correlation_id);
+"""
 
 
 class Store:
@@ -312,6 +332,7 @@ class Store:
                 (31, PREMERGE_CONTEXT_MIGRATION),
                 (32, SCHEMA_V32),
                 (33, SCHEMA_V33),
+                (34, SCHEMA_V34),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -370,14 +391,15 @@ class Store:
     def record_audit(
         self, action: str, object_type: str, object_id: int | None, outcome: str,
         actor_id: int | None = None, actor_name: str | None = None,
+        correlation_id: str = "",
     ) -> None:
         """仅记录操作元数据，绝不保存请求体、令牌或外部服务响应。"""
 
         with self.connection() as db:
             db.execute(
                 """INSERT INTO audit_log(action, object_type, object_id, outcome,
-                actor_id, actor_name) VALUES (?, ?, ?, ?, ?, ?)""",
-                (action, object_type, object_id, outcome, actor_id, actor_name),
+                actor_id, actor_name, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (action, object_type, object_id, outcome, actor_id, actor_name, correlation_id),
             )
 
     def list_audit(self, page: int, page_size: int) -> dict[str, Any]:
@@ -907,20 +929,23 @@ class Store:
         delivery_id: str | None,
         merge_sha: str | None,
         squash_sha: str | None,
+        correlation_id: str | None = None,
     ) -> bool:
         """以 MR 和投递 ID 双重去重，成功保存才允许向 GitLab 确认。"""
 
         with self.connection() as db:
             cursor = db.execute(
                 """INSERT OR IGNORE INTO merge_events
-                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha)
-                VALUES (?, ?, ?, ?, ?)""",
-                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha),
+                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha, correlation_id)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha,
+                 correlation_id or uuid.uuid4().hex),
             )
             return cursor.rowcount == 1
 
     def add_push_event(
-        self, repository_id: int, before_sha: str, after_sha: str, delivery_id: str | None
+        self, repository_id: int, before_sha: str, after_sha: str, delivery_id: str | None,
+        correlation_id: str | None = None,
     ) -> bool:
         """复用事件队列保存 Push；负 IID 仅作内部区分，提交范围以后端 Git 为准。"""
 
@@ -928,9 +953,10 @@ class Store:
         with self.connection() as db:
             cursor = db.execute(
                 """INSERT OR IGNORE INTO merge_events
-                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha)
-                VALUES (?, ?, ?, ?, ?)""",
-                (repository_id, synthetic_iid, delivery_id, after_sha, before_sha),
+                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha, correlation_id)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (repository_id, synthetic_iid, delivery_id, after_sha, before_sha,
+                 correlation_id or uuid.uuid4().hex),
             )
             return cursor.rowcount == 1
 
@@ -939,9 +965,9 @@ class Store:
 
         with self.connection() as db:
             cursor = db.execute(
-                """INSERT OR IGNORE INTO merge_events(repository_id, mr_iid)
-                VALUES (?, ?)""",
-                (repository_id, mr_iid),
+                """INSERT OR IGNORE INTO merge_events(repository_id, mr_iid, correlation_id)
+                VALUES (?, ?, ?)""",
+                (repository_id, mr_iid, uuid.uuid4().hex),
             )
             if cursor.rowcount:
                 return True
@@ -1005,8 +1031,10 @@ class Store:
                     db.execute(
                         """INSERT OR IGNORE INTO review_jobs
                         (id, repository_id, event_id, mr_iid, commit_sha, base_sha, ordinal,
-                         config_hash, rule_digest, target_branch, notification_min_severity)
+                         config_hash, rule_digest, correlation_id, target_branch,
+                         notification_min_severity)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          COALESCE((SELECT correlation_id FROM merge_events WHERE id=?), ''),
                           (SELECT target_branch FROM repositories WHERE id=?),
                           COALESCE((SELECT minimum_severity FROM project_policies
                             WHERE repository_id=?), 'medium'))""",
@@ -1020,6 +1048,7 @@ class Store:
                             ordinal,
                             snapshot_hash,
                             rule_digest,
+                            event_id,
                             event["repository_id"],
                             event["repository_id"],
                         ),
@@ -1283,7 +1312,8 @@ class Store:
             )
             if status != "cancelled":
                 db.execute(
-                    "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
+                    """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
+                    SELECT id, correlation_id FROM review_jobs WHERE id=?""", (job_id,)
                 )
             if status in {"complete", "partial"} and projection:
                 comments = projection.get("comments")
@@ -1304,12 +1334,14 @@ class Store:
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, result_path, error, failure_stage,
-                 config_snapshot, result_json, changed_files, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 config_snapshot, result_json, changed_files, started_at, correlation_id)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, correlation_id
+                FROM review_jobs WHERE id=?""",
                 (job_id, job["attempts"], status, result_path, error,
                  job["failure_stage"] if status in {"failed", "partial"} else None,
                  job["config_snapshot"], json.dumps(projection, ensure_ascii=False)
-                 if projection is not None else None, job["changed_files"], job["started_at"]),
+                 if projection is not None else None, job["changed_files"], job["started_at"],
+                 job_id),
             )
 
     def defer_job(self, job_id: int, error: str) -> None:
@@ -1318,7 +1350,7 @@ class Store:
         with self.connection() as db:
             job = db.execute(
                 "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested, "
-                "config_snapshot, changed_files, started_at "
+                "config_snapshot, changed_files, started_at, correlation_id "
                 "FROM review_jobs WHERE id=?",
                 (job_id,),
             ).fetchone()
@@ -1339,15 +1371,16 @@ class Store:
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, error, failure_stage,
-                 config_snapshot, changed_files, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                 config_snapshot, changed_files, started_at, correlation_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (job_id, attempts, "cancelled" if cancelled else "failed", error[:500],
                  job["failure_stage"], job["config_snapshot"], job["changed_files"],
-                 job["started_at"]),
+                 job["started_at"], job["correlation_id"]),
             )
             if final and not cancelled:
                 db.execute(
-                    "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)", (job_id,)
+                    """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
+                    SELECT id, correlation_id FROM review_jobs WHERE id=?""", (job_id,)
                 )
 
     def list_jobs(self) -> list[dict[str, Any]]:
@@ -1358,7 +1391,7 @@ class Store:
                 dict(row)
                 for row in db.execute(
                     """SELECT id, repository_id, event_id, mr_iid, commit_sha, base_sha, ordinal,
-                status, error, attempts, created_at, finished_at FROM review_jobs
+                correlation_id, status, error, attempts, created_at, finished_at FROM review_jobs
                 ORDER BY id DESC LIMIT 200"""
                 )
             ]
@@ -1428,7 +1461,7 @@ class Store:
                 )
             }
             delivery = db.execute(
-                """SELECT id, status, attempts, error, sent_at
+                """SELECT id, correlation_id, status, attempts, error, sent_at
                 FROM notification_deliveries WHERE job_id=?""",
                 (job_id,),
             ).fetchone()
@@ -1472,9 +1505,9 @@ class Store:
                 cursor = db.execute(
                     """INSERT OR IGNORE INTO review_jobs
                     (id, repository_id, event_id, mr_iid, commit_sha, commit_author,
-                     base_sha, ordinal, config_hash, rule_digest, target_branch,
+                     base_sha, ordinal, config_hash, rule_digest, correlation_id, target_branch,
                      notification_min_severity)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                       (SELECT minimum_severity FROM project_policies WHERE repository_id=?),
                       'medium'))""",
                     (
@@ -1488,6 +1521,7 @@ class Store:
                         old["ordinal"],
                         config_hash,
                         old["rule_digest"],
+                        old["correlation_id"],
                         old["target_branch"],
                         old["repository_id"],
                     ),
@@ -1607,7 +1641,7 @@ class Store:
                 WHERE status='running'"""
             )
             running = db.execute(
-                """SELECT id, attempts, retry_start_attempts
+                """SELECT id, attempts, retry_start_attempts, correlation_id
                 FROM review_jobs WHERE status='running' AND cancel_requested=0"""
             ).fetchall()
             db.execute("""UPDATE review_jobs SET status='cancelled',
@@ -1617,9 +1651,9 @@ class Store:
                 final = job["attempts"] - job["retry_start_attempts"] >= 3
                 db.execute(
                     """INSERT OR IGNORE INTO review_attempts
-                    (job_id, attempt_number, status, error)
-                    VALUES (?, ?, 'failed', 'Worker 中断，评审结果未确认')""",
-                    (job["id"], job["attempts"]),
+                    (job_id, attempt_number, status, error, correlation_id)
+                    VALUES (?, ?, 'failed', 'Worker 中断，评审结果未确认', ?)""",
+                    (job["id"], job["attempts"], job["correlation_id"]),
                 )
                 db.execute(
                     """UPDATE review_jobs SET status=?, error='Worker 中断，评审结果未确认',
@@ -1630,7 +1664,8 @@ class Store:
                 )
                 if final:
                     db.execute(
-                        "INSERT OR IGNORE INTO notification_deliveries(job_id) VALUES (?)",
+                        """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
+                        SELECT id, correlation_id FROM review_jobs WHERE id=?""",
                         (job["id"],),
                     )
             # 响应丢失时飞书可能已收消息；有限重试并在卡片中保留任务 ID 供识别。

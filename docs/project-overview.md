@@ -60,7 +60,7 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | 项目配置 | `/repositories` | 基础接入、评审参数、发布审查、接入诊断四个页签。 |
 | 系统设置 | `/settings` | `model`、`feishu`、`rules` 三个标签，分别管理模型、通知和规则。 |
 | 访问权限 | `/users` | 账号、角色、停用、密码重置和多人登录模式。 |
-| 运维与审计 | `/operations` | 运行监控、告警、工件维护、服务地址及管理操作审计。 |
+| 运维与审计 | `/operations` | 运行监控、告警、工件维护、数据对账、脱敏诊断包、服务地址及管理操作审计。 |
 | 配置历史 | `/config-history` | 项目、飞书与 Agent 模型配置版本查看和恢复。 |
 
 事件中心、运行监控与配置历史均可从主导航进入；只读账号可查询事件但不能重试或发起补审。`/webhooks` 转到项目配置，`/feishu` 与 `/review-rules` 转到对应设置标签，`/effectiveness` 转到概览并保留筛选。
@@ -130,6 +130,7 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | `backend/ocr_manager/feishu.py`、`publications.py` | 飞书通知与 GitLab 行内评论。 |
 | `backend/ocr_manager/auth.py`、`secrets.py` | 账号会话、角色校验与凭据加密。 |
 | `backend/ocr_manager/alerts.py`、`monitoring.py`、`backup.py`、`launchd.py` | 独立监控、维护、备份恢复及进程清单。 |
+| `backend/ocr_manager/reconciliation.py`、`diagnostics.py`、`openapi_contract.py` | 只读业务对账、脱敏诊断包和 OpenAPI 一致性检查。 |
 | `backend/tests/` | 后端自动化与隔离浏览器服务夹具。 |
 | `frontend/src/app/` | 应用壳、会话、导航和路由。 |
 | `frontend/src/pages/` | 页面与页面私有交互组件。 |
@@ -137,6 +138,7 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | `frontend/src/ui/`、`frontend/src/styles.css` | 通用控件、状态反馈、草稿保护和共享布局样式。 |
 | `frontend/src/test/`、`frontend/e2e/` | 组件 / 单元测试与浏览器回归。 |
 | `docs/` | 当前使用文档、设计依据、规范及阶段记录。 |
+| `docs/openapi.json` | FastAPI OpenAPI 契约快照，由本地和 CI 命令检查漂移。 |
 | `pyproject.toml`、`uv.lock` | Python 依赖、工具与锁文件。 |
 | `frontend/package.json`、`frontend/package-lock.json` | 前端脚本、依赖与锁文件。 |
 
@@ -149,7 +151,11 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 - GitLab 回调入口与管理入口分别配置；对外只转发受控 Webhook 路径，管理页另行保护。
 - 模型密钥与飞书地址不回显；GitLab Webhook Token 默认遮罩，管理员可主动读取或复制。
 - SQLite、主密钥配置、备份和 OCR 原始工件按敏感数据保护；不写入 Git、截图和普通日志。
+- `/api/reconciliation` 只报告状态差异、不自动修复；诊断导出只包含受限状态元数据和关联 ID。
+- Webhook 请求 ID 回传在 `X-Request-ID`；入库事件后沿用同一关联 ID 贯穿任务、尝试与通知，可在诊断包中跨表检索。
 - 携带私有配置的成对备份默认保留 90 天且至少保留最近两份；恢复写入不存在的新目录，切换前停止相关进程，不覆盖运行中的数据库。
+
+恢复演练使用 `uv run python -m ocr_manager.backup --drill-from /path/to/app-YYYYMMDD-HHMMSS.db --output-dir /path/to/drill-records`，仅在临时隔离副本迁移数据库并解密校验已保存凭据。演练记录包含备份标识、版本、校验状态、时间和耗时，不写入密钥或解密内容。
 
 详细安装、进程启动、launchd 与恢复步骤统一见[部署说明](deployment.md)，不在本文复制真实环境配置。
 

@@ -1,0 +1,5856 @@
+{
+  "components": {
+    "schemas": {
+      "AlertConfig": {
+        "additionalProperties": false,
+        "description": "默认关闭主动投递；启用时必须引用已保存的飞书通道。",
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "queue_minutes": {
+            "default": 30,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Queue Minutes",
+            "type": "integer"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          }
+        },
+        "title": "AlertConfig",
+        "type": "object"
+      },
+      "BackfillRequest": {
+        "additionalProperties": false,
+        "description": "时间范围最多 31 天，避免一个运维命令占用 Worker 太久。",
+        "properties": {
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "until": {
+            "format": "date-time",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until"
+        ],
+        "title": "BackfillRequest",
+        "type": "object"
+      },
+      "BatchIds": {
+        "additionalProperties": false,
+        "description": "最多处理 100 个目标；逐条冲突不回滚已成功的命令。",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "BatchIds",
+        "type": "object"
+      },
+      "ConnectionCheckInput": {
+        "additionalProperties": false,
+        "description": "诊断目标由服务端配置决定，浏览器不能传入外部 URL。",
+        "properties": {
+          "kind": {
+            "enum": [
+              "git",
+              "gitlab",
+              "model",
+              "feishu"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "repository_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ConnectionCheckInput",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IssueBatchResult": {
+        "description": "已提交事务的处理数量，不将相同状态的项重复计为变更。",
+        "properties": {
+          "status": {
+            "enum": [
+              "open",
+              "fixed",
+              "ignored"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "updated",
+          "unchanged"
+        ],
+        "title": "IssueBatchResult",
+        "type": "object"
+      },
+      "IssueBatchTarget": {
+        "additionalProperties": false,
+        "description": "批量处理携带勾选时的状态快照，防止覆盖其他入口后续作出的决定。",
+        "properties": {
+          "expected_status": {
+            "enum": [
+              "open",
+              "fixed",
+              "ignored"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "expected_status"
+        ],
+        "title": "IssueBatchTarget",
+        "type": "object"
+      },
+      "IssueBatchUpdate": {
+        "additionalProperties": false,
+        "description": "仅接收显式勾选的问题，不按筛选条件扩展到其他页。",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "fixed",
+              "ignored"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/IssueBatchTarget"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "targets"
+        ],
+        "title": "IssueBatchUpdate",
+        "type": "object"
+      },
+      "IssueMerge": {
+        "additionalProperties": false,
+        "description": "管理员确认两条描述不同的问题实际上指向同一缺陷。",
+        "properties": {
+          "target_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Target Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "title": "IssueMerge",
+        "type": "object"
+      },
+      "IssueUpdate": {
+        "additionalProperties": false,
+        "description": "状态须由人确认；发现从后续评审消失不会自动视为已修复。",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "fixed",
+              "ignored"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "IssueUpdate",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "description": "账号登录输入，不允许夹带额外授权字段。",
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "ModeUpdate": {
+        "additionalProperties": false,
+        "description": "账号模式显式启停；开启前须已有可用管理员。",
+        "properties": {
+          "users_enabled": {
+            "title": "Users Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "users_enabled"
+        ],
+        "title": "ModeUpdate",
+        "type": "object"
+      },
+      "ModelProfileCreate": {
+        "additionalProperties": false,
+        "description": "OCR 模型可来自内置 provider 或 OpenAI 兼容端点。",
+        "properties": {
+          "api_key": {
+            "minLength": 1,
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "default": "",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "input_price_per_million": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Price Per Million"
+          },
+          "model": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "output_price_per_million": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Price Per Million"
+          },
+          "price_currency": {
+            "default": "CNY",
+            "enum": [
+              "CNY",
+              "USD"
+            ],
+            "title": "Price Currency",
+            "type": "string"
+          },
+          "provider": {
+            "default": "dashscope",
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "model",
+          "api_key"
+        ],
+        "title": "ModelProfileCreate",
+        "type": "object"
+      },
+      "ModelProfileUpdate": {
+        "additionalProperties": false,
+        "description": "编辑模型时省略 API key 表示沿用加密保存的原密钥。",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "input_price_per_million": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Price Per Million"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "output_price_per_million": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Price Per Million"
+          },
+          "price_currency": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CNY",
+                  "USD"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Currency"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "pattern": "^[a-zA-Z0-9_-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "ModelProfileUpdate",
+        "type": "object"
+      },
+      "NotificationTargetCreate": {
+        "additionalProperties": false,
+        "description": "独立的飞书机器人配置，可由多个仓库引用。",
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "signing_secret": {
+            "default": "",
+            "title": "Signing Secret",
+            "type": "string"
+          },
+          "webhook_url": {
+            "title": "Webhook Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "webhook_url"
+        ],
+        "title": "NotificationTargetCreate",
+        "type": "object"
+      },
+      "NotificationTargetUpdate": {
+        "additionalProperties": false,
+        "description": "空签名密钥表示关闭签名；省略凭据表示保留原值。",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "signing_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signing Secret"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Url"
+          }
+        },
+        "title": "NotificationTargetUpdate",
+        "type": "object"
+      },
+      "PremergeSetting": {
+        "additionalProperties": false,
+        "description": "项目级合并前审查开关，默认关闭。",
+        "properties": {
+          "context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Paths",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "include_description": {
+            "default": false,
+            "title": "Include Description",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "PremergeSetting",
+        "type": "object"
+      },
+      "ProjectLimits": {
+        "additionalProperties": false,
+        "description": "空值继承全局模型或进程超时，预算及文件上限为无限制。",
+        "properties": {
+          "max_files": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Files"
+          },
+          "max_tokens_budget": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens Budget"
+          },
+          "model_profile_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Id"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "maximum": 14400.0,
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          }
+        },
+        "title": "ProjectLimits",
+        "type": "object"
+      },
+      "ProjectNotificationPolicy": {
+        "additionalProperties": false,
+        "description": "项目通知卡片的重点发现级别；完整结论仍包含所有发现。",
+        "properties": {
+          "minimum_severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Minimum Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "minimum_severity"
+        ],
+        "title": "ProjectNotificationPolicy",
+        "type": "object"
+      },
+      "PublicationSetting": {
+        "additionalProperties": false,
+        "description": "默认不向 GitLab 写回；启用须显式保存项目级设置。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "PublicationSetting",
+        "type": "object"
+      },
+      "RepositoryCreate": {
+        "additionalProperties": false,
+        "description": "接入 GitLab 项目；Secret token 可省略并由服务端生成。",
+        "properties": {
+          "auth_kind": {
+            "default": "secret",
+            "enum": [
+              "signing",
+              "secret"
+            ],
+            "title": "Auth Kind",
+            "type": "string"
+          },
+          "enable_default_branch_pushes": {
+            "default": false,
+            "title": "Enable Default Branch Pushes",
+            "type": "boolean"
+          },
+          "enable_merge_requests": {
+            "default": true,
+            "title": "Enable Merge Requests",
+            "type": "boolean"
+          },
+          "feishu_target_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feishu Target Id"
+          },
+          "feishu_webhook": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feishu Webhook"
+          },
+          "gitlab_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gitlab Token"
+          },
+          "gitlab_url": {
+            "title": "Gitlab Url",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "path_with_namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path With Namespace"
+          },
+          "project_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Project Id",
+            "type": "integer"
+          },
+          "remote_url": {
+            "title": "Remote Url",
+            "type": "string"
+          },
+          "target_branch": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Target Branch",
+            "type": "string"
+          },
+          "webhook_token": {
+            "anyOf": [
+              {
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Token"
+          }
+        },
+        "required": [
+          "name",
+          "gitlab_url",
+          "project_id",
+          "remote_url",
+          "target_branch"
+        ],
+        "title": "RepositoryCreate",
+        "type": "object"
+      },
+      "RepositoryUpdate": {
+        "additionalProperties": false,
+        "description": "接入设置；项目身份只允许在业务投递前纠正。",
+        "properties": {
+          "auth_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "signing",
+                  "secret"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Kind"
+          },
+          "enable_default_branch_pushes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Default Branch Pushes"
+          },
+          "enable_merge_requests": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Merge Requests"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "feishu_target_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feishu Target Id"
+          },
+          "feishu_webhook": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feishu Webhook"
+          },
+          "gitlab_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gitlab Token"
+          },
+          "gitlab_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gitlab Url"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "path_with_namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path With Namespace"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "remote_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Url"
+          },
+          "target_branch": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Branch"
+          },
+          "webhook_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Id"
+          },
+          "webhook_token": {
+            "anyOf": [
+              {
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Token"
+          }
+        },
+        "title": "RepositoryUpdate",
+        "type": "object"
+      },
+      "ReviewFeedbackInput": {
+        "additionalProperties": false,
+        "description": "人工标记单条发现，可在重评审前修改或撤销。",
+        "properties": {
+          "verdict": {
+            "enum": [
+              "helpful",
+              "false_positive",
+              "fixed"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict"
+        ],
+        "title": "ReviewFeedbackInput",
+        "type": "object"
+      },
+      "ReviewRuleDocument": {
+        "additionalProperties": false,
+        "description": "与 OCR rule.json 格式一致，避免管理页保存无法解析的自由结构。",
+        "properties": {
+          "exclude": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Exclude",
+            "type": "array"
+          },
+          "include": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Include",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewRuleEntry"
+            },
+            "maxItems": 100,
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "ReviewRuleDocument",
+        "type": "object"
+      },
+      "ReviewRuleEntry": {
+        "additionalProperties": false,
+        "description": "按声明顺序匹配文件路径；合并开关只合并 OCR 内置规则。",
+        "properties": {
+          "merge_system_rule": {
+            "default": false,
+            "title": "Merge System Rule",
+            "type": "boolean"
+          },
+          "path": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "rule": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "rule"
+        ],
+        "title": "ReviewRuleEntry",
+        "type": "object"
+      },
+      "RulePreviewInput": {
+        "additionalProperties": false,
+        "description": "规则预览只接受仓库内相对文件路径，不能选择外部工作目录。",
+        "properties": {
+          "file_path": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "File Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ],
+        "title": "RulePreviewInput",
+        "type": "object"
+      },
+      "UserCreate": {
+        "additionalProperties": false,
+        "description": "仅管理员可创建账号；只读角色不能提升自己。",
+        "properties": {
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "role": {
+            "pattern": "^(admin|reader)$",
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "role"
+        ],
+        "title": "UserCreate",
+        "type": "object"
+      },
+      "UserUpdate": {
+        "additionalProperties": false,
+        "description": "管理员可调整角色、启停或重置密码，字段缺失表示保留。",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 12,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "pattern": "^(admin|reader)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "UserUpdate",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Open Code Review 管理平台",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/alerts": {
+      "get": {
+        "description": "返回配置、当前状态和最近投递。",
+        "operationId": "alerts_api_alerts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Alerts Api Alerts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Alerts"
+      }
+    },
+    "/api/alerts/config": {
+      "put": {
+        "description": "通道更换后重新检测，旧投递继续保留其原目标。",
+        "operationId": "save_api_alerts_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Save Api Alerts Config Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save"
+      }
+    },
+    "/api/alerts/{delivery_id}/retry": {
+      "post": {
+        "description": "人工重试只接受已失败消息；已删除的目标须先修复配置。",
+        "operationId": "retry_api_alerts__delivery_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Retry Api Alerts  Delivery Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry"
+      }
+    },
+    "/api/audit-logs": {
+      "get": {
+        "description": "分页展示管理写操作及 HTTP 结果，不返回请求内容。",
+        "operationId": "list_audit_logs_api_audit_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Audit Logs Api Audit Logs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit Logs"
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "description": "每账号连续失败五次锁定五分钟；登录成功签发十二小时随机会话。",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Login Api Auth Login Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login"
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "description": "删除当前会话；默认开发和共享口令模式不保存会话。",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Logout Api Auth Logout Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout"
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "description": "前端恢复界面状态时从服务端获取当前角色。",
+        "operationId": "me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Me Api Auth Me Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me"
+      }
+    },
+    "/api/auth/mode": {
+      "get": {
+        "description": "仅管理员可查看或切换账号模式。",
+        "operationId": "mode_api_auth_mode_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Mode Api Auth Mode Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mode"
+      },
+      "put": {
+        "description": "切换与管理员存在性核对在同一写事务；关闭后用户会话失去访问权。",
+        "operationId": "change_mode_api_auth_mode_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Change Mode Api Auth Mode Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Mode"
+      }
+    },
+    "/api/auth/users": {
+      "get": {
+        "description": "用户列表不包含认证材料。",
+        "operationId": "list_users_api_auth_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Users Api Auth Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Users"
+      },
+      "post": {
+        "description": "新账号密码在持久化前派生；重复用户名以冲突响应。",
+        "operationId": "create_user_api_auth_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create User Api Auth Users Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create User"
+      }
+    },
+    "/api/auth/users/{user_id}": {
+      "delete": {
+        "description": "删除账号会级联撤销会话；最后一名管理员始终保留恢复入口。",
+        "operationId": "delete_user_api_auth_users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete User Api Auth Users  User Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete User"
+      },
+      "patch": {
+        "description": "最后一名启用管理员不可降权或停用，且变更会撤销目标会话。",
+        "operationId": "update_user_api_auth_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update User Api Auth Users  User Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update User"
+      }
+    },
+    "/api/config-history/{kind}": {
+      "get": {
+        "description": "查看对象配置差异；共享口令只能标识共享管理会话。",
+        "operationId": "config_history_api_config_history__kind__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "repository",
+                "notification_target",
+                "model_profile"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "object_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Object Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Config History Api Config History  Kind  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Config History"
+      }
+    },
+    "/api/config-history/{kind}/{object_id}/{revision_id}/restore": {
+      "post": {
+        "description": "恢复历史内容；密文失效或当前队列不允许恢复时返回冲突。",
+        "operationId": "restore_configuration_api_config_history__kind___object_id___revision_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "repository",
+                "notification_target",
+                "model_profile"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "title": "Object Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Restore Configuration Api Config History  Kind   Object Id   Revision Id  Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Configuration"
+      }
+    },
+    "/api/connection-checks": {
+      "get": {
+        "description": "显示最近的连接测试结果，外部响应和密钥不进入管理 API。",
+        "operationId": "list_connection_checks_api_connection_checks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Connection Checks Api Connection Checks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Connection Checks"
+      },
+      "post": {
+        "description": "快速持久化连接测试，耗时的 Git、网络和 OCR 调用由 Worker 完成。",
+        "operationId": "enqueue_connection_check_api_connection_checks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionCheckInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Enqueue Connection Check Api Connection Checks Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enqueue Connection Check"
+      }
+    },
+    "/api/diagnostics/export": {
+      "get": {
+        "description": "下载脱敏运行元数据；不包含凭据、原始代码、评审发现或模型推理。",
+        "operationId": "diagnostics_export_api_diagnostics_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Diagnostics Export"
+      }
+    },
+    "/api/event-search": {
+      "get": {
+        "description": "返回全量事件的稳定分页，任务数量和最新任务 ID 同事务读取。",
+        "operationId": "search_api_event_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "done",
+                    "needs_attention"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mr_iid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mr Iid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Search Api Event Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search"
+      }
+    },
+    "/api/events": {
+      "get": {
+        "description": "展示最近合并事件与队列处理状态。",
+        "operationId": "list_events_api_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Events Api Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Events"
+      }
+    },
+    "/api/events/{event_id}/retry": {
+      "post": {
+        "description": "把需要人工处理的事件重新放入 GitLab 确认队列。",
+        "operationId": "retry_event_api_events__event_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Retry Event Api Events  Event Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Event"
+      }
+    },
+    "/api/gitlab-publications/{publication_id}/retry": {
+      "post": {
+        "description": "失败或未定位的评论可在 MR diff 更新后独立重试。",
+        "operationId": "retry_api_gitlab_publications__publication_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publication_id",
+            "required": true,
+            "schema": {
+              "title": "Publication Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Retry Api Gitlab Publications  Publication Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry"
+      }
+    },
+    "/api/health": {
+      "get": {
+        "description": "检查 API、SQLite、鉴权模式与独立 Worker；API 存活不代表队列正在消费。",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Api Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "description": "展示近期评审任务。",
+        "operationId": "list_jobs_api_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Jobs Api Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Jobs"
+      }
+    },
+    "/api/jobs/batch-retry": {
+      "post": {
+        "description": "每条记录按当前配置重审，失败项保留可读原因。",
+        "operationId": "batch_retry_api_jobs_batch_retry_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Batch Retry Api Jobs Batch Retry Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Retry"
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "description": "获取评审详情及原始机器可读结果。",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Job Api Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Job"
+      }
+    },
+    "/api/jobs/{job_id}/cancel": {
+      "post": {
+        "description": "任务已结束时拒绝停止；成功只表示停止请求已持久化。",
+        "operationId": "cancel_api_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Api Jobs  Job Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel"
+      }
+    },
+    "/api/jobs/{job_id}/comparison": {
+      "get": {
+        "description": "可跨配置版本比较同一项目同一提交；不读取其他提交或原始工件。",
+        "operationId": "comparison_api_jobs__job_id__comparison_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Before",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "After",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "other_job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Other Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Comparison Api Jobs  Job Id  Comparison Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Comparison"
+      }
+    },
+    "/api/jobs/{job_id}/feedback/{comment_index}": {
+      "delete": {
+        "description": "撤销已有反馈及其拥有的问题处理；缺失记录明确返回 404。",
+        "operationId": "delete_review_feedback_api_jobs__job_id__feedback__comment_index__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comment_index",
+            "required": true,
+            "schema": {
+              "title": "Comment Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Review Feedback Api Jobs  Job Id  Feedback  Comment Index  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Review Feedback"
+      },
+      "put": {
+        "description": "校验终态发现并同步问题处理；身份取自鉴权上下文而非请求体。",
+        "operationId": "put_review_feedback_api_jobs__job_id__feedback__comment_index__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comment_index",
+            "required": true,
+            "schema": {
+              "title": "Comment Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewFeedbackInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Review Feedback Api Jobs  Job Id  Feedback  Comment Index  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Review Feedback"
+      }
+    },
+    "/api/jobs/{job_id}/gitlab-publications/prepare": {
+      "post": {
+        "description": "为启用后的历史终态结果建立发布项，唯一约束防重复。",
+        "operationId": "prepare_api_jobs__job_id__gitlab_publications_prepare_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Prepare Api Jobs  Job Id  Gitlab Publications Prepare Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prepare"
+      }
+    },
+    "/api/jobs/{job_id}/neighbors": {
+      "get": {
+        "description": "只返回相邻任务编号，沿用详情页的只读访问权限。",
+        "operationId": "task_neighbors_api_jobs__job_id__neighbors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "complete",
+                    "partial",
+                    "failed",
+                    "skipped",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_branch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Branch"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mr_iid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mr Iid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sha",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-fA-F]{4,40}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sha"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "attention",
+                    "notification_failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Task Neighbors Api Jobs  Job Id  Neighbors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Neighbors"
+      }
+    },
+    "/api/jobs/{job_id}/notification/retry": {
+      "post": {
+        "description": "只重发终态评审结果，不再次调用模型。",
+        "operationId": "retry_notification_api_jobs__job_id__notification_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Retry Notification Api Jobs  Job Id  Notification Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Notification"
+      }
+    },
+    "/api/jobs/{job_id}/report": {
+      "get": {
+        "description": "下载白名单报告；额外移除当前已知凭据，绝不返回原始 thinking。",
+        "operationId": "download_report_api_jobs__job_id__report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "attempt",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Attempt"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report"
+      }
+    },
+    "/api/jobs/{job_id}/retry": {
+      "post": {
+        "description": "将已完成或失败的任务重新排队，保留历史工件。",
+        "operationId": "retry_job_api_jobs__job_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "title": "Response Retry Job Api Jobs  Job Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Job"
+      }
+    },
+    "/api/maintenance/orphans/prune": {
+      "post": {
+        "description": "只移除已删除项目的历史目录，当前任务和符号链接都不触碰。",
+        "operationId": "prune_orphans_api_maintenance_orphans_prune_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Prune Orphans Api Maintenance Orphans Prune Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Prune Orphans"
+      }
+    },
+    "/api/maintenance/preview": {
+      "get": {
+        "description": "预览终态任务旧工件；不触碰任务、结果摘要或未发送通知。",
+        "operationId": "maintenance_preview_api_maintenance_preview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 3650,
+              "minimum": 7,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Maintenance Preview Api Maintenance Preview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Maintenance Preview"
+      }
+    },
+    "/api/maintenance/prune": {
+      "post": {
+        "description": "人工确认后清理；每日备份及数据库历史不由此接口删除。",
+        "operationId": "maintenance_prune_api_maintenance_prune_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 3650,
+              "minimum": 7,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Maintenance Prune Api Maintenance Prune Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Maintenance Prune"
+      }
+    },
+    "/api/model-profiles": {
+      "get": {
+        "operationId": "list_model_profiles_api_model_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Model Profiles Api Model Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Model Profiles"
+      },
+      "post": {
+        "description": "新增配置先保持未启用，避免保存草稿立即改变评审任务。",
+        "operationId": "create_model_profile_api_model_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Model Profile Api Model Profiles Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Model Profile"
+      }
+    },
+    "/api/model-profiles/{profile_id}": {
+      "delete": {
+        "operationId": "delete_model_profile_api_model_profiles__profile_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Model Profile Api Model Profiles  Profile Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Model Profile"
+      },
+      "patch": {
+        "description": "更新已保存模型；启用配置在队列运行期间保持不可变。",
+        "operationId": "update_model_profile_api_model_profiles__profile_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Model Profile Api Model Profiles  Profile Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Model Profile"
+      }
+    },
+    "/api/model-profiles/{profile_id}/activate": {
+      "post": {
+        "operationId": "activate_model_profile_api_model_profiles__profile_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Activate Model Profile Api Model Profiles  Profile Id  Activate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Model Profile"
+      }
+    },
+    "/api/mr-backfills": {
+      "get": {
+        "description": "最近申请及错误供管理员确认；不包含 API 凭据。",
+        "operationId": "list_backfills_api_mr_backfills_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Backfills Api Mr Backfills Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Backfills"
+      }
+    },
+    "/api/notification-targets": {
+      "get": {
+        "operationId": "list_notification_targets_api_notification_targets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Notification Targets Api Notification Targets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Notification Targets"
+      },
+      "post": {
+        "description": "加密保存可共享的飞书机器人及可选签名密钥。",
+        "operationId": "create_notification_target_api_notification_targets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationTargetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Notification Target Api Notification Targets Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Notification Target"
+      }
+    },
+    "/api/notification-targets/{target_id}": {
+      "delete": {
+        "description": "删除通道并解除所有仓库关联，已有评审任务仍保留。",
+        "operationId": "delete_notification_target_api_notification_targets__target_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Notification Target Api Notification Targets  Target Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Notification Target"
+      },
+      "patch": {
+        "description": "修改共享通道后，Worker 下一次投递会直接读取新凭据。",
+        "operationId": "update_notification_target_api_notification_targets__target_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationTargetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Notification Target Api Notification Targets  Target Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Notification Target"
+      }
+    },
+    "/api/operations": {
+      "get": {
+        "description": "展示队列、失败、磁盘和同目录约定下的成对备份状态。",
+        "operationId": "operations_api_operations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Operations Api Operations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Operations"
+      }
+    },
+    "/api/overview": {
+      "get": {
+        "description": "返回全量聚合与最近八条任务，不以截断列表推断队列。",
+        "operationId": "overview_api_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Overview Api Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Overview"
+      }
+    },
+    "/api/premerge-reviews": {
+      "get": {
+        "description": "最多展示最近 100 个版本，旧版本明确标为失效。",
+        "operationId": "list_reviews_api_premerge_reviews_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Reviews Api Premerge Reviews Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Reviews"
+      }
+    },
+    "/api/premerge-reviews/{review_id}": {
+      "get": {
+        "description": "详情只暴露安全投影与差异文件，原始模型工件保留在本机。",
+        "operationId": "review_detail_api_premerge_reviews__review_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Review Detail Api Premerge Reviews  Review Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Detail"
+      }
+    },
+    "/api/premerge-reviews/{review_id}/cancel": {
+      "post": {
+        "description": "停止请求只写入 SQLite，不从管理请求直接操作 Worker 进程。",
+        "operationId": "cancel_review_api_premerge_reviews__review_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Review Api Premerge Reviews  Review Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Review"
+      }
+    },
+    "/api/premerge-reviews/{review_id}/retry": {
+      "post": {
+        "description": "按相同 MR 版本重新排队；Worker 仍会向 GitLab 复核当前提交。",
+        "operationId": "retry_review_api_premerge_reviews__review_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "title": "Review Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Retry Review Api Premerge Reviews  Review Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Review"
+      }
+    },
+    "/api/premerge-search": {
+      "get": {
+        "description": "按项目和 MR 查询版本；最新指最新接收版本，不把旧结果当成当前结论。",
+        "operationId": "premerge_search_api_premerge_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mr_iid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mr Iid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "complete",
+                    "partial",
+                    "failed",
+                    "skipped",
+                    "cancelled",
+                    "superseded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "latest_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Latest Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Premerge Search Api Premerge Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Premerge Search"
+      }
+    },
+    "/api/reconciliation": {
+      "get": {
+        "description": "只报告事件、任务、投递和工件差异，不自动更改业务事实。",
+        "operationId": "reconciliation_report_api_reconciliation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reconciliation Report Api Reconciliation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reconciliation Report"
+      }
+    },
+    "/api/repositories": {
+      "get": {
+        "description": "列出已接入仓库；密钥仅由单项查看接口按需返回。",
+        "operationId": "list_repositories_api_repositories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Repositories Api Repositories Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Repositories"
+      },
+      "post": {
+        "description": "接入单个 GitLab 项目并加密 webhook 与飞书凭据。",
+        "operationId": "create_repository_api_repositories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Repository Api Repositories Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Repository"
+      }
+    },
+    "/api/repositories/preflight": {
+      "post": {
+        "description": "保存前复用来源约束；不访问外部系统，也不持久化表单中的密钥。",
+        "operationId": "preflight_repository_api_repositories_preflight_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preflight Repository Api Repositories Preflight Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preflight Repository"
+      }
+    },
+    "/api/repositories/{repository_id}": {
+      "delete": {
+        "description": "删除项目配置及其业务记录；操作由前端确认后发起。",
+        "operationId": "delete_repository_api_repositories__repository_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Repository Api Repositories  Repository Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Repository"
+      },
+      "patch": {
+        "description": "校验修改后的仓库来源，并在保留业务历史的前提下更新接入设置。",
+        "operationId": "update_repository_api_repositories__repository_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Repository Api Repositories  Repository Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Repository"
+      }
+    },
+    "/api/repositories/{repository_id}/feishu-hook": {
+      "delete": {
+        "description": "删除单个项目的飞书 Hook，项目配置和评审历史保持不变。",
+        "operationId": "delete_feishu_hook_api_repositories__repository_id__feishu_hook_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Feishu Hook Api Repositories  Repository Id  Feishu Hook Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Feishu Hook"
+      }
+    },
+    "/api/repositories/{repository_id}/gitlab-publication": {
+      "get": {
+        "description": "读取是否允许该项目向 MR 发布行内评论。",
+        "operationId": "setting_api_repositories__repository_id__gitlab_publication_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Setting Api Repositories  Repository Id  Gitlab Publication Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setting"
+      },
+      "put": {
+        "description": "关闭后待发布项暂停，已发布的 GitLab 评论不自动撤回。",
+        "operationId": "save_setting_api_repositories__repository_id__gitlab_publication_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Save Setting Api Repositories  Repository Id  Gitlab Publication Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Setting"
+      }
+    },
+    "/api/repositories/{repository_id}/limits": {
+      "get": {
+        "description": "返回项目当前覆盖值，不回显模型凭据。",
+        "operationId": "read_api_repositories__repository_id__limits_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Read Api Repositories  Repository Id  Limits Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read"
+      },
+      "put": {
+        "description": "队列运行中拒绝改动，避免任务执行时的快照和参数分离。",
+        "operationId": "save_api_repositories__repository_id__limits_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectLimits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Save Api Repositories  Repository Id  Limits Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save"
+      }
+    },
+    "/api/repositories/{repository_id}/mrs/backfill": {
+      "post": {
+        "description": "只保存补审范围；网页请求不调用 GitLab。",
+        "operationId": "enqueue_api_repositories__repository_id__mrs_backfill_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Enqueue Api Repositories  Repository Id  Mrs Backfill Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enqueue"
+      }
+    },
+    "/api/repositories/{repository_id}/mrs/batch-enqueue": {
+      "post": {
+        "description": "补触发仍由 Worker 核验合并事实；重复 MR 保持幂等。",
+        "operationId": "batch_enqueue_api_repositories__repository_id__mrs_batch_enqueue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Batch Enqueue Api Repositories  Repository Id  Mrs Batch Enqueue Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Enqueue"
+      }
+    },
+    "/api/repositories/{repository_id}/mrs/{mr_iid}/enqueue": {
+      "post": {
+        "description": "管理员补触发一个 MR，合并事实仍由 Worker 向 GitLab 确认。",
+        "operationId": "enqueue_mr_api_repositories__repository_id__mrs__mr_iid__enqueue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mr_iid",
+            "required": true,
+            "schema": {
+              "title": "Mr Iid",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Enqueue Mr Api Repositories  Repository Id  Mrs  Mr Iid  Enqueue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enqueue Mr"
+      }
+    },
+    "/api/repositories/{repository_id}/notification-policy": {
+      "put": {
+        "description": "保存项目通知阈值；未完成事件或任务阻止快照变更。",
+        "operationId": "put_notification_policy_api_repositories__repository_id__notification_policy_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectNotificationPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Notification Policy Api Repositories  Repository Id  Notification Policy Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Notification Policy"
+      }
+    },
+    "/api/repositories/{repository_id}/premerge": {
+      "get": {
+        "description": "读取该项目是否审查未合并 MR。",
+        "operationId": "setting_api_repositories__repository_id__premerge_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setting Api Repositories  Repository Id  Premerge Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setting"
+      },
+      "put": {
+        "description": "关闭只暂停新任务领取；历史版本仍可供管理员核查。",
+        "operationId": "save_setting_api_repositories__repository_id__premerge_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PremergeSetting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Setting Api Repositories  Repository Id  Premerge Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Setting"
+      }
+    },
+    "/api/repositories/{repository_id}/rule-previews": {
+      "get": {
+        "description": "显示指定仓库最近的规则预览及执行时固定的提交 SHA。",
+        "operationId": "list_rule_previews_api_repositories__repository_id__rule_previews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Rule Previews Api Repositories  Repository Id  Rule Previews Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Rule Previews"
+      },
+      "post": {
+        "description": "HTTP 只验证路径并入队；Git 与 OCR 在 Worker 中执行。",
+        "operationId": "enqueue_rule_preview_api_repositories__repository_id__rule_previews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RulePreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Enqueue Rule Preview Api Repositories  Repository Id  Rule Previews Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enqueue Rule Preview"
+      }
+    },
+    "/api/repositories/{repository_id}/webhook-token": {
+      "get": {
+        "description": "管理员按需查看已有令牌，响应禁止缓存且审计不记录明文。",
+        "operationId": "get_webhook_token_api_repositories__repository_id__webhook_token_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Webhook Token Api Repositories  Repository Id  Webhook Token Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Webhook Token"
+      }
+    },
+    "/api/repositories/{repository_id}/webhook-token/rotate": {
+      "post": {
+        "description": "服务端生成新 Secret；GitLab 中的令牌必须同步更新才能继续投递。",
+        "operationId": "rotate_webhook_token_api_repositories__repository_id__webhook_token_rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Rotate Webhook Token Api Repositories  Repository Id  Webhook Token Rotate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Webhook Token"
+      }
+    },
+    "/api/repository-readiness": {
+      "get": {
+        "description": "按保存版本与测试时间计算接入状态，旧测试不会冒充新配置已验证。",
+        "operationId": "repository_readiness_api_repository_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Repository Readiness Api Repository Readiness Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Repository Readiness"
+      }
+    },
+    "/api/review-effectiveness": {
+      "get": {
+        "description": "按项目和最近天数统计，样本量判断留给界面明确展示。",
+        "operationId": "effectiveness_api_review_effectiveness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Effectiveness Api Review Effectiveness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Effectiveness"
+      }
+    },
+    "/api/review-feedback/summary": {
+      "get": {
+        "description": "反馈统计以已标记发现为分母，未标记发现不推断为有用或误报。",
+        "operationId": "review_feedback_summary_api_review_feedback_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Review Feedback Summary Api Review Feedback Summary Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Review Feedback Summary"
+      }
+    },
+    "/api/review-issues": {
+      "get": {
+        "description": "按仓库、状态和级别分页；默认隐藏已合并的重复项。",
+        "operationId": "list_issues_api_review_issues_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "fixed",
+                    "ignored",
+                    "merged"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Issues Api Review Issues Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Issues"
+      }
+    },
+    "/api/review-issues/batch-update": {
+      "post": {
+        "description": "管理员批量确认处理；任一目标缺失或冲突时整批不更新。",
+        "operationId": "batch_update_issues_api_review_issues_batch_update_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueBatchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueBatchResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Update Issues"
+      }
+    },
+    "/api/review-issues/{issue_id}": {
+      "get": {
+        "description": "返回原始出现位置和人工决策历史，便于跨 MR 核查。",
+        "operationId": "issue_detail_api_review_issues__issue_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "title": "Issue Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Issue Detail Api Review Issues  Issue Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Detail"
+      },
+      "patch": {
+        "description": "记录状态变化和操作者；重复保存不生成无意义事件。",
+        "operationId": "update_issue_api_review_issues__issue_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "title": "Issue Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Update Issue Api Review Issues  Issue Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Issue"
+      }
+    },
+    "/api/review-issues/{issue_id}/merge": {
+      "post": {
+        "description": "同仓库开放问题可人工合并；保留源问题及合并记录供审计。",
+        "operationId": "merge_issue_api_review_issues__issue_id__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "title": "Issue Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueMerge"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Merge Issue Api Review Issues  Issue Id  Merge Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Issue"
+      }
+    },
+    "/api/review-rules": {
+      "get": {
+        "description": "规则正文是非凭据配置；项目规则由管理台按项目选择编辑。",
+        "operationId": "list_review_rules_api_review_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Review Rules Api Review Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Review Rules"
+      }
+    },
+    "/api/review-rules/global": {
+      "delete": {
+        "operationId": "delete_global_review_rule_api_review_rules_global_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Global Review Rule Api Review Rules Global Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Delete Global Review Rule"
+      },
+      "put": {
+        "description": "全局配置写入每次 OCR 的隔离 HOME，作为仓库规则的后备层。",
+        "operationId": "put_global_review_rule_api_review_rules_global_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRuleDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Global Review Rule Api Review Rules Global Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Global Review Rule"
+      }
+    },
+    "/api/review-rules/global/revisions": {
+      "get": {
+        "description": "列出全局规则的最近 50 个版本。",
+        "operationId": "global_rule_revisions_api_review_rules_global_revisions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Global Rule Revisions Api Review Rules Global Revisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Global Rule Revisions"
+      }
+    },
+    "/api/review-rules/global/revisions/{revision_id}/restore": {
+      "post": {
+        "description": "恢复全局规则并重新计算后续任务快照。",
+        "operationId": "restore_global_rule_api_review_rules_global_revisions__revision_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Restore Global Rule Api Review Rules Global Revisions  Revision Id  Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Global Rule"
+      }
+    },
+    "/api/review-rules/repositories/{repository_id}": {
+      "delete": {
+        "description": "删除项目规则，保留历史版本以便恢复。",
+        "operationId": "delete_repository_review_rule_api_review_rules_repositories__repository_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Repository Review Rule Api Review Rules Repositories  Repository Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Repository Review Rule"
+      },
+      "put": {
+        "description": "管理台项目规则通过 OCR --rule 置于版本化仓库规则之上。",
+        "operationId": "put_repository_review_rule_api_review_rules_repositories__repository_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRuleDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Repository Review Rule Api Review Rules Repositories  Repository Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Repository Review Rule"
+      }
+    },
+    "/api/review-rules/repositories/{repository_id}/revisions": {
+      "get": {
+        "description": "列出项目规则的最近 50 个版本。",
+        "operationId": "repository_rule_revisions_api_review_rules_repositories__repository_id__revisions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Repository Rule Revisions Api Review Rules Repositories  Repository Id  Revisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Repository Rule Revisions"
+      }
+    },
+    "/api/review-rules/repositories/{repository_id}/revisions/{revision_id}/restore": {
+      "post": {
+        "description": "恢复指定项目的一个规则版本。",
+        "operationId": "restore_repository_rule_api_review_rules_repositories__repository_id__revisions__revision_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Restore Repository Rule Api Review Rules Repositories  Repository Id  Revisions  Revision Id  Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Repository Rule"
+      }
+    },
+    "/api/service-addresses": {
+      "get": {
+        "description": "只返回入口地址，不读取或回显部署凭据。",
+        "operationId": "service_addresses_api_service_addresses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Service Addresses Api Service Addresses Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service Addresses"
+      }
+    },
+    "/api/task-search": {
+      "get": {
+        "description": "查询所有历史任务，以稳定降序返回分页数据。",
+        "operationId": "task_search_api_task_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 1000000,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "complete",
+                    "partial",
+                    "failed",
+                    "skipped",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_branch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Branch"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mr_iid",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mr Iid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sha",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-fA-F]{4,40}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sha"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "attention",
+                    "notification_failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Task Search Api Task Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Task Search"
+      }
+    },
+    "/api/webhook-diagnostics": {
+      "get": {
+        "description": "展示最近投递的脱敏状态；未鉴权载荷字段仅作为自称值。",
+        "operationId": "list_webhook_diagnostics_api_webhook_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Webhook Diagnostics Api Webhook Diagnostics Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Webhook Diagnostics"
+      }
+    },
+    "/api/webhooks/gitlab": {
+      "post": {
+        "description": "按 GitLab 项目和目标分支定位配置；匹配后仍必须验证该项目令牌。",
+        "operationId": "receive_gitlab_shared_api_webhooks_gitlab_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Receive Gitlab Shared"
+      }
+    },
+    "/api/webhooks/gitlab/{repository_id}": {
+      "post": {
+        "description": "保留旧项目的专属回调地址，新配置统一使用无 ID 地址。",
+        "operationId": "receive_gitlab_api_webhooks_gitlab__repository_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Receive Gitlab Api Webhooks Gitlab  Repository Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Receive Gitlab"
+      }
+    }
+  }
+}

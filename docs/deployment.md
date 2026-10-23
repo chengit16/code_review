@@ -116,6 +116,7 @@ uv run python -m ocr_manager.launchd \
 uv run ruff check backend
 uv run mypy backend/ocr_manager
 uv run pytest -q
+uv run python -m ocr_manager.openapi_contract
 npm --prefix frontend run lint
 npm --prefix frontend test
 npm --prefix frontend run build
@@ -147,6 +148,18 @@ uv run python -m ocr_manager.backup \
 ```
 
 先核对新目录的 `app.db` 和 `private.json`，切换前停止 API、Worker 和 monitor，确保配置指向恢复后的数据目录，再按原主密钥启动并检查仓库、任务和凭据可解密。不要覆盖正在运行的 `app.db`。备份目录须在数据目录外，正式环境还应安排加密异机副本及定期恢复演练。
+
+可先在同批备份上做隔离恢复演练。命令会在 `--output-dir` 下创建临时副本，执行 SQLite 完整性检查、数据库迁移和已保存凭据解密验证；演练结束后删除临时恢复副本，仅保留权限为 `0600` 的脱敏结果记录：
+
+```bash
+uv run python -m ocr_manager.backup \
+  --drill-from "/path/to/review-backups/app-YYYYMMDD-HHMMSS.db" \
+  --output-dir "/path/to/recovery-drills"
+```
+
+普通恢复会在新数据目录写入 `restore-manifest.json`，记载备份标识、数据库版本、完整性结果和操作时间。它与备份数据同样受文件权限保护。
+
+“运维与审计 → 数据对账”按 SQLite 事件、任务、尝试、通知及工件目录报告不一致，不自动修改事件状态或删除目录。下载的诊断包仅含状态、时间、错误是否存在和关联 ID，不含凭据、评审发现正文、原始代码或模型推理内容。收到错误报告时优先提供包内的 `correlation_id`，配合响应 `X-Request-ID` 定位。
 
 ## 试点验收
 

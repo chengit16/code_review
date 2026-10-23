@@ -148,6 +148,7 @@ export interface MergeEvent {
   repository_id: number;
   mr_iid: number;
   delivery_id: string | null;
+  correlation_id?: string;
   merge_sha: string | null;
   squash_sha: string | null;
   status: string;
@@ -181,6 +182,7 @@ export interface ReviewJob {
   id: number;
   repository_id: number;
   event_id: number;
+  correlation_id?: string;
   mr_iid: number;
   commit_sha: string;
   base_sha?: string | null;
@@ -280,6 +282,7 @@ export interface ReviewJobDetail extends ReviewJob {
   }>;
   delivery: {
     id: number;
+    correlation_id?: string;
     status: string;
     attempts: number;
     error: string | null;

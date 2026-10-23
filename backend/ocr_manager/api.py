@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import sqlite3
+import uuid
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
@@ -370,6 +371,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Open Code Review 管理平台")
 
     @app.middleware("http")
+    async def assign_request_id(request: Request, call_next: Any) -> Response:
+        """为每个请求生成不可伪造的关联 ID，并通过响应头提供排查入口。"""
+
+        request_id = uuid.uuid4().hex
+        request.state.request_id = request_id
+        response: Response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+    @app.middleware("http")
     async def audit_management(request: Request, call_next: Any) -> Response:
         """管理写操作按稳定路由记录结果；请求体与密钥从不进入审计表。"""
 
@@ -408,6 +419,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         f"{request.method} {route.path}", object_type, object_id, outcome,
                         identity["id"] if identity else None,
                         identity["username"] if identity else None,
+                        getattr(request.state, "request_id", ""),
                     )
                 except sqlite3.Error:
                     # 审计写入异常不能让已提交的配置操作向客户端伪装成失败。
@@ -647,6 +659,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "success",
                 request.state.identity["id"],
                 request.state.identity["username"],
+                request.state.request_id,
             )
         except sqlite3.Error:
             LOGGER.exception("Webhook 令牌查看审计记录失败")
@@ -1133,7 +1146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return b"".join(chunks)
 
     def process_gitlab_webhook(
-        row: dict[str, Any], headers: dict[str, str], body: bytes
+        row: dict[str, Any], headers: dict[str, str], body: bytes, correlation_id: str
     ) -> dict[str, str]:
         """候选项目必须通过自身的密钥验证，未鉴权载荷不能产生事件。"""
 
@@ -1167,7 +1180,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ):
                 return {"status": "ignored"}
             delivery_id = headers.get("webhook-id") or headers.get("idempotency-key")
-            created = store.add_push_event(row["id"], before, after, delivery_id)
+            created = store.add_push_event(
+                row["id"], before, after, delivery_id, correlation_id
+            )
             return {"status": "queued" if created else "duplicate"}
         if headers.get("x-gitlab-event") != "Merge Request Hook":
             return {"status": "ignored"}
@@ -1197,7 +1212,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return {"status": "ignored"}
         delivery_id = headers.get("webhook-id") or headers.get("idempotency-key")
         created = store.add_event(
-            row["id"], event["mr_iid"], delivery_id, event["merge_sha"], event["squash_sha"]
+            row["id"], event["mr_iid"], delivery_id, event["merge_sha"], event["squash_sha"],
+            correlation_id,
         )
         with store.connection() as db:
             # 合并后的旧预审结论不能继续作为当前未合并 MR 结果展示。
@@ -1239,12 +1255,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def handle_webhook_candidate(
         row: dict[str, Any], headers: dict[str, str], body: bytes,
-        payload: dict[str, Any] | None, ignored_http_status: int = 200,
+        payload: dict[str, Any] | None, correlation_id: str, ignored_http_status: int = 200,
     ) -> dict[str, str]:
         """鉴权与业务入队后记录结论，失败也只记录固定错误类别。"""
 
         try:
-            result = process_gitlab_webhook(row, headers, body)
+            result = process_gitlab_webhook(row, headers, body, correlation_id)
         except HTTPException as error:
             reason = {
                 401: "authentication_failed",
@@ -1297,6 +1313,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return handle_webhook_candidate(
             row, {key.lower(): value for key, value in request.headers.items()},
             body, parsed if isinstance(parsed, dict) else None,
+            request.state.request_id,
         )
 
     @app.post("/api/webhooks/gitlab", response_model=None)
@@ -1332,7 +1349,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 None, payload, headers, "ignored", "unmatched_project_or_branch", 204
             )
             return Response(status_code=204)
-        result = handle_webhook_candidate(matches[0], headers, body, payload, 204)
+        result = handle_webhook_candidate(
+            matches[0], headers, body, payload, request.state.request_id, 204
+        )
         return Response(status_code=204) if result["status"] == "ignored" else result
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"

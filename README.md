@@ -25,6 +25,7 @@
 | 项目配置 | 管理 GitLab 接入、评审参数、发布审查和接入诊断。 |
 | 系统设置 | 集中配置 Agent 模型、飞书通知和审核规则。 |
 | 访问权限 | 管理账号、管理员 / 只读角色及多人登录模式。 |
+| 运维与审计 | 查看运行与数据对账、导出脱敏诊断包、核对配置和管理操作。 |
 
 ## 本地使用
 
@@ -42,6 +43,7 @@
 uv run ruff check backend
 uv run mypy backend/ocr_manager
 uv run pytest -q
+uv run python -m ocr_manager.openapi_contract
 npm --prefix frontend run lint
 npm --prefix frontend test
 npm --prefix frontend run build

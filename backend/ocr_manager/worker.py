@@ -252,7 +252,8 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         store.finish_event(event["id"], commits, snapshots, None)
     except Exception as error:
         # 事件处理失败必须落库为待处理状态，不能因网络库的新异常类型丢失队列项。
-        LOGGER.warning("合并事件 %s 需要处理：%s", event["id"], error)
+        LOGGER.warning("关联 %s 的合并事件 %s 需要处理：%s",
+                       event.get("correlation_id", ""), event["id"], error)
         if is_temporary(error):
             store.defer_event(event["id"], str(error))
         else:
@@ -324,7 +325,8 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         store.finish_job(job["id"], "cancelled", None, None, "用户请求停止评审")
     except Exception as error:
         # 临时失败记录每次尝试并有限退避；提交范围冲突立即终止，避免盲目重试。
-        LOGGER.warning("评审任务 %s 失败：%s", job["id"], error)
+        LOGGER.warning("关联 %s 的评审任务 %s 失败：%s",
+                       job.get("correlation_id", ""), job["id"], error)
         if is_temporary(error):
             store.defer_job(job["id"], str(error))
         else:
@@ -373,16 +375,20 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
             send_review(webhook, delivery)
         store.finish_delivery(delivery["id"], None)
     except FeishuDeliveryError as error:
-        LOGGER.warning("飞书投递 %s 失败：%s", delivery["id"], error)
+        LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
+                       delivery.get("correlation_id", ""), delivery["id"], error)
         store.finish_delivery(delivery["id"], str(error), retryable=error.retryable)
     except (InvalidToken, ValueError):
         # 密文不可解或已保存结果损坏时，重复发送不会修复输入。
-        LOGGER.warning("飞书投递 %s 的本地配置或结果不可用", delivery["id"])
+        LOGGER.warning("关联 %s 的飞书投递 %s 本地配置或结果不可用",
+                       delivery.get("correlation_id", ""), delivery["id"])
         store.finish_delivery(delivery["id"], "飞书投递配置或结果不可用", retryable=False)
     except Exception as error:
         # 投递失败只改变通知状态，不重新消耗模型额度。
         # HTTP 客户端异常可能包含带令牌的 webhook URL，持久化时仅记录异常类别。
-        LOGGER.warning("飞书投递 %s 失败：%s", delivery["id"], type(error).__name__)
+        LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
+                       delivery.get("correlation_id", ""), delivery["id"],
+                       type(error).__name__)
         store.finish_delivery(delivery["id"], f"飞书投递失败：{type(error).__name__}")
 
 

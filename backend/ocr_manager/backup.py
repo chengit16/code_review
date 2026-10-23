@@ -9,10 +9,13 @@ import shutil
 import sqlite3
 import stat
 import tempfile
-from datetime import datetime
+import time
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
-from ocr_manager.storage import SCHEMA_VERSION
+from ocr_manager.secrets import SecretBox
+from ocr_manager.storage import SCHEMA_VERSION, Store
 
 
 def backup_database(source: Path, output_dir: Path) -> Path:
@@ -97,7 +100,8 @@ def restore_backup(snapshot: Path, destination: Path) -> Path:
     if destination.exists():
         raise FileExistsError("恢复目标必须是不存在的新目录")
     with sqlite3.connect(f"file:{snapshot}?mode=ro", uri=True) as db:
-        if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        integrity = str(db.execute("PRAGMA quick_check").fetchone()[0])
+        if integrity != "ok":
             raise RuntimeError("备份数据库完整性检查失败")
         version = db.execute("PRAGMA user_version").fetchone()[0]
         if version > SCHEMA_VERSION:
@@ -113,6 +117,17 @@ def restore_backup(snapshot: Path, destination: Path) -> Path:
     try:
         shutil.copyfile(snapshot, stage / "app.db")
         shutil.copyfile(private, stage / "private.json")
+        manifest = {
+            "backup_id": snapshot.name,
+            "database_version": version,
+            "integrity_check": integrity,
+            "operation": "restore_to_new_directory",
+            "operation_at": datetime.now(UTC).isoformat(),
+        }
+        manifest_path = stage / "restore-manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
         for file in stage.iterdir():
             os.chmod(file, 0o600)
         stage.replace(destination)
@@ -120,6 +135,118 @@ def restore_backup(snapshot: Path, destination: Path) -> Path:
         if stage.exists():
             shutil.rmtree(stage)
     return destination
+
+
+def recovery_drill(snapshot: Path, output_dir: Path) -> Path:
+    """在隔离副本上执行恢复与凭据解密校验，并保存脱敏演练记录。"""
+
+    started = time.monotonic()
+    operation_at = datetime.now(UTC).isoformat()
+    checks = {
+        "integrity": "not_run", "schema_migration": "not_run",
+        "encrypted_credentials": "not_run",
+    }
+    active_check = "integrity"
+    database_version: int | None = None
+    restored_version: int | None = None
+    outcome = "failed"
+    try:
+        with sqlite3.connect(f"file:{snapshot}?mode=ro", uri=True) as source_db:
+            database_version = int(source_db.execute("PRAGMA user_version").fetchone()[0])
+            checks["integrity"] = (
+                "passed" if source_db.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+                else "failed"
+            )
+        if checks["integrity"] != "passed":
+            raise RuntimeError("integrity")
+        active_check = "encrypted_credentials"
+        private_snapshot = snapshot.with_suffix(".private.json")
+        metadata = private_snapshot.stat()
+        if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
+            raise RuntimeError("私有配置备份权限必须不超过 0600")
+        private = json.loads(private_snapshot.read_text(encoding="utf-8"))
+        if not isinstance(private, dict) or not isinstance(private.get("OCR_APP_MASTER_KEY"), str):
+            raise RuntimeError("私有配置备份缺少加密主密钥")
+        box = SecretBox(private["OCR_APP_MASTER_KEY"])
+        if database_version is not None and database_version > SCHEMA_VERSION:
+            active_check = "schema_migration"
+            raise RuntimeError("备份数据库版本高于当前程序")
+        output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(output_dir, 0o700)
+        active_check = "schema_migration"
+        with tempfile.TemporaryDirectory(prefix=".recovery-drill-", dir=output_dir) as temporary:
+            restored = restore_backup(snapshot, Path(temporary) / "restored")
+            store = Store(restored / "app.db")
+            store.migrate()
+            with store.connection() as db:
+                restored_version = int(db.execute("PRAGMA user_version").fetchone()[0])
+            checks["schema_migration"] = (
+                "passed" if restored_version == SCHEMA_VERSION else "failed"
+            )
+            if checks["schema_migration"] != "passed":
+                raise RuntimeError("schema_migration")
+            active_check = "encrypted_credentials"
+            _validate_encrypted_credentials(store, box)
+            checks["encrypted_credentials"] = "passed"
+            outcome = "passed"
+    except Exception:
+        checks[active_check] = "failed"
+
+    record = {
+        "backup_id": snapshot.name,
+        "database_version": database_version,
+        "restored_database_version": restored_version,
+        "checks": checks,
+        "outcome": outcome,
+        "isolated_copy_only": True,
+        "operation_at": operation_at,
+        "duration_seconds": round(time.monotonic() - started, 3),
+    }
+    output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(output_dir, 0o700)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    name = f"recovery-drill-{timestamp}-{uuid.uuid4().hex[:8]}.json"
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".recovery-drill-", dir=output_dir)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            json.dump(record, target, ensure_ascii=False, indent=2)
+            target.write("\n")
+            target.flush()
+            os.fsync(target.fileno())
+        os.chmod(temporary_name, 0o600)
+        Path(temporary_name).replace(output_dir / name)
+    finally:
+        Path(temporary_name).unlink(missing_ok=True)
+    if outcome != "passed":
+        raise RuntimeError(f"恢复演练未通过；脱敏记录已保存：{output_dir / name}")
+    return output_dir / name
+
+
+def _validate_encrypted_credentials(store: Store, box: SecretBox) -> None:
+    """在恢复副本上解密已保存凭据，绝不返回或记录明文。"""
+
+    protected = {
+        "repositories": ("webhook_secret", "feishu_webhook", "gitlab_token_ciphertext"),
+        "model_profile": ("api_key_ciphertext",),
+        "model_profiles": ("api_key_ciphertext",),
+        "notification_targets": ("webhook_ciphertext", "signing_secret_ciphertext"),
+    }
+    with store.connection() as db:
+        tables = {row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'",
+        )}
+        for table, columns in protected.items():
+            if table not in tables:
+                continue
+            available = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+            selected = [column for column in columns if column in available]
+            if not selected:
+                continue
+            query = f"SELECT {', '.join(selected)} FROM {table}"
+            for row in db.execute(query):
+                for value in row:
+                    if value:
+                        box.decrypt(str(value))
 
 
 def main() -> None:
@@ -132,7 +259,15 @@ def main() -> None:
     parser.add_argument("--retain-days", type=int, default=90)
     parser.add_argument("--restore-from", type=Path)
     parser.add_argument("--restore-to", type=Path)
+    parser.add_argument("--drill-from", type=Path)
     args = parser.parse_args()
+    if args.drill_from:
+        if args.restore_from or args.restore_to or args.data_dir:
+            parser.error("恢复演练不能与恢复或备份参数同时使用")
+        if args.output_dir is None:
+            parser.error("恢复演练必须指定 --output-dir 保存脱敏记录")
+        print(recovery_drill(args.drill_from, args.output_dir))
+        return
     if args.restore_from or args.restore_to:
         if not args.restore_from or not args.restore_to:
             parser.error("恢复时必须同时指定 --restore-from 与 --restore-to")

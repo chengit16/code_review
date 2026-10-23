@@ -23,6 +23,7 @@ jobs:
       - run: uv run ruff check backend
       - run: uv run mypy backend/ocr_manager
       - run: uv run pytest -q
+      - run: uv run python -m ocr_manager.openapi_contract
 
   frontend:
     runs-on: ubuntu-latest

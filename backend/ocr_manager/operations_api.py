@@ -14,12 +14,14 @@ from starlette.responses import Response
 from ocr_manager.attempt_history import attempt_job, compare_results
 from ocr_manager.config import Settings
 from ocr_manager.config_history import list_config_history, restore_config
+from ocr_manager.diagnostics import create_diagnostic_bundle
 from ocr_manager.monitoring import (
     eligible_artifacts,
     operations_snapshot,
     prune_artifacts,
     prune_orphan_artifacts,
 )
+from ocr_manager.reconciliation import reconcile
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import job_neighbors, report_projection, search_jobs
@@ -92,6 +94,28 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         """展示队列、失败、磁盘和同目录约定下的成对备份状态。"""
 
         return operations_snapshot(store, settings.data_dir, settings.data_dir.parent / "backups")
+
+    @app.get("/api/reconciliation", dependencies=[admin])
+    def reconciliation_report() -> dict[str, Any]:
+        """只报告事件、任务、投递和工件差异，不自动更改业务事实。"""
+
+        return reconcile(store, settings.data_dir)
+
+    @app.get("/api/diagnostics/export", dependencies=[admin])
+    def diagnostics_export() -> Response:
+        """下载脱敏运行元数据；不包含凭据、原始代码、评审发现或模型推理。"""
+
+        content = json.dumps(
+            create_diagnostic_bundle(store, settings.data_dir), ensure_ascii=False, indent=2,
+        )
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition":
+                    'attachment; filename="open-code-review-diagnostics.json"',
+            },
+        )
 
     @app.get("/api/maintenance/preview", dependencies=[admin])
     def maintenance_preview(days: int = Query(90, ge=7, le=3650)) -> dict[str, int]:
