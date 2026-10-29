@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from ocr_manager.cancellation import check_cancellation
 from ocr_manager.config import Settings
@@ -58,11 +59,12 @@ def _prepare_custom_provider(
 ) -> str:
     """OCR 使用 OpenAI 兼容协议读取自定义端点；只把非密钥 URL 写入隔离 HOME。"""
 
-    if not settings.ocr_base_url:
+    endpoint = _validated_model_endpoint(settings.ocr_base_url)
+    if not endpoint:
         return settings.ocr_provider
     provider = "managed-gateway"
     for key, value in (
-        (f"custom_providers.{provider}.url", settings.ocr_base_url),
+        (f"custom_providers.{provider}.url", endpoint),
         (f"custom_providers.{provider}.protocol", "openai"),
         # OCR 不会从通用变量读取自定义 provider 的密钥；命令只保存变量名。
         (f"custom_providers.{provider}.api_key_cmd", "printenv OCR_LLM_TOKEN"),
@@ -73,6 +75,29 @@ def _prepare_custom_provider(
         if code:
             raise RuntimeError("OCR 自定义模型端点配置失败")
     return provider
+
+
+def _validated_model_endpoint(base_url: str) -> str:
+    """仅在真正测试或调用模型时检查自定义端点，保存草稿不受限制。"""
+
+    endpoint = base_url.strip().rstrip("/")
+    if not endpoint:
+        return ""
+    try:
+        parsed = urlparse(endpoint)
+        valid = (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError("OCR 自定义 Base URL 必须是无凭据的 HTTPS 地址")
+    return endpoint
 
 
 def _prepare_review_language(

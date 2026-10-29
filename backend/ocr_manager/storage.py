@@ -1136,7 +1136,7 @@ class Store:
             return True
 
     def update_model_profile(self, profile_id: int, values: dict[str, str | None]) -> bool:
-        """单价变更不改变评审输入或版本；模型本身变更仍受在途队列保护。"""
+        """始终保存模型编辑；执行前的快照检查阻止在途任务静默切换配置。"""
 
         allowed = {"name", "provider", "model", "base_url", "api_key_ciphertext",
                    "price_currency", "input_price_per_million", "output_price_per_million"}
@@ -1154,25 +1154,6 @@ class Store:
                               "output_price_per_million"} and value != profile[field]
                 for field, value in values.items()
             )
-            if changes_review and profile["enabled"]:
-                busy = db.execute(
-                    """SELECT EXISTS(SELECT 1 FROM merge_events
-                    WHERE status IN ('queued','running'))
-                    OR EXISTS(SELECT 1 FROM review_jobs
-                    WHERE status IN ('queued','running'))"""
-                ).fetchone()[0]
-                if busy:
-                    raise ValueError("队列运行期间不能修改启用的模型配置")
-            project_busy = db.execute("""SELECT EXISTS(
-                SELECT 1 FROM project_review_limits p JOIN review_jobs j
-                ON j.repository_id=p.repository_id
-                WHERE p.model_profile_id=? AND j.status IN ('queued','running'))
-                OR EXISTS(SELECT 1 FROM project_review_limits p JOIN merge_events e
-                ON e.repository_id=p.repository_id
-                WHERE p.model_profile_id=? AND e.status IN ('queued','running'))""",
-                (profile_id, profile_id)).fetchone()[0]
-            if changes_review and project_busy:
-                raise ValueError("项目队列运行期间不能修改其专属模型")
             db.execute(
                 f"UPDATE model_profiles SET {assignments}, version=version+{int(changes_review)}, "
                 "updated_at=CURRENT_TIMESTAMP WHERE id=?",

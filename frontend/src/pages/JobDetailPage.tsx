@@ -65,6 +65,7 @@ function JobDetail({ token, canEdit }: {
     {job && <>
       <section className="detail-summary job-summary-card">
         <div><span>评审状态</span><Status value={job.status} /></div>
+        <div><span>提交人</span><strong>{job.commit_author?.trim() || "未记录"}</strong></div>
         <div><span>尝试次数</span><strong>{job.attempts}</strong></div>
         <div><span>创建时间</span><strong>{formatTime(job.created_at)}</strong></div>
         <div><span>完成时间</span><strong>{formatTime(job.finished_at)}</strong></div>

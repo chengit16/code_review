@@ -481,10 +481,10 @@ def test_model_profiles_activate_without_revealing_key(client: TestClient) -> No
     assert client.delete(f"/api/model-profiles/{model_id}", headers=ADMIN).status_code == 200
 
 
-def test_model_edit_preserves_key_and_blocks_active_changes_while_queued(
+def test_model_edit_preserves_key_and_allows_active_changes_while_queued(
     client: TestClient, settings: Settings
 ) -> None:
-    """编辑时保留密钥；启用模型有待处理任务时禁止改变配置快照。"""
+    """编辑时保留密钥；即使启用模型有待处理事件也允许保存。"""
 
     created = client.post(
         "/api/model-profiles",
@@ -511,7 +511,7 @@ def test_model_edit_preserves_key_and_blocks_active_changes_while_queued(
         client.post(f"/api/repositories/{repository_id}/mrs/7/enqueue", headers=ADMIN).status_code
         == 200
     )
-    assert client.patch(url, headers=ADMIN, json={"model": "qwen-later"}).status_code == 409
+    assert client.patch(url, headers=ADMIN, json={"model": "qwen-later"}).status_code == 200
 
 
 def test_https_git_token_stays_out_of_git_arguments_and_local_commands(

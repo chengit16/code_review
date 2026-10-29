@@ -56,6 +56,7 @@ def main() -> None:
         assert event is not None
         store.finish_event(event["id"], commits, {sha: ("navigation", "") for sha in commits}, None)
         with store.connection() as db:
+            db.execute("UPDATE review_jobs SET commit_author='测试提交人' WHERE id=1")
             db.execute("UPDATE review_jobs SET target_branch='develop' WHERE id IN (3, 5)")
         for index in range(25):
             store.record_audit("PATCH /api/test/{item_id}", "synthetic", index, "success")

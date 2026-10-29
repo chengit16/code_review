@@ -132,3 +132,23 @@ def test_neighbors_validate_filters_and_auth(
     assert client.get("/api/jobs/1/neighbors").status_code == 401
     assert client.get(f"/api/jobs/1/neighbors?{query}",
                       headers={"X-Admin-Token": settings.admin_token}).status_code == 422
+
+
+def test_task_list_and_detail_return_persisted_commit_author(
+    client: TestClient, settings: Settings,
+) -> None:
+    """列表与详情复用 Git 作者事实；历史缺失值不冒充处理人或 MR 发起人。"""
+
+    store, _ = populate(client, settings, 2)
+    headers = {"X-Admin-Token": settings.admin_token}
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET commit_author=? WHERE id=1", ("测试提交人",))
+    response = client.get("/api/task-search", headers=headers)
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[1]["commit_author"] == "测试提交人"
+    assert items[2]["commit_author"] is None
+    for job_id, author in ((1, "测试提交人"), (2, None)):
+        detail = client.get(f"/api/jobs/{job_id}", headers=headers)
+        assert detail.status_code == 200
+        assert detail.json()["commit_author"] == author

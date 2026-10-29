@@ -97,17 +97,17 @@ def test_bailian_pricing_estimate_uses_run_snapshot(
     assert report["estimated_cost"]["total"] == "3"
 
 
-def test_pricing_requires_both_rates_and_full_usage(
+def test_pricing_allows_one_rate_but_requires_full_usage_for_estimate(
     client: TestClient, settings: Settings,
 ) -> None:
-    """单边报价被拒绝，只有合计 Token 时不推断输入/输出费用。"""
+    """单边报价可保存，只有合计 Token 时不推断输入/输出费用。"""
 
     store, _ = populate(client, settings, 1)
     response = client.post("/api/model-profiles", headers=ADMIN, json={
         "name": "缺少输出价", "provider": "dashscope", "model": "qwen-test",
         "api_key": "synthetic-key", "input_price_per_million": "2",
     })
-    assert response.status_code == 422
+    assert response.status_code == 201
     job = store.next_job()
     assert job is not None
     store.finish_job(job["id"], "complete", None, {

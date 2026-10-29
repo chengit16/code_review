@@ -185,6 +185,8 @@ export interface ReviewJob {
   correlation_id?: string;
   mr_iid: number;
   commit_sha: string;
+  /** 固定提交的 Git 作者姓名；旧任务或尚未读取 Git 时可能缺失，不代表问题处理人。 */
+  commit_author?: string | null;
   base_sha?: string | null;
   ordinal: number;
   status: string;

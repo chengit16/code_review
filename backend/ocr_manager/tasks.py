@@ -58,7 +58,7 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
         db.execute("BEGIN")
         total = db.execute(f"SELECT COUNT(*) FROM review_jobs j{where}", values).fetchone()[0]
         rows = db.execute(
-            f"""SELECT j.id, j.repository_id, j.event_id, j.mr_iid, j.commit_sha,
+            f"""SELECT j.id, j.repository_id, j.event_id, j.mr_iid, j.commit_sha, j.commit_author,
             j.ordinal, j.target_branch, j.status, j.error, j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
             j.usage_json, j.config_snapshot,

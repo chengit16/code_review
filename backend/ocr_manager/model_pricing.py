@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, DecimalException, InvalidOperation
 from typing import Any
 
 PRICE_FIELDS = ("price_currency", "input_price_per_million", "output_price_per_million")
@@ -83,9 +83,16 @@ def estimate_cost(
     if not all(rate.is_finite() and rate >= 0 for rate in (input_rate, output_rate)):
         return None
     divisor = Decimal(1_000_000)
+    # 草稿允许任意单价文本，超出十进制运算范围时只省略估算，不影响任务详情读取。
+    try:
+        input_cost = input_rate * input_tokens / divisor
+        output_cost = output_rate * output_tokens / divisor
+        total_cost = (input_rate * input_tokens + output_rate * output_tokens) / divisor
+    except DecimalException:
+        return None
     return {
         "currency": currency,
-        "input": str(input_rate * input_tokens / divisor),
-        "output": str(output_rate * output_tokens / divisor),
-        "total": str((input_rate * input_tokens + output_rate * output_tokens) / divisor),
+        "input": str(input_cost),
+        "output": str(output_cost),
+        "total": str(total_cost),
     }

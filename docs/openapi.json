@@ -307,10 +307,10 @@
       },
       "ModelProfileCreate": {
         "additionalProperties": false,
-        "description": "OCR 模型可来自内置 provider 或 OpenAI 兼容端点。",
+        "description": "保存 OCR 模型草稿；配置可不完整，能否连接由独立测试确认。",
         "properties": {
           "api_key": {
-            "minLength": 1,
+            "default": "",
             "title": "Api Key",
             "type": "string"
           },
@@ -322,12 +322,13 @@
           "input_price_per_million": {
             "anyOf": [
               {
-                "minimum": 0.0,
-                "type": "number"
+                "type": "string"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
-                "type": "string"
+                "type": "integer"
+              },
+              {
+                "type": "number"
               },
               {
                 "type": "null"
@@ -336,26 +337,25 @@
             "title": "Input Price Per Million"
           },
           "model": {
-            "maxLength": 160,
-            "minLength": 1,
+            "default": "",
             "title": "Model",
             "type": "string"
           },
           "name": {
-            "maxLength": 120,
-            "minLength": 1,
+            "default": "",
             "title": "Name",
             "type": "string"
           },
           "output_price_per_million": {
             "anyOf": [
               {
-                "minimum": 0.0,
-                "type": "number"
+                "type": "string"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
-                "type": "string"
+                "type": "integer"
+              },
+              {
+                "type": "number"
               },
               {
                 "type": "null"
@@ -374,27 +374,20 @@
           },
           "provider": {
             "default": "dashscope",
-            "pattern": "^[a-zA-Z0-9_-]+$",
             "title": "Provider",
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "model",
-          "api_key"
-        ],
         "title": "ModelProfileCreate",
         "type": "object"
       },
       "ModelProfileUpdate": {
         "additionalProperties": false,
-        "description": "编辑模型时省略 API key 表示沿用加密保存的原密钥。",
+        "description": "保存模型草稿变更；省略或留空 API key 表示沿用原密钥。",
         "properties": {
           "api_key": {
             "anyOf": [
               {
-                "minLength": 1,
                 "type": "string"
               },
               {
@@ -417,12 +410,13 @@
           "input_price_per_million": {
             "anyOf": [
               {
-                "minimum": 0.0,
-                "type": "number"
+                "type": "string"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
-                "type": "string"
+                "type": "integer"
+              },
+              {
+                "type": "number"
               },
               {
                 "type": "null"
@@ -433,8 +427,6 @@
           "model": {
             "anyOf": [
               {
-                "maxLength": 160,
-                "minLength": 1,
                 "type": "string"
               },
               {
@@ -446,8 +438,6 @@
           "name": {
             "anyOf": [
               {
-                "maxLength": 120,
-                "minLength": 1,
                 "type": "string"
               },
               {
@@ -459,12 +449,13 @@
           "output_price_per_million": {
             "anyOf": [
               {
-                "minimum": 0.0,
-                "type": "number"
+                "type": "string"
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,15}0*$)\\d{0,8}\\.\\d{0,6}0*$)",
-                "type": "string"
+                "type": "integer"
+              },
+              {
+                "type": "number"
               },
               {
                 "type": "null"
@@ -490,7 +481,6 @@
           "provider": {
             "anyOf": [
               {
-                "pattern": "^[a-zA-Z0-9_-]+$",
                 "type": "string"
               },
               {
@@ -3071,7 +3061,7 @@
         "summary": "List Model Profiles"
       },
       "post": {
-        "description": "新增配置先保持未启用，避免保存草稿立即改变评审任务。",
+        "description": "保存未启用的模型草稿，不在保存阶段校验连接参数或计费文本。",
         "operationId": "create_model_profile_api_model_profiles_post",
         "requestBody": {
           "content": {
@@ -3153,7 +3143,7 @@
         "summary": "Delete Model Profile"
       },
       "patch": {
-        "description": "更新已保存模型；启用配置在队列运行期间保持不可变。",
+        "description": "保存模型草稿，不因字段内容或在途队列阻止编辑。",
         "operationId": "update_model_profile_api_model_profiles__profile_id__patch",
         "parameters": [
           {

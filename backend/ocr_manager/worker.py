@@ -101,7 +101,10 @@ def review_settings(
         if settings.ocr_model and settings.ocr_api_key:
             return apply_limits(settings, limits), 0
         raise ValueError("请先在管理台启用 Agent 模型")
-    key = SecretBox(settings.master_key).decrypt(profile["api_key_ciphertext"])
+    key = (
+        SecretBox(settings.master_key).decrypt(profile["api_key_ciphertext"])
+        if profile["api_key_ciphertext"] else ""
+    )
     return replace(
         apply_limits(settings, limits),
         ocr_provider=profile["provider"],
@@ -269,13 +272,15 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         store.finish_job(job["id"], "failed", None, None, "仓库配置已删除")
         return
     try:
+        # 先冻结本次模型参数，再比对版本；保存模型不再被在途队列阻塞。
+        model_settings, model_version = review_settings(store, settings, job["repository_id"])
         snapshot = configuration_snapshot(store, settings, job["rule_digest"], job["repository_id"])
         current_hash = snapshot_hash(snapshot)
     except Exception:
         # 凭据不可解时不能退回旧环境变量继续评审，也不把密钥异常持久化。
         store.finish_job(job["id"], "failed", None, None, "评审配置无法读取")
         return
-    if current_hash != job["config_hash"]:
+    if current_hash != job["config_hash"] or model_version != snapshot["model_version"]:
         # 入队快照是不可变输入；管理员可用重评审创建当前配置的新任务。
         store.finish_job(job["id"], "failed", None, None, "评审配置已变化，请按当前配置重新评审")
         return
@@ -310,7 +315,6 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
                 "UPDATE review_jobs SET changed_files=?, commit_author=? WHERE id=?",
                 (json.dumps(changed_files), commit_author, job["id"]),
             )
-        model_settings, _ = review_settings(store, settings, job["repository_id"])
         set_job_stage(store, job["id"], "ocr_configuration")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
             status, result = run_review(

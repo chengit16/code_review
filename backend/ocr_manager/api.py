@@ -8,7 +8,6 @@ import logging
 import re
 import sqlite3
 import uuid
-from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
 from typing import Any, Literal
@@ -135,35 +134,31 @@ class RulePreviewInput(BaseModel):
 
 
 class ModelProfileCreate(BaseModel):
-    """OCR 模型可来自内置 provider 或 OpenAI 兼容端点。"""
+    """保存 OCR 模型草稿；配置可不完整，能否连接由独立测试确认。"""
 
-    name: str = Field(min_length=1, max_length=120)
-    model: str = Field(min_length=1, max_length=160)
+    name: str = ""
+    model: str = ""
     base_url: str = ""
-    api_key: str = Field(min_length=1)
-    provider: str = Field(default="dashscope", pattern=r"^[a-zA-Z0-9_-]+$")
+    api_key: str = ""
+    provider: str = "dashscope"
     price_currency: Literal["CNY", "USD"] = "CNY"
-    input_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
-                                                    decimal_places=6)
-    output_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
-                                                     decimal_places=6)
+    input_price_per_million: str | int | float | None = None
+    output_price_per_million: str | int | float | None = None
 
     model_config = {"extra": "forbid"}
 
 
 class ModelProfileUpdate(BaseModel):
-    """编辑模型时省略 API key 表示沿用加密保存的原密钥。"""
+    """保存模型草稿变更；省略或留空 API key 表示沿用原密钥。"""
 
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    model: str | None = Field(default=None, min_length=1, max_length=160)
+    name: str | None = None
+    model: str | None = None
     base_url: str | None = None
-    api_key: str | None = Field(default=None, min_length=1)
-    provider: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]+$")
+    api_key: str | None = None
+    provider: str | None = None
     price_currency: Literal["CNY", "USD"] | None = None
-    input_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
-                                                    decimal_places=6)
-    output_price_per_million: Decimal | None = Field(default=None, ge=0, max_digits=14,
-                                                     decimal_places=6)
+    input_price_per_million: str | int | float | None = None
+    output_price_per_million: str | int | float | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -334,31 +329,6 @@ def public_model_profile(row: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key != "api_key_ciphertext"} | {
         "has_api_key": bool(row["api_key_ciphertext"])
     }
-
-
-def validate_model_endpoint(base_url: str) -> str:
-    """自定义 OCR 端点只能使用无凭据 HTTPS 地址。"""
-
-    endpoint = base_url.strip().rstrip("/")
-    if endpoint:
-        parsed = urlparse(endpoint)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise HTTPException(status_code=422, detail="Base URL 必须是无凭据的 HTTPS 地址")
-    return endpoint
-
-
-def validate_model_prices(input_price: object, output_price: object) -> None:
-    """输入和输出单价须成对提供，否则详情页无法给出完整费用。"""
-
-    if (input_price is None) != (output_price is None):
-        raise HTTPException(status_code=422, detail="请同时填写或清空输入、输出 Token 单价")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -921,17 +891,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/model-profiles", dependencies=[admin], status_code=201)
     def create_model_profile(payload: ModelProfileCreate) -> dict[str, Any]:
-        """新增配置先保持未启用，避免保存草稿立即改变评审任务。"""
+        """保存未启用的模型草稿，不在保存阶段校验连接参数或计费文本。"""
 
-        if not payload.name.strip():
-            raise HTTPException(status_code=422, detail="配置名称不能为空")
-        validate_model_prices(payload.input_price_per_million, payload.output_price_per_million)
         profile_id = store.add_model_profile(
-            payload.name.strip(),
+            payload.name,
             payload.provider,
             payload.model,
-            validate_model_endpoint(payload.base_url),
-            secrets.encrypt(payload.api_key),
+            payload.base_url,
+            secrets.encrypt(payload.api_key) if payload.api_key else "",
             payload.price_currency,
             str(payload.input_price_per_million) if payload.input_price_per_million is not None
             else None,
@@ -943,35 +910,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.patch("/api/model-profiles/{profile_id}", dependencies=[admin])
     def update_model_profile(profile_id: int, payload: ModelProfileUpdate) -> dict[str, Any]:
-        """更新已保存模型；启用配置在队列运行期间保持不可变。"""
+        """保存模型草稿，不因字段内容或在途队列阻止编辑。"""
 
         values = payload.model_dump(exclude_unset=True, exclude_none=True)
-        # 单价显式传 null 表示清空；其他可选字段仍沿用省略即保留的现有语义。
+        # 单价显式传 null 表示清空；其他可选字段仍沿用省略即保留的语义。
         for field in ("input_price_per_million", "output_price_per_million"):
             if field in payload.model_fields_set and getattr(payload, field) is None:
                 values[field] = None
-        if not values:
-            raise HTTPException(status_code=422, detail="没有可更新的模型设置")
+            elif values.get(field) is not None:
+                values[field] = str(values[field])
         current = next((row for row in store.list_model_profiles() if row["id"] == profile_id),
                        None)
         if current is None:
             raise HTTPException(status_code=404, detail="模型配置不存在")
-        validate_model_prices(
-            values.get("input_price_per_million", current["input_price_per_million"]),
-            values.get("output_price_per_million", current["output_price_per_million"]),
-        )
-        for field in ("input_price_per_million", "output_price_per_million"):
-            if values.get(field) is not None:
-                values[field] = str(values[field])
-        if "name" in values:
-            values["name"] = values["name"].strip()
-            if not values["name"]:
-                raise HTTPException(status_code=422, detail="配置名称不能为空")
-        if "base_url" in values:
-            values["base_url"] = validate_model_endpoint(values["base_url"])
         key = values.pop("api_key", None)
         if key:
             values["api_key_ciphertext"] = secrets.encrypt(key)
+        if not values:
+            return public_model_profile(current)
         try:
             updated = store.update_model_profile(profile_id, values)
         except ValueError as error:

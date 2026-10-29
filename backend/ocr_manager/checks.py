@@ -56,7 +56,7 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                     ocr_base_url=profile["base_url"],
                     ocr_api_key=SecretBox(settings.master_key).decrypt(
                         profile["api_key_ciphertext"]
-                    ),
+                    ) if profile["api_key_ciphertext"] else "",
                 )
             check_model_connection(model_settings, settings.data_dir / "checks" / str(check["id"]))
         elif repository is None:
