@@ -200,7 +200,7 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                     q: str | None = Query(None, max_length=200),
                     page: int = Query(1, ge=1),
                     page_size: int = Query(25, ge=1, le=100)) -> dict[str, Any]:
-        """按仓库、状态和级别分页；默认隐藏已合并的重复项。"""
+        """按仓库、状态和级别分页；提交人取最近出现记录的持久化任务作者。"""
 
         where = """WHERE (? IS NULL OR i.repository_id=?)
             AND (? IS NOT NULL OR i.status!='merged')
@@ -215,7 +215,12 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
             total = db.execute(
                 f"SELECT COUNT(*) FROM review_issues i {where}", params
             ).fetchone()[0]
+            # 问题可跨提交复用或人工合并；只展示最近出现对应的作者，不推断责任人。
+            # 最近任务缺失作者时保持空值，不能回退到更早记录造成错误归属。
             rows = db.execute(f"""SELECT i.*,r.name AS repository_name,
+                (SELECT j.commit_author FROM review_issue_occurrences o
+                 JOIN review_jobs j ON j.id=o.job_id WHERE o.issue_id=i.id
+                 ORDER BY o.id DESC LIMIT 1) AS commit_author,
                 (SELECT COUNT(*) FROM review_issue_occurrences o WHERE o.issue_id=i.id)
                 AS occurrence_count FROM review_issues i JOIN repositories r
                 ON r.id=i.repository_id {where} ORDER BY i.id DESC LIMIT ? OFFSET ?""",
@@ -250,8 +255,9 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                 (issue_id,)).fetchone()
             if issue is None:
                 raise HTTPException(404, "问题不存在")
-            occurrences = [dict(row) for row in db.execute("""SELECT * FROM
-                review_issue_occurrences WHERE issue_id=? ORDER BY id DESC""", (issue_id,))]
+            occurrences = [dict(row) for row in db.execute("""SELECT o.*,j.commit_author FROM
+                review_issue_occurrences o JOIN review_jobs j ON j.id=o.job_id
+                WHERE o.issue_id=? ORDER BY o.id DESC""", (issue_id,))]
             events = [dict(row) for row in db.execute("""SELECT * FROM review_issue_events
                 WHERE issue_id=? ORDER BY id DESC""", (issue_id,))]
         return {**dict(issue), "occurrences": occurrences, "events": events}

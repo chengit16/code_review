@@ -117,3 +117,58 @@ def test_backfill_is_idempotent_and_only_uses_current_result(
     detail = client.get(f"/api/jobs/{job_id}", headers=ADMIN).json()
     assert len(detail["issue_ids"]) == 1
     assert client.get("/api/review-issues", headers=ADMIN).json()["total"] == 1
+
+
+def test_issue_author_comes_from_latest_occurrence_and_detail_keeps_each_author(
+    client: TestClient, settings: Settings,
+) -> None:
+    """跨提交问题只返回一行；最新任务缺失作者时不误用历史作者。"""
+
+    repository_id = create_repository(client)
+    store = Store(settings.data_dir / "app.db")
+    first = finish_with_finding(store, repository_id, 1, "a" * 40)
+    second = finish_with_finding(store, repository_id, 2, "b" * 40)
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET commit_author=? WHERE id=?", ("合成作者甲", first))
+        db.execute("UPDATE review_jobs SET commit_author=? WHERE id=?", ("合成作者乙", second))
+    listing = client.get("/api/review-issues?page_size=1", headers=ADMIN).json()
+    assert listing["total"] == 1
+    assert len(listing["items"]) == 1
+    issue = listing["items"][0]
+    assert issue["commit_author"] == "合成作者乙"
+    assert issue["occurrence_count"] == 2
+    detail = client.get(f"/api/review-issues/{issue['id']}", headers=ADMIN).json()
+    assert [(item["job_id"], item["commit_author"]) for item in detail["occurrences"]] == [
+        (second, "合成作者乙"), (first, "合成作者甲"),
+    ]
+
+    third = finish_with_finding(store, repository_id, 3, "c" * 40)
+    listing = client.get("/api/review-issues", headers=ADMIN).json()
+    assert listing["items"][0]["commit_author"] is None
+    detail = client.get(f"/api/review-issues/{issue['id']}", headers=ADMIN).json()
+    assert detail["occurrences"][0]["job_id"] == third
+    assert detail["occurrences"][0]["commit_author"] is None
+    assert detail["occurrences"][1]["commit_author"] == "合成作者乙"
+
+
+def test_merged_issue_author_follows_latest_occurrence_not_merge_target(
+    client: TestClient, settings: Settings,
+) -> None:
+    """合并问题后按出现记录选取提交人，不将目标问题原作者当成所有提交的作者。"""
+
+    repository_id = create_repository(client)
+    store = Store(settings.data_dir / "app.db")
+    first = finish_with_finding(store, repository_id, 1, "a" * 40)
+    second = finish_with_finding(store, repository_id, 2, "b" * 40, content="另一个发现")
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET commit_author=? WHERE id=?", ("原作者", first))
+        db.execute("UPDATE review_jobs SET commit_author=? WHERE id=?", ("最新作者", second))
+    target = client.get(f"/api/jobs/{first}", headers=ADMIN).json()["issue_ids"]["0"]
+    source = client.get(f"/api/jobs/{second}", headers=ADMIN).json()["issue_ids"]["0"]
+    assert client.post(f"/api/review-issues/{source}/merge", headers=ADMIN,
+                       json={"target_id": target}).status_code == 200
+    listing = client.get("/api/review-issues", headers=ADMIN).json()
+    assert listing["total"] == 1
+    assert listing["items"][0]["id"] == target
+    assert listing["items"][0]["commit_author"] == "最新作者"
+    assert listing["items"][0]["occurrence_count"] == 2
