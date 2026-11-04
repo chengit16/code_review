@@ -26,6 +26,7 @@ from ocr_manager.auth import register_auth, session_identity, users_mode
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
+from ocr_manager.model_catalog import fetch_model_catalog
 from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.operations_api import register_operations
 from ocr_manager.premerge import (
@@ -159,6 +160,17 @@ class ModelProfileUpdate(BaseModel):
     price_currency: Literal["CNY", "USD"] | None = None
     input_price_per_million: str | int | float | None = None
     output_price_per_million: str | int | float | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class ModelCatalogInput(BaseModel):
+    """临时查询模型目录；凭据只用于本次服务端请求，不落库。"""
+
+    provider: str = "dashscope"
+    base_url: str = ""
+    api_key: str = ""
+    profile_id: int | None = Field(default=None, gt=0, description="编辑时可引用已保存的密钥")
 
     model_config = {"extra": "forbid"}
 
@@ -888,6 +900,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/model-profiles", dependencies=[admin])
     def list_model_profiles() -> list[dict[str, Any]]:
         return [public_model_profile(row) for row in store.list_model_profiles()]
+
+    @app.post("/api/model-catalog", dependencies=[admin])
+    def get_model_catalog(payload: ModelCatalogInput) -> dict[str, list[str]]:
+        """通过已鉴权管理端查询模型目录；不保存 API Key 或返回上游响应正文。"""
+
+        key = payload.api_key
+        if not key.strip() and payload.profile_id is not None:
+            profile = next((row for row in store.list_model_profiles()
+                            if row["id"] == payload.profile_id), None)
+            if profile is None:
+                raise HTTPException(status_code=404, detail="模型配置不存在")
+            # 修改端点后必须重新提供密钥，不能把已保存凭据转发到任意新地址。
+            if (payload.provider != profile["provider"] or
+                    payload.base_url.strip().rstrip("/") !=
+                    profile["base_url"].strip().rstrip("/")):
+                raise HTTPException(
+                    status_code=422, detail="Provider 或 Base URL 已更改，请重新填写 API Key"
+                )
+            try:
+                key = (secrets.decrypt(profile["api_key_ciphertext"])
+                       if profile["api_key_ciphertext"] else "")
+            except InvalidToken:
+                raise HTTPException(
+                    status_code=409, detail="已保存的密钥无法解密，请重新填写 API Key"
+                ) from None
+        try:
+            return {"models": fetch_model_catalog(payload.provider, payload.base_url, key)}
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except RuntimeError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
 
     @app.post("/api/model-profiles", dependencies=[admin], status_code=201)
     def create_model_profile(payload: ModelProfileCreate) -> dict[str, Any]:

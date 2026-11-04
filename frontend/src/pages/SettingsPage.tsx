@@ -1,7 +1,7 @@
 /** @description 管理 OCR 模型配置，只有一个配置可处于启用状态。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Plus, Settings2, Trash2, X } from "lucide-react";
+import { Check, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -58,6 +58,17 @@ export function SettingsPage({ token, embedded = false }: {
     },
     onSuccess: () => { setOpen(false); setEditing(null); setForm(initial); setFeedback("模型配置已更新"); refresh(); },
   });
+  const catalog = useMutation({
+    mutationFn: (input: Pick<ModelForm, "provider" | "base_url" | "api_key"> & { profile_id?: number }) =>
+      apiRequest<{ models: string[] }>(token, "/api/model-catalog", {
+        method: "POST", body: JSON.stringify(input),
+      }),
+  });
+  // 目录只对发起请求时的凭据与端点有效，旧响应不能覆盖新的编辑输入。
+  const catalogMatches = open && catalog.variables?.provider === form.provider
+    && catalog.variables?.base_url === form.base_url && catalog.variables?.api_key === form.api_key
+    && catalog.variables?.profile_id === editing?.id;
+  const catalogModels = catalogMatches ? catalog.data?.models ?? [] : [];
   const activate = useMutation({
     mutationFn: (id: number) => apiRequest<ModelConfiguration>(token, `/api/model-profiles/${id}/activate`, { method: "POST" }),
     onSuccess: () => { setFeedback("模型已启用"); refresh(); },
@@ -72,6 +83,7 @@ export function SettingsPage({ token, embedded = false }: {
     else create.mutate(form);
   }
   function beginEdit(profile: ModelConfiguration) {
+    catalog.reset();
     setEditing(profile);
     const draft: ModelForm = { name: profile.name, provider: profile.provider, model: profile.model, base_url: profile.base_url, api_key: "", price_currency: profile.price_currency, input_price_per_million: profile.input_price_per_million ?? "", output_price_per_million: profile.output_price_per_million ?? "" };
     setBaseline(draft);
@@ -82,7 +94,7 @@ export function SettingsPage({ token, embedded = false }: {
   }
   const active = profiles.data?.find((profile) => profile.enabled);
   return <div className={embedded ? "settings-content" : "page"}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
+    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
@@ -104,11 +116,15 @@ export function SettingsPage({ token, embedded = false }: {
       <form className="settings-form hook-form" noValidate onSubmit={submit}><fieldset className="form-fields" disabled={create.isPending || update.isPending}>
         <p className="form-note">可随时保存，字段留空或尚未填写完整也不影响保存。保存不代表模型可用，请另行测试模型。</p>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
-        <SelectField label="Provider" value={form.provider} onValueChange={(value) => setForm((current) => ({ ...current, provider: value }))} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
+        <SelectField label="Provider" value={form.provider} onValueChange={(value) => { catalog.reset(); setForm((current) => ({ ...current, provider: value })); }} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
         {form.provider === "dashscope" && <p className="form-note">百练模型使用 DashScope API Key 和模型标识；Base URL 留空即可使用内置端点。</p>}
+        <label>Base URL<input value={form.base_url} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, base_url: event.target.value })); }} placeholder="内置 Provider 可留空" /></label>
+        <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, api_key: event.target.value })); }} placeholder={editing ? "留空则保留现有密钥" : "可留空，后续补充"} /></label>
+        <div className="form-actions"><button className="button button-secondary" type="button" disabled={(!form.api_key.trim() && !editing?.has_api_key) || catalog.isPending} onClick={() => catalog.mutate({ provider: form.provider, base_url: form.base_url, api_key: form.api_key, profile_id: editing?.id })}><RefreshCw size={16} />{catalog.isPending ? "获取中…" : "自动获取模型"}</button></div>
+        <p className="form-note">编辑时可留空 API Key，使用已保存的密钥获取模型；更换 Provider 或 Base URL 后需重新填写密钥。获取列表不代表所有模型均支持代码评审。</p>
+        {catalogMatches && catalog.error && <p className="form-error" role="alert">{catalog.error.message}</p>}
+        {catalogModels.length > 0 && <><p className="form-success" role="status">已获取 {catalogModels.length} 个模型，请选择</p><SelectField label="选择模型" placeholder="请选择模型" value={catalogModels.includes(form.model) ? form.model : ""} onValueChange={(value) => setForm((current) => ({ ...current, model: value }))} options={catalogModels.map((model) => ({ value: model, label: model }))} /></>}
         <label>模型标识<input value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} /></label>
-        <label>Base URL<input value={form.base_url} onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))} placeholder="内置 Provider 可留空" /></label>
-        <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))} placeholder={editing ? "留空则保留现有密钥" : "可留空，后续补充"} /></label>
         <SelectField label="计费币种" value={form.price_currency} onValueChange={(value) => setForm((current) => ({ ...current, price_currency: value === "USD" ? "USD" : "CNY" }))} options={[{ value: "CNY", label: "人民币 CNY" }, { value: "USD", label: "美元 USD" }]} />
         <label>输入单价（每百万 Token）<input type="text" inputMode="decimal" value={form.input_price_per_million} onChange={(event) => setForm((current) => ({ ...current, input_price_per_million: event.target.value }))} placeholder="可选" /></label>
         <label>输出单价（每百万 Token）<input type="text" inputMode="decimal" value={form.output_price_per_million} onChange={(event) => setForm((current) => ({ ...current, output_price_per_million: event.target.value }))} placeholder="可选" /></label>
