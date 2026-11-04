@@ -40,6 +40,26 @@ def test_empty_and_incomplete_model_drafts_can_be_saved(client: TestClient) -> N
     }}) is None
 
 
+def test_model_edit_accepts_post_for_tunnels_while_preserving_patch_compatibility(
+    client: TestClient,
+) -> None:
+    """模型更新提供 POST 隧道兼容路由，同时保留已有 PATCH 客户端契约。"""
+
+    created = client.post("/api/model-profiles", headers=ADMIN, json={"name": "隧道兼容"})
+    assert created.status_code == 201
+    profile_id = created.json()["id"]
+    updated = client.post(
+        f"/api/model-profiles/{profile_id}", headers=ADMIN, json={"model": "edited"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["model"] == "edited"
+    compatible = client.patch(
+        f"/api/model-profiles/{profile_id}", headers=ADMIN, json={"provider": "custom"}
+    )
+    assert compatible.status_code == 200
+    assert compatible.json()["provider"] == "custom"
+
+
 @pytest.mark.parametrize("endpoint", ["尚未完成", "http://example.test/v1",
                                      "https://user:secret@example.test/v1", "https://["])
 def test_invalid_saved_endpoint_is_rejected_only_at_execution(

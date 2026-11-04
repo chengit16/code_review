@@ -319,6 +319,10 @@ def check_model_connection(settings: Settings, run_dir: Path) -> None:
                 # 仅提取 HTTP 状态码，不把可能含密钥或服务响应的 stderr 写入数据库。
                 status = re.search(r"\b([45][0-9]{2})\s+[A-Za-z]", stderr)
                 detail = f"HTTP {status.group(1)}" if status else f"退出码 {code}"
+                if status and status.group(1) == "401":
+                    detail += "，API Key 鉴权失败，请检查密钥是否完整以及是否属于当前端点"
+                elif status and status.group(1) == "502":
+                    detail += "，模型网关或上游服务暂时不可用；这不是保存配置时的字段校验"
                 raise RuntimeError(f"OCR 模型连接测试失败（{detail}）")
             raise RuntimeError("OCR 模型测试配置失败")
 

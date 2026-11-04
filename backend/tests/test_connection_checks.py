@@ -163,3 +163,23 @@ def test_model_probe_uses_isolated_config_and_only_exposes_http_status(
     assert all(env["HOME"] == str(tmp_path / "check" / "home") for _, env, _ in calls)
     assert calls[-1][1]["OCR_LLM_TOKEN"] == "private-model-key"
     assert "private-model-key" not in str(error.value)
+    assert "API Key 鉴权失败" in str(error.value)
+
+
+def test_model_gateway_failure_is_not_reported_as_save_validation(
+    settings: Settings, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """上游 502 与草稿保存相互独立，诊断不得回显密钥或响应正文。"""
+
+    from ocr_manager import ocr
+
+    def fake_command(command: list[str], *_args: Any) -> tuple[int, str]:
+        if command[-2:] == ["llm", "test"]:
+            return 1, '502 Bad Gateway {"token":"private-model-key"}'
+        return 0, ""
+
+    monkeypatch.setattr(ocr, "run_ocr_command", fake_command)
+    with pytest.raises(RuntimeError, match="HTTP 502") as error:
+        check_model_connection(settings, tmp_path / "check")
+    assert "不是保存配置时的字段校验" in str(error.value)
+    assert "private-model-key" not in str(error.value)

@@ -3143,7 +3143,7 @@
         "summary": "Delete Model Profile"
       },
       "patch": {
-        "description": "保存模型草稿，不因字段内容或在途队列阻止编辑。",
+        "description": "保存模型草稿；POST 兼容不转发 PATCH 的反向隧道，字段仍由业务逻辑合并。",
         "operationId": "update_model_profile_api_model_profiles__profile_id__patch",
         "parameters": [
           {
@@ -3173,6 +3173,56 @@
                 "schema": {
                   "additionalProperties": true,
                   "title": "Response Update Model Profile Api Model Profiles  Profile Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Model Profile"
+      },
+      "post": {
+        "description": "保存模型草稿；POST 兼容不转发 PATCH 的反向隧道，字段仍由业务逻辑合并。",
+        "operationId": "update_model_profile_api_model_profiles__profile_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "title": "Profile Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Model Profile Api Model Profiles  Profile Id  Post",
                   "type": "object"
                 }
               }

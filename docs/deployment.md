@@ -31,6 +31,8 @@ export OCR_APP_OCR_EFFORT="low"
 uv run uvicorn ocr_manager.asgi:app --app-dir backend --host 127.0.0.1 --port 8781
 ```
 
+模型编辑使用 POST 更新，以兼容不转发 PATCH 的内网穿透。
+
 回调与管理入口分别配置；管理入口可使用本机地址或受控 HTTPS 地址。旧的 `OCR_APP_PUBLIC_URL` 继续作为回调地址后备值，管理入口默认本机 `8781`。这两个设置为进程配置，修改后需重启 API 与 Worker。本机开发配置如下：
 
 ```bash

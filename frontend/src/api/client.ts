@@ -43,7 +43,10 @@ export async function apiRequest<T>(
     throw new ApiError(0, "无法连接管理服务，请确认服务已启动后重试。", "network");
   }
   if (!response.ok) {
-    let message = `请求失败（${response.status}）`;
+    // 网关错误不能说明写请求是否已落库，不自动重试，避免重复创建配置。
+    let message = response.status === 502
+      ? "管理服务或访问代理返回 502，无法确认本次操作是否完成。请刷新核对配置；若仍失败，请检查访问地址、代理和后端服务。"
+      : `请求失败（${response.status}）`;
     let code: string | undefined;
     try {
       const payload: unknown = await response.json();

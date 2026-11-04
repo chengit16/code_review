@@ -53,7 +53,7 @@ export function SettingsPage({ token, embedded = false }: {
       const payload: Partial<ModelForm> = { ...input };
       if (!payload.api_key) delete payload.api_key;
       return apiRequest<ModelConfiguration>(token, `/api/model-profiles/${id}`, {
-        method: "PATCH", body: JSON.stringify({ ...payload, input_price_per_million: input.input_price_per_million || null, output_price_per_million: input.output_price_per_million || null }),
+        method: "POST", body: JSON.stringify({ ...payload, input_price_per_million: input.input_price_per_million || null, output_price_per_million: input.output_price_per_million || null }),
       });
     },
     onSuccess: () => { setOpen(false); setEditing(null); setForm(initial); setFeedback("模型配置已更新"); refresh(); },
@@ -96,6 +96,7 @@ export function SettingsPage({ token, embedded = false }: {
         </div></td></tr>)}
         {profiles.data?.length === 0 && <tr><td colSpan={7} className="empty-row">尚无模型配置</td></tr>}
       </tbody></table></div>
+      <p className="form-note">连接测试只测试当前已启用的模型{active ? `“${active.name}”` : ""}，保存配置不会发起模型请求。切换模型后请重新测试，最近结果可能来自之前启用的配置。</p>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </section>}
     {open && <Modal titleId="model-title" onClose={closeEditor}>

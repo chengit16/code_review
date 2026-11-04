@@ -908,9 +908,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         row = next(row for row in store.list_model_profiles() if row["id"] == profile_id)
         return public_model_profile(row)
 
+    @app.post("/api/model-profiles/{profile_id}", dependencies=[admin])
     @app.patch("/api/model-profiles/{profile_id}", dependencies=[admin])
     def update_model_profile(profile_id: int, payload: ModelProfileUpdate) -> dict[str, Any]:
-        """保存模型草稿，不因字段内容或在途队列阻止编辑。"""
+        """保存模型草稿；POST 兼容不转发 PATCH 的反向隧道，字段仍由业务逻辑合并。"""
 
         values = payload.model_dump(exclude_unset=True, exclude_none=True)
         # 单价显式传 null 表示清空；其他可选字段仍沿用省略即保留的语义。
