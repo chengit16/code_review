@@ -4794,6 +4794,29 @@
         "title": "RulePreviewInput",
         "type": "object"
       },
+      "SchedulerConfigRequest": {
+        "additionalProperties": false,
+        "description": "严格整数边界；拒绝布尔值、隐式字符串转换和未知配置键。",
+        "properties": {
+          "model_task_concurrency": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Model Task Concurrency",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_task_concurrency",
+          "version"
+        ],
+        "title": "SchedulerConfigRequest",
+        "type": "object"
+      },
       "TaskExecutionResponse": {
         "additionalProperties": true,
         "description": "保留已有动态任务字段，新增可观测性字段提供明确 OpenAPI 契约。",
@@ -11614,6 +11637,70 @@
           }
         },
         "summary": "Receive Gitlab"
+      }
+    },
+    "/api/worker-scheduler/config": {
+      "get": {
+        "description": "读取期望容量，与监控中的已应用容量分别展示。",
+        "operationId": "read_api_worker_scheduler_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Read Api Worker Scheduler Config Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read"
+      },
+      "put": {
+        "description": "只保存用户明确提交的容量；Worker 下一轮应用，降低时排空不强杀。",
+        "operationId": "save_api_worker_scheduler_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulerConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Save Api Worker Scheduler Config Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save"
       }
     }
   }

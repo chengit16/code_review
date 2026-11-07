@@ -1070,3 +1070,243 @@
 - 关联文件或证据：docs/ant-design-impact-assessment.md；frontend/package.json；frontend/src/ui/Modal.tsx、SelectField.tsx、Pagination.tsx、UnsavedChangesGuard.tsx、useConfigurationDraft.ts；frontend/src/pages/JobsPage.tsx、RecoveryBudgetPanel.tsx、SystemSettingsPage.tsx；frontend/src/styles.css；实际静态检查与 registry 输出。
 - 遗留与下一步：与用户确认通用 UI 替换、Form 状态接管、原生确认替换及移动端/图标/图表范围后，再提出正式规划。当前待用户决策，不把评估完成当迁移已实现；只读核验本 PI 至少两条来源同步，不扩大聊天授权。
 - 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_applicable"}
+
+### PI-20261107-008｜可配置多任务并发落地差距：已受理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：架构改进评估；已受理，排查中，未授权实施或调高业务并发。
+- 关联记录：本会话此前的第四阶段单协调器解耦及单 Worker 多执行槽建议；不引用其他事项的部署结论作为本期验收。
+- 现象或目标：用户询问按单 Worker、可配置多个模型评审任务的建议落地，当前还缺少什么；需要基于最新源码及可核对运行事实回答。
+- 原因或分析：此前方案保留模型任务并发 1；当前项目已经继续演进，须重新核对调度器、执行槽、队列及新增补审预算，不直接沿用旧状态。
+- 处理与改进：先登记事项；计划只读核对源码、当前本机安全运行投影与并发控制入口，列出必要改造和验证范围，不启动 OCR 或修改配置。
+- 代码修改：尚未修改业务代码，仅追加本条受理记录；本轮初始 git status 无输出。
+- 本地验证：已实际运行 git status --short、读取 AGENTS.md、docs/chat-capture.md、台账历史及工程规范；尚未执行功能测试、并发实验或模型请求，静态阅读不代表并发验收通过。
+- 部署生效：未部署本轮功能，未重启进程、迁移数据库或调整并发；当前服务是否运行待只读核对。
+- 关联文件或证据：backend/ocr_manager/worker_scheduler.py；backend/ocr_manager/scheduler_state.py；docs/review-performance-phase4.md；本会话用户问题。
+- 遗留与下一步：完成最新差距评估后追加同编号结论；等待既有 monitor 同步，并运行 minimum-entries 2 的只读核验，不绑定或扩展聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"performance","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：并发落地差距已核对，待实施可配置模型执行池
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：架构评估阶段完成；后续实现待确认，不把建议当成已支持多任务评审。
+- 关联记录：PI-20261107-008 的受理；本会话第四阶段与并发讨论。
+- 现象或目标：明确当前能否直接启用多个 OCR 评审、可复用基础及必须补齐的控制和验证。
+- 原因或分析：当前 WorkerScheduler 每槽 max_workers=1 且只有一个 future；worker_execution_slots 以 model/ingress/delivery 为唯一主键，监控返回 model_task_concurrency=1，页面只读。合并后任务存在本类别顺序保护，但预审、补审与初审之间没有多模型槽所需的统一仓库占用约束。失败子集补审和模型诊断也必须占同一总额度，不能扩线程池后绕过上限。已有独立 HOME、worktree、原子领取、工件/仓库锁和进程组栅栏可复用，真实 OCR 多任务兼容与供应商额度仍未验证。
+- 处理与改进：建议保留单协调 Worker、SQLite 和现有独立通知/事件槽；新增独立调度配置及管理员版本化 API，默认 1、首批开放 1～2，热调高、调低排空不强杀；执行槽迁移为可唯一识别多模型单元。初审/预审/补审统一仓库互斥，模型诊断占总配额，公平游标集中维护；同任务补审不得并行合并覆盖或重复占批准预算。调度并发不应直接混入冻结评审内容配置摘要，单任务内部并发和预算继续按原快照执行。跨仓库先试点，同仓库多任务作为后续独立语义变更。
+- 代码修改：无业务代码修改，只追加本事项两段台账；没有新增接口、迁移、设置控件或多模型执行池。
+- 本地验证：实际只读核对 worker_scheduler.py、scheduler_state.py、storage.py 的 next_job、premerge.py 的 next_premerge、review_recovery_store.py 的 claim、review_recovery_worker.py、ocr.py 和 WorkerExecution.tsx。实际运行 .venv/bin/pytest -q backend/tests/test_worker_scheduler.py backend/tests/test_scheduler_queue.py：13 passed，保留一条 Starlette httpx 弃用提示，仅证明现有单模型槽基线，不是 N 槽验收；未跑全量和真实付费 OCR 多任务实验。实际通过回环 GET /api/health 与 /api/operations、SQLite mode=ro 查询得到当前事实；未打印凭据或完整业务内容。~/.codex/comment-standards.md 不存在。
+- 部署生效：只读确认当前本机健康 status=ok、worker=running，schema 48，三个槽均 idle、心跳新鲜，模型任务上限 1；相比本会话较早的 stopped 状态已变化，但不推断何时或由谁启动。内部 OCR 并发配置缺省为 4，启用仓库为 2 个。可配置多任务并发未实现、未部署；未调整内部并发、模型参数、补审授权或任务，未重启任何服务。
+- 关联文件或证据：上述源码和本轮命令输出；backend/ocr_manager/worker_scheduler.py:98；backend/ocr_manager/scheduler_state.py:13；backend/ocr_manager/scheduler_state.py:92；backend/ocr_manager/ocr.py:311。
+- 遗留与下一步：完成配置/迁移/API/前端、统一领取与多任务恢复；隔离覆盖动态升降、同仓库互斥、三类评审公平、取消/删除/重审、补审预算和覆盖合并，随后经明确授权用受控小样本实测 OCR 两任务、供应商限流和资源影响。任务并发与内部并发乘积只是潜在压力，不等于精确 HTTP 请求数或费用。本轮没有核实供应商 RPM/TPM，不能承诺并发 2 的效果；本编号保持 planned，不宣称实现闭环。收尾等待独立 monitor 后按 minimum-entries 2 核验来源与页面，不强制同步或修改已同步历史。
+- 同步状态：{"kind":"improvement","category":"performance","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：已授权实施单 Worker 的 1～10 任务并发
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一并发改进继续；已受理，实施中。
+- 关联记录：PI-20261107-008 的差距评估；用户本轮明确要求首版允许自由设置 1～10，替代此前建议的 1～2，不覆盖历史建议。
+- 现象或目标：保留单 Worker，管理员可调整模型任务总并发，默认 1；降低上限不强杀在途任务，同仓库串行，普通评审、预审、补审和模型检查统一受限。
+- 原因或分析：现有单槽执行器、持久化结构及只读页面需要共同改造；上限 10 是设置范围，不是资源、供应商额度或吞吐保证。
+- 处理与改进：先核对当前实现与工程约束，再实现配置、迁移、调度和管理入口，增加隔离自动化验证；不自动调高本机并发、不执行付费评审。
+- 代码修改：受理时尚未修改业务代码，仅追加台账；已有台账工作区改动予以保留。
+- 本地验证：已运行 git status --short 并读取项目约定及工程规范；本轮功能测试未运行。
+- 部署生效：未部署，未重启服务或迁移运行数据库，运行上限未调整。
+- 关联文件或证据：用户本轮授权；worker_scheduler.py、scheduler_state.py、WorkerExecution.tsx。
+- 遗留与下一步：完成实现与隔离验证后追加事实记录，按本编号累计条数执行只读同步核验；不扩大聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"performance","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：1～10 模型任务池已实现，专项与后端全量验证推进
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一并发改进实施中，正在完成浏览器及最终验收。
+- 关联记录：PI-20261107-008 的授权实施；用户指定的首版范围为 1～10，不沿用旧建议的 1～2 限制。
+- 现象或目标：单 Worker 可调总容量，热升降不强杀，跨仓库并行且同仓库跨类型互斥，补审授权预算保持。
+- 原因或分析：只扩线程会遗漏持久化身份、全局总配额、降低容量时高编号在途槽及业务取消后的实际退出窗口；本轮统一处理这些边界。
+- 处理与改进：新增 schema 49、调度配置/变更记录及管理接口，增加独立模型槽和共享公平游标、领取事务的仓库占用检查、管理设置及已保存/已应用/执行中/排空展示；新增隔离验证和说明文档。调度容量不加入评审内容快照。
+- 代码修改：已修改后端调度/队列、前端监控及测试/契约；未调整运行实例，已有历史台账保持不覆盖。
+- 本地验证：实际专项 pytest（worker_concurrency、worker_scheduler、scheduler_queue、review_recovery、recovery_budget）65 passed；随后 .venv/bin/pytest -q 全量 708 passed、1 skipped，保留 Starlette/httpx 弃用提示。实际 npm --prefix frontend test -- --reporter=dot：130 passed；ruff check backend/ocr_manager backend/tests --fix、mypy backend/ocr_manager、前端 lint、tsc -b 通过；隔离 Vite 构建通过，仍有既有主包超过 500 kB 提示；已生成 OpenAPI，新契约只读校验及浏览器全量尚在完成中。
+- 部署生效：未部署；未重启 API/Worker/monitor，未迁移 .local-data/local/app.db，未覆盖 frontend/dist，未调高本机容量或触发真实付费评审。上述并发 10 仅为临时库合成执行器验证，不是实际机器或模型配额承载确认。
+- 关联文件或证据：scheduler_config.py、scheduler_api.py、worker_scheduler.py、scheduler_state.py；test_worker_concurrency.py、test_execution_fence.py；WorkerConcurrency.tsx；docs/worker-task-concurrency.md；实际命令输出。
+- 遗留与下一步：完成桌面/320px 持久化和冲突浏览器验收、静态契约与最终差异检查；真实 OCR 并发和供应商限流/资源效果未经验证，不承诺倍数收益。完成后追加最终记录并按本编号累计条数只读核验同步。
+- 同步状态：{"kind":"improvement","category":"performance","status":"verifying","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：1～10 可配置任务并发实现及隔离验收完成，运行实例未升级
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：本轮代码实现和本地验收完成；运行实例升级与真实 OCR 容量试点未执行。
+- 关联记录：PI-20261107-008 的评估、用户授权和实施进展；首版配置范围依用户要求为 1～10。
+- 现象或目标：管理员自行控制单 Worker 模型任务总容量，默认 1；跨仓库并行，同仓库跨初审/预审/补审/关联诊断互斥，模型诊断计入上限，通知和事件保留独立槽。
+- 原因或分析：多槽需要独立持久化身份和代次、共享公平游标、领取事务仓库保护及降低容量的全局在途计数；仅扩线程或看业务终态会超领或提前释放仍在退出的任务。本轮通过临时库和受控命令验证这些边界，不把设置上限当作机器或供应商额度保证。
+- 处理与改进：完成 schema 49 的旧槽证据保留及配置/变更历史、严格整数与版本冲突 API、热升降执行池、已保存/已应用/执行中/排空展示和 1～10 管理入口。调度容量不进入评审内容快照；补审批准路径/Token/批次不放宽，不自动补审或重试。增加迁移、权限、并发、恢复、进程组停止及任务取消隔离验证，更新 OpenAPI 和使用/部署文档。
+- 代码修改：后端 scheduler_config.py、scheduler_api.py、scheduler_state.py、worker_scheduler.py、storage.py、premerge.py、review_recovery_store.py、api.py；前端新增 workerScheduler 服务及 WorkerConcurrency 组件，更新执行槽展示和监控入口；补充测试与旧版迁移夹具，不引入额外 Worker、队列服务器或依赖，不撤回已有用户改动。
+- 本地验证：最终实际 .venv/bin/pytest -q：710 passed、1 skipped，保留 Starlette/httpx 弃用提示；.venv/bin/ruff check backend/ocr_manager backend/tests、.venv/bin/mypy backend/ocr_manager（123 文件）、PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract、git diff --check 均通过。实际 npm --prefix frontend run lint 和 npm --prefix frontend test -- --reporter=dot 通过（27 文件、131 测试）；frontend 内 npx tsc -b 与 npx vite build --outDir /tmp/ocr-concurrency-dist --emptyOutDir 通过，保留既有主包大于 500 kB 提示。使用 OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-concurrency-dist 及本机 Chrome 的默认 Playwright 套件 64 passed、18 skipped；另设 OCR_BROWSER_REVIEW_RECOVERY=1 跑 reviewRecovery.spec.ts：12 passed；最终单独重跑 workerConcurrency.spec.ts：5 passed，包含 1440/320px 保存/刷新、版本冲突草稿、十槽排空与无横向溢出，部分用例与默认套件重叠，不累加为独立通过总数。实际查看桌面设置及 320px 十槽截图。最初旧版迁移夹具/版本断言和同仓库互斥旧假设导致回归失败，已适配后完整重跑通过；新增十槽浏览器测试曾误用断言 matcher 导致两项失败，改为 Playwright 的 toContainText 后五项全部通过，没有改业务响应掩盖失败。
+- 部署生效：未部署。实际只读 SQLite mode=ro 核对当前业务库仍为 schema 48；未重启 API/Worker/monitor，未迁移该库、覆盖 frontend/dist 或调高运行实例并发；构建和浏览器服务使用独立临时产物/数据库，没有真实付费 OCR 并发试点、真实补审授权调整或通知发送。代码/隔离验证完成不能替代本机生效。
+- 关联文件或证据：docs/worker-task-concurrency.md、docs/configuration-guide.md、docs/deployment.md、docs/openapi.json；backend/tests/test_worker_concurrency.py、test_execution_fence.py；frontend/e2e/workerConcurrency.spec.ts；.local-data/visual-checks/worker-concurrency 下隔离截图；本轮实际命令输出。
+- 遗留与下一步：首次使用前按说明备份并正常停止共享库进程，整体升级同版 API/Worker/monitor 和前端，保持默认 1 后核对已应用版本，再由管理员自行设置 1～10；旧代码不能直接打开新版库，回退须恢复备份并核对新增数据补偿。真实 OCR 多进程兼容性、本机内存/CPU/磁盘与供应商 RPM/TPM 未实测；首版无新增账户级限速器，建议逐步调高，不能承诺十路容量或提速倍数。前四段已通过只读同步核验，追加本段后等待独立 monitor，再执行 minimum-entries 5 核验，不强制同步或扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"performance","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：已核对并发设置页面入口，澄清尚未发布
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一并发事项的入口咨询；已核对，说明实现与运行实例的区别。
+- 关联记录：PI-20261107-008 的 1～10 配置实现；不另行扩展为独立设置页或发布授权。
+- 现象或目标：用户询问在哪里设置 1～10、是否有具体页面；需要明确现有页面路径及为何当前访问可能看不到。
+- 原因或分析：已实现的设置位于管理员“运行监控”页 /operations 的“模型任务并发设置”区块，不是新增独立导航菜单；此前实现与隔离验证已完成，但上一轮没有升级运行实例，不能把源码入口当作当前已可访问。
+- 处理与改进：明确操作路径“左侧运行监控 → Worker 调度与执行槽下方 → 模型任务并发设置”，输入 1～10 并保存；同时说明首次需要整体升级同版前后端及 API/Worker/monitor，之后日常调整无需重启。当前咨询不自动触发发布、重启或并发调整。
+- 代码修改：本轮没有新增业务代码，沿用已实现入口，仅追加本段；不改已同步记录。
+- 本地验证：本轮实际运行 rg 核对 App.tsx 的 /operations 管理员路由、OperationsPage.tsx 的设置区块和 WorkerConcurrency.tsx 的组件入口；属于源码定位，未重跑功能测试或访问运行页面，不沿用上轮测试次数作为本轮新验收。
+- 部署生效：本轮未发布、重启或迁移业务库，未调高并发；上一轮未部署事实保持，不声称当前运行页面已有该入口。
+- 关联文件或证据：frontend/src/app/App.tsx；frontend/src/pages/OperationsPage.tsx:57；frontend/src/pages/WorkerConcurrency.tsx；本轮用户问题及实际源码匹配输出。
+- 遗留与下一步：用户如需当前实例可操作，下一步执行备份及同版整体升级，而非仅刷新旧页面。首次只读核验因本段 resolved/not_run 组合不满足内容校验而暂不可用；确认本段尚未导入（已导入仍为五段）后改为 planned/not_run，表示实例升级待执行，不修改前五段已同步事实。本轮按累计六条重新核验，不强制同步或扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"performance","status":"planned","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：已受理本机停旧启新操作指引
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一并发事项继续；正在核对本机启动与整体升级步骤。
+- 关联记录：PI-20261107-008 的 schema 49 实现及尚未部署事实。
+- 现象或目标：用户要求说明如何停止以前的服务、再启动新的本地服务；本轮是操作指引，不擅自执行停止、迁移或启动。
+- 原因或分析：API、Worker、monitor 共用业务库，必须避免旧进程混写；既有私有配置和主密钥必须沿用，不能重建凭据或删除锁文件。
+- 处理与改进：登记后核对已有启动脚本、部署文档和进程启动方式，准备仅针对当前项目的停止、备份、构建、同版启动和验证命令。
+- 代码修改：未修改业务代码，仅追加台账。
+- 本地验证：本轮受理时尚未执行停启、迁移或真实评审；拟只读核对命令入口，不把指引当成实际执行通过。
+- 部署生效：未部署，本轮没有停止或启动服务。
+- 关联文件或证据：用户本轮要求；docs/deployment.md；项目启动入口待核对。
+- 遗留与下一步：给出可执行指引及避免误停其他项目的边界后追加结果，按本编号实际条数执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"performance","status":"planned","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-008｜追加：本机停旧启新指引已核对，实际升级待用户执行
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一并发事项的本机操作指导完成；没有执行发布，仍待实例升级与容量试点。
+- 关联记录：PI-20261107-008 的并发实现、页面入口说明及停启指引受理。
+- 现象或目标：提供本机停止旧服务、成对备份、构建新前端、启动同版三进程及查看并发设置的具体步骤。
+- 原因或分析：实际只读确认 8781 由本项目虚拟环境的 Uvicorn 监听，另有独立 Worker、monitor；三者工作目录均为当前项目，当前用户 launchctl list 未发现 ai.open-code-review 服务。不能用全局杀 Python 或重复启动 Worker 的方式切换。
+- 处理与改进：指引按当前项目绝对路径和模块名匹配旧进程，发送 TERM 并等待退出，检查端口；沿用 .local-data/local/private.json 和原主密钥，使用现有 backup CLI 备份数据库与配置，再构建 frontend/dist；分别启动 API、Worker 和 monitor，API 先完成 schema 49 迁移与健康核对，再启动另外两个进程。保持默认并发 1，通过 /operations 的模型任务并发设置手动调整；明确同仓库仍串行、在途任务应先结束、旧代码不能直接打开新版库。
+- 代码修改：本轮只追加台账，没有新增或修改业务代码、依赖、启动脚本或私有配置；保留上一轮并发实现工作区。
+- 本地验证：实际运行 git status --short、读取部署与实施/采集文档、rg 核对启动入口、读取 backup.py 的备份及权限校验、worker.py/alerts.py 的启动和迁移入口；实际运行 launchctl list 的项目标签过滤、lsof -nP -iTCP:8781 -sTCP:LISTEN、限定模块的 ps 检查，以及 lsof -a -p 72707,72718,72719 -d cwd -Fn，确认当前进程归属。实际运行 PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261107-008 --minimum-entries 7 返回 passed=true，页面 18、版本 7；本段追加后需按累计八条再次核验。没有实际执行所提供的停止、备份、构建、迁移、启动或健康验收命令，没有重跑功能测试，静态核对不是升级成功。
+- 部署生效：未部署；本轮没有停止或重启任何服务，没有迁移业务数据库、覆盖现有 frontend/dist 或调整任务并发，没有触发真实 OCR 和飞书通知。
+- 关联文件或证据：docs/deployment.md；backend/ocr_manager/backup.py、config.py、worker.py、alerts.py、asgi.py；实际进程只读输出及本轮同步核验结果。
+- 遗留与下一步：由用户依次执行指引；任一步失败不得继续启动后续进程，旧进程未退出时不删除锁、不强杀替代排查。数据库及配置快照不是运行工件全量备份，保留原工件；回退须停服恢复配对备份和对应旧代码，不能降低数据库版本号。等待正常 monitor 周期后执行 minimum-entries 8 只读核验，不强制同步或扩大聊天采集授权；真实容量仍建议从 2 起逐步观察。
+- 同步状态：{"kind":"improvement","category":"performance","status":"planned","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-009｜本机停止服务命令执行反馈：已受理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：操作问题；已受理，排查中。
+- 关联记录：PI-20261107-008 的停旧启新操作指引。
+- 现象或目标：用户反馈执行指引时报错，截图显示终端中的多行停止命令，未见明确错误正文；需要核对命令解析与当前进程状态，避免重复停启。
+- 原因或分析：尚未确认是粘贴编辑状态、命令执行错误还是无匹配进程后的非零退出；不能仅凭截图认定根因。
+- 处理与改进：先登记，随后只读检查相关服务并在隔离 shell 核对命令；不执行实际停止、启动、迁移或模型请求。
+- 代码修改：仅追加本条台账，没有修改业务代码或私有配置。
+- 本地验证：受理时尚未运行本轮诊断，截图本身不作为执行成功或失败证据。
+- 部署生效：未部署，本轮没有停止或启动服务。
+- 关联文件或证据：本轮用户截图；上一轮停服务命令。
+- 遗留与下一步：核对后给出针对性处理步骤；追加结果并以本编号至少两条运行只读同步核验，monitor 已停止时明确未同步，不擅自恢复服务或扩大采集范围。
+- 同步状态：{"kind":"problem","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-009｜追加：当前旧服务已无运行迹象，说明无匹配退出码与后续步骤
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：只读核对完成；未见实际错误正文，停止后的当前状态已核对，升级仍待执行。
+- 关联记录：PI-20261107-009 的受理；PI-20261107-008 的停旧启新指引。
+- 现象或目标：解释用户截图与终端错误提示的区别，判断是否需要重复停止旧服务。
+- 原因或分析：截图只有命令，没有明确异常正文，不能证明具体报错原因。本轮限定当前项目解释器及模块检查未找到 API、Worker、monitor，8781 无监听；pgrep 和 lsof 无匹配时返回 1，不是 shell 语法错误，也不能据此认定停止失败。此前指引未解释这一预期非零状态，可能造成误解；无法仅凭本轮观测确认旧服务由哪条命令停止。
+- 处理与改进：告知当前无需重复停止，继续按原指引先成对备份、再构建，成功后启动 API 并检查健康，最后启动 Worker 和 monitor；如终端仍处于多行编辑可先取消当前输入，如另有真实错误须补充错误正文。后续检查需区分无匹配与实际失败，不用全局杀进程或删除锁。
+- 代码修改：仅追加两段台账，没有修改业务代码、私有配置或启动脚本。
+- 本地验证：实际运行限定项目路径及模块的 ps/rg 检查、lsof -nP -iTCP:8781 -sTCP:LISTEN、launchctl list 的项目标签过滤，均无对应服务输出，lsof_exit=1；在 /bin/zsh -f 中实际执行原模式的变量赋值、pgrep 与数组赋值只读部分，无解析错误，匹配数量为 0、pgrep_exit=1。没有执行 kill、备份、构建、迁移、启动、真实 OCR 或功能测试；只读状态不是升级验收。
+- 部署生效：本轮未部署、未停止或重启服务；当前旧进程未运行不等于新服务已启动，业务库升级情况未核对。
+- 关联文件或证据：本轮用户截图、只读进程和端口检查、隔离 zsh 输出。
+- 遗留与下一步：本轮追加时 monitor 同样不在运行，预计台账尚不能自动同步；收尾实际运行本编号 minimum-entries 2 的只读核验，按真实结果说明，不擅自启动 monitor 或强制同步。待用户完成同版启动后由原 monitor 正常同步；如有其他报错，依据正文继续同编号排查，不把推测当确定根因。
+- 同步状态：{"kind":"problem","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜运行监控页信息架构与布局重规划：已受理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：体验改进规划；已受理，排查中，未授权实施业务页面改造。
+- 关联记录：PI-20261107-008 的模型任务并发设置；以当前截图和源码为准，不推断运行实例的升级状态。
+- 现象或目标：用户反馈运行监控页布局不友好，要求重新设计与规划；需兼顾当前运行、异常、执行槽、并发配置和历史性能信息的可发现性。
+- 原因或分析：截图可见概览、异常和历史分组统计混排，说明文字较长、统计分组纵向展开；完整结构与数据口径尚待核对。
+- 处理与改进：先登记，随后只读核对页面、组件、指标和既有设计规则，产出分层布局、交互和分阶段实施建议；不修改运行配置或发布前端。
+- 代码修改：仅追加台账，尚未修改业务代码或样式。
+- 本地验证：受理时仅查看用户截图，尚未运行本轮布局或功能验证。
+- 部署生效：未部署，未停止或启动服务、迁移数据库或调整并发。
+- 关联文件或证据：本轮用户截图；frontend/src/pages/OperationsPage.tsx 待核对。
+- 遗留与下一步：完成方案后追加结论并执行本编号至少两条只读同步核验；如制作示意，明确样例数据不是业务事实，不将原型等同实现。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：四分区重设计方案与交互示意已完成，待确认实施
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：体验规划完成；业务页面尚未改造，实施待确认。
+- 关联记录：PI-20261107-010 的受理；不将 PI-20261107-008 的并发实现测试当作本布局的验收。
+- 现象或目标：解决实时运行与历史性能混排、并发设置被长报告推到下方、异常口径及状态数字难理解的问题。
+- 原因或分析：实际源码先渲染全部 ReviewPerformance 再渲染 WorkerExecution/WorkerConcurrency；历史分组随数据增长拉长页面。排队/运行显示合计，重试/通知失败混合次数及记录数；monitoring.py 的全历史当前结论计数与近七天耗时同屏。历史失败触发通用异常，不足以证明服务当前故障。原 API 已返回 execution_jobs，前端尚未声明，实时原始执行与有效结论必须分开。
+- 处理与改进：新增 docs/operations-redesign-plan.md，推荐同入口四标签“运行与并发、性能分析、告警与通知、维护与审计”；默认页提升并发控制和执行槽，集中已保存/已应用/在途/排空状态，历史统计改可比较表格，未知和样本量保真。固定近七天，不伪造日趋势或从分组分位数计算总体分位数；保留已有主题、权限、版本冲突、费用提示与危险操作确认。提供独立的可切换四标签示意，全部为样例且无业务 API 请求；不改变业务页面。
+- 代码修改：新增规划文档与当前会话目录中的示意文件，仅追加本台账；没有修改业务源码、样式、私有配置或运行产物，未引入新组件库，保留既有工作区改动。
+- 本地验证：实际读取 OperationsPage.tsx、ReviewPerformance.tsx、WorkerExecution.tsx、WorkerConcurrency.tsx、监控类型和查询服务、App.tsx、AlertsPanel.tsx、ReconciliationPanel.tsx、AuditLogPanel.tsx、monitoring.py、review_metrics.py 及现有主题/前端规范；实际 git diff --check 通过。实际使用 visualize/scripts/render.py 生成独立预览，Node 调用现有 @playwright/test 与本机 Chrome 检查 1440/1024/768/375/320px 的四标签切换、横向溢出及本地模拟保存，最终通过且 pageerror 为空；实际查看 1440/375px 截图。首次示意使用原生表单在预览沙箱未触发预期更新，改为显式按钮后重新生成；一次预览因未传 --force 未覆盖旧文件导致同一检查失败，最终覆盖并完整重跑通过。这些仅为示意自检，不是业务功能测试，未运行规划中的前端全量、后端或真实 OCR 验收。
+- 部署生效：未部署；未覆盖 frontend/dist、重启 API/Worker/monitor、迁移数据库、调并发或触发模型/通知。未凭截图推断本机是否已升级并发功能。
+- 关联文件或证据：docs/operations-redesign-plan.md；当前会话可视化目录 operations-redesign.html、operations-redesign-preview.html、operations-redesign-1440.png、operations-redesign-375.png；本轮静态阅读与浏览器检查输出。
+- 遗留与下一步：用户确认后先做结构和发现性，再补交互/查询生命周期和回归；是否发布本机另行确认。当前项目 monitor 进程只读检查无匹配，收尾运行本编号 minimum-entries 2 核验，若未导入则明确未同步，不强制导入、不启动 monitor 或扩大采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-007｜追加：结合全站重设计重新核对 Ant Design 统一规范可行性
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一组件库评估继续；正在核对采用边界，尚未实施迁移。
+- 关联记录：PI-20261107-007 既有影响评估；PI-20261107-010/011 的监控与全站重设计规划。
+- 现象或目标：用户询问是否可用 Ant Design 开发重设计页面，并写入规则约束后续所有开发，以及会产生哪些影响。
+- 原因或分析：需区分“统一通用组件”与“强制所有内容由组件库实现”，同时明确本项目规则不自动约束其他项目；不能把架构建议当依赖已安装或迁移已授权。
+- 处理与改进：先记录，再核对已有评估、当前依赖和工程规范，给出推荐规则、风险及前置实施安排；不安装依赖、改页面或直接落地强制规则。
+- 代码修改：仅追加本段台账，未修改 AGENTS.md、业务代码、依赖或私有配置。
+- 本地验证：实际运行 git status --short，读取已有 Ant Design 评估、frontend/package.json 和 AGENTS.md；尚未执行本轮兼容验证或构建。
+- 部署生效：未部署，未更新运行产物、重启服务或迁移数据库。
+- 关联文件或证据：docs/ant-design-impact-assessment.md；frontend/package.json；docs/governance/frontend-code-standards.md 待进一步核对。
+- 遗留与下一步：完成解释后追加同编号结论并按实际条数只读核验同步，不扩大采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：用户确认运行监控四分区设计基线
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：设计方向已确认，业务页面待实施；同时扩展其他页面体验排查。
+- 关联记录：PI-20261107-010 的规划与交互示意；全站排查另以 PI-20261107-011 跟踪。
+- 现象或目标：用户明确运行监控页按照已提出方案设计，再检查其他页面并统一整理重设计规划。
+- 原因或分析：运行监控四分区作为确定基线，不再重复选择视觉方向；跨页面问题需先核对，不据单页截图推断全部页面同样严重。
+- 处理与改进：保留四分区、并发与执行槽前置、历史性能单列的方案，纳入全站分批实施顺序；本轮先做其他页面梳理，不把规划确认等同业务代码已改造。
+- 代码修改：本段只记录确认，没有修改业务页面、接口或配置。
+- 本地验证：尚未执行本轮功能验收；确认依据为本轮用户请求。
+- 部署生效：未部署，不声称新布局已在本机生效。
+- 关联文件或证据：docs/operations-redesign-plan.md；用户本轮确认。
+- 遗留与下一步：完成全站清单与优先级后安排分批实施，收尾按本编号累计三条核验同步；不覆盖已同步历史。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜全站页面体验排查与分批重设计：已受理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：体验改进规划；已受理，排查中。
+- 关联记录：PI-20261107-010 的运行监控四分区设计；不将此前灰白蓝主题或组件库评估当作本轮布局验收。
+- 现象或目标：用户要求找出其他页面类似的信息堆叠、状态表达及操作入口问题，整理统一重设计规划。
+- 原因或分析：尚未完成其他页面审查，须按实际路由、页面组件、状态与已有测试核对，区分已存在的良好模式与待改问题。
+- 处理与改进：先登记，随后只读审查主要路由与页面、共用组件和交互检查依据，输出问题位置、优先级、页面目标结构、实施范围与验证计划；不批量改造业务或发布。
+- 代码修改：仅追加台账，保留既有工作区改动，没有修改业务代码。
+- 本地验证：受理前实际运行 git status --short、列出 frontend/src/pages 文件及阅读实施/规范采用说明；尚未运行页面功能或浏览器验收。
+- 部署生效：未部署，没有停止或启动服务、迁移数据库、修改并发或发送外部请求。
+- 关联文件或证据：本轮用户请求；frontend/src/app/App.tsx 和 frontend/src/pages 待进一步核对。
+- 遗留与下一步：完成后追加方案结论；按本编号至少两条及关联编号实际条数分别核验同步，不扩大聊天采集授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：主要页面静态排查与全站分批重设计规划已整理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：本轮排查和规划完成；业务页面改造、逐页视觉验收及发布尚未执行。
+- 关联记录：PI-20261107-011 的受理；PI-20261107-010 已确认的运行监控四分区为设计基线。
+- 现象或目标：系统整理其他页面的信息层级、状态表达和操作可发现性问题，避免只优化运行监控或全站盲目换肤。
+- 原因或分析：源码确认事件补审表及历史在收件箱前、任务诊断与补审在发现前、首页效果区在最近评审前；系统设置审核规则混排编辑/反馈/预览/历史，优化主题按阶段完整铺开。任务列表、系统设置和问题侧栏已有 URL/折叠/草稿/窄屏机制，应保留而非重做。首次接入加载/失败仍计算缺省进度、Webhook 地址就绪不等于外部配置完成；账号模式和关联配置辅助查询缺失可显示为默认关闭或未配置，需要隔离复现后优先修正。未测量实际页面高度、用户效率或查询性能，不把源码风险冒充逐页浏览器缺陷。
+- 处理与改进：新增 docs/whole-site-ux-redesign-plan.md，覆盖主要路由、页面级建议、P0/P1/P2 优先级、四种页面模板和四批实施/验收计划；用户已确认的运行监控独立方案补充基线确认与全站链接，文档索引增加两份规划。推荐先修状态事实与实施监控，再优化评审链路、配置/平台管理，最后全链路回归与单独确认发布；不绑定新组件库或底层架构重做。
+- 代码修改：本轮仅新增/更新规划、文档索引与台账，没有修改业务源码、主题、依赖或配置；保留上一轮并发实现等现有工作区改动，没有执行页面批量改造。
+- 本地验证：实际 git status --short；读取 App.tsx 主要路由、各主要页面及详情/配置/批量/草稿组件、交互回归文档与 Playwright 夹具/用例范围；实际 git diff --check 通过。实际运行 .venv/bin/python 的只读文档链接和源码渲染顺序核对脚本：两份规划各一处本地链接均存在，五处指定先后关系断言通过。一次 zsh 检索辅助命令因 echo 的等号展开失败，改为 printf 后成功读取，不涉及业务执行。回环 GET /api/health 实际返回 status=ok、worker=running；只作当前只读状态观测，不证明新布局部署。实际 PI-20261107-010 minimum-entries 3 同步核验通过（页面 20、版本 3）。未运行 lint、单元测试、构建或逐页浏览器验收；文中的这些命令均为待实施后的验证计划。
+- 部署生效：未部署，没有覆盖 frontend/dist、迁移数据库、重启服务、调并发、触发真实评审或发送通知；本机运行中的旧/新业务版本没有作为本轮验收项核对。
+- 关联文件或证据：docs/whole-site-ux-redesign-plan.md；docs/operations-redesign-plan.md；docs/README.md；实际静态阅读、只读结构核对与健康检查输出。
+- 遗留与下一步：按分批计划补隔离视觉/交互基线并实施，P0 未复现前不宣称修复；完整保留权限、冻结输入、版本冲突、费用提示、三维交付及采集授权边界。最后等待正常 monitor 同步，再以本编号 minimum-entries 2 和关联编号累计三条分别只读核验，不强制导入或扩大聊天范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}

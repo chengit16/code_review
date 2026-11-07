@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ocr_manager.range_preflight import input_policy
 from ocr_manager.review_failures import REVIEW_POLICY
 from ocr_manager.review_results import project_review_result
+from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES
 
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
@@ -154,15 +155,16 @@ def enqueue_premerge(store: Store, repository_id: int, mr_iid: int, head_sha: st
 
 
 def next_premerge(store: Store, last_repository_id: int | None = None) -> dict[str, Any] | None:
-    """单 Worker 领取开启合并前审查的最新待处理版本。"""
+    """原子领取开启合并前审查的版本；与初审、补审及尚未退出的执行槽互斥。"""
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        row = db.execute("""SELECT p.* FROM premerge_reviews p
+        row = db.execute(f"""SELECT p.* FROM premerge_reviews p
             JOIN repositories r ON r.id=p.repository_id
             JOIN premerge_settings s ON s.repository_id=r.id
             WHERE p.status='queued' AND p.next_run_at<=CURRENT_TIMESTAMP
             AND r.enabled=1 AND s.enabled=1
+            AND p.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
             ORDER BY CASE WHEN p.repository_id>? THEN 0 ELSE 1 END,
             p.repository_id,p.id LIMIT 1""",
                          (last_repository_id,)).fetchone()

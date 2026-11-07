@@ -64,7 +64,12 @@ export interface PerformanceGroup {
 /** 执行槽来自受保护的监控接口，不含凭据或代码，过期心跳不授予抢占权。 */
 export interface SchedulerSnapshot {
   model_task_concurrency: number;
-  slots: Array<{ lane: string; owner: string; generation: number; task_kind: string | null;
+  applied_concurrency?: number | null;
+  applied_version?: number | null;
+  config_version?: number;
+  running_model_tasks?: number;
+  draining?: boolean;
+  slots: Array<{ slot_id?: string; slot_index?: number; lane: string; owner: string; generation: number; task_kind: string | null;
     task_id: number | null; repository_id: number | null; state: string;
     heartbeat_at: string; heartbeat_age_seconds: number }>;
 }

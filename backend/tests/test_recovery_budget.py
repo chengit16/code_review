@@ -297,7 +297,7 @@ def test_migration_rolls_back_without_grant(
     monkeypatch.setattr(storage, "RECOVERY_BUDGET_MIGRATION", migration)
     store.migrate()
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 48
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 49
         assert db.execute("SELECT count(*) FROM review_recovery_authorizations").fetchone()[0] == 0
 
 

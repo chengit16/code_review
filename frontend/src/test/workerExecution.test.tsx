@@ -42,3 +42,16 @@ it("过期心跳提示待核实，已停止槽不提示抢占或当作在运行"
   expect(screen.getAllByText(/协调心跳过期，执行状态待核实/)).toHaveLength(1);
   expect(screen.queryByText("执行中 · 合并后评审 #7")).toBeNull();
 });
+
+it("区分已保存与已应用并发，独立标识多个模型槽及降低容量排空", () => {
+  render(<WorkerExecution snapshot={{ model_task_concurrency: 1, config_version: 3,
+    applied_concurrency: 1, applied_version: 3, running_model_tasks: 2, draining: true,
+    slots: [
+      { ...snapshot.slots[0], slot_id: "model", slot_index: 1 },
+      { ...snapshot.slots[0], slot_id: "model:2", slot_index: 2, task_id: 9 },
+    ] }} />);
+  expect(screen.getByRole("heading", { name: "模型评审 #1" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "模型评审 #2" })).toBeVisible();
+  expect(screen.getByText(/已应用上限 1 · 持久化执行中 2/)).toHaveTextContent("正在排空");
+  expect(screen.getByText(/任务 #9|合并后评审 #9/)).toHaveTextContent("超出上限，不再领取");
+});

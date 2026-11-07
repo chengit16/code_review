@@ -15,6 +15,7 @@ import { ReconciliationPanel } from "./ReconciliationPanel";
 import type { PerformanceGroup, SchedulerSnapshot } from "../api/reviewExecution";
 import { ReviewPerformance } from "./ReviewPerformance";
 import { WorkerExecution } from "./WorkerExecution";
+import { WorkerConcurrency } from "./WorkerConcurrency";
 
 interface Snapshot {
   scheduler?: SchedulerSnapshot;
@@ -53,6 +54,7 @@ export function OperationsPage({ token }: { /** 内存中的管理口令。 */ t
     </div></>}
     {data && <ReviewPerformance groups={data.performance_7d} />}
     {data && <WorkerExecution snapshot={data.scheduler} />}
+    <section className="section"><div className="section-head"><h2>模型任务并发设置</h2></div><WorkerConcurrency token={token} /></section>
     <div className="operations-tools-grid">
       <section className="section operation-card maintenance-card"><div className="section-head"><h2>旧评审工件</h2></div><div className="maintenance-list">
         <div className="maintenance-item"><label>评审工件保留天数<input type="number" min="7" max="3650" value={days} onChange={(event) => setDays(Math.max(7, Math.min(3650, Number(event.target.value) || 7)))} /></label><div className="maintenance-summary"><span>可清理工件</span><strong>{preview.data ? `${preview.data.count} 个目录 · ${(preview.data.bytes / 1024 ** 2).toFixed(1)} MB` : "计算中"}</strong></div><button className="button button-secondary" disabled={!preview.data?.count || prune.isPending} onClick={() => { if (window.confirm(`清理 ${preview.data?.count} 个超过 ${days} 天的终态评审工件？任务和报告摘要会保留。`)) prune.mutate(); }}><Trash2 size={16} />清理工件</button></div>

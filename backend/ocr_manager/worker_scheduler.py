@@ -1,4 +1,4 @@
-"""单协调器将已持久化任务交给三个有界执行槽；不增加模型并发，不按心跳抢占。"""
+"""单协调器按持久化容量调度模型池；事件和通知独立执行，不按心跳抢占。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ from typing import Any
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.config import Settings
 from ocr_manager.execution_guard import WorkerStopping, check_stopping, stopping_scope
+from ocr_manager.scheduler_config import read_scheduler_config
 from ocr_manager.scheduler_state import (
+    apply_capacity,
     finish_slot,
     heartbeat,
     initialize_slots,
@@ -39,7 +41,7 @@ class Action:
 
 @dataclass
 class Lane:
-    """每类最多一个在途单元；轮转游标只决定调度机会，不替代 SQLite 业务事实。"""
+    """每槽最多一个在途单元；模型槽共享轮转游标，不替代 SQLite 业务事实。"""
 
     name: str
     actions: list[Action]
@@ -47,6 +49,7 @@ class Lane:
     cursor: int = 0
     future: Future[None] | None = None
     generation: int = 0
+    slot_index: int = 1
 
 
 class WorkerScheduler:
@@ -57,7 +60,6 @@ class WorkerScheduler:
         from ocr_manager.checks import run_connection_check
         from ocr_manager.publications import next_publication
         from ocr_manager.review_recovery_notifications import claim_delivery
-        from ocr_manager.review_recovery_store import claim as claim_recovery
         from ocr_manager.review_recovery_worker import execute_recovery
 
         self.store, self.settings = store, settings
@@ -65,18 +67,20 @@ class WorkerScheduler:
         self.stopping = threading.Event()
         self.last_repository_id: int | None = None
         self.last_event_repository: int | None = None
-        self.last_premerge_repository: int | None = None
         self.last_heartbeat = 0.0
         self.closed = False
+        self.model_cursor = 0
+        self.capacity = 0
+        self.config_version = 0
 
         def action(kind: str, claim: Claim,
                    execute: Callable[[Store, Settings, Task], None]) -> Action:
             return Action(kind, claim, lambda task: execute(store, settings, task))
 
-        # 模型诊断也占唯一模型槽；通知不与 Git/事件共用线程，避免大仓库 fetch 再次阻塞消息。
+        # 所有模型任务共用总配额；各模型槽共享类型与仓库游标，避免扩容后偏向初审。
         groups = {
             "model": [Action("review", self._claim_job, self._review),
-                      action("review_recovery", lambda: claim_recovery(store), execute_recovery),
+                      action("review_recovery", self._claim_recovery, execute_recovery),
                       action("premerge", self._claim_premerge, worker.review_premerge),
                       action("model_check", lambda: store.next_connection_check(("model",)),
                              run_connection_check)],
@@ -98,6 +102,28 @@ class WorkerScheduler:
         self.lanes = [Lane(name, actions, ThreadPoolExecutor(max_workers=1,
                                                            thread_name_prefix=f"ocr-{name}"))
                       for name, actions in groups.items()]
+        self._refresh_capacity()
+
+    def _refresh_capacity(self) -> None:
+        config = read_scheduler_config(self.store)
+        if config["version"] == self.config_version:
+            return
+        capacity = config["model_task_concurrency"]
+        apply_capacity(self.store, self.owner, capacity, config["version"])
+        existing = sum(lane.name.startswith("model") for lane in self.lanes)
+        for index in range(existing + 1, capacity + 1):
+            self.lanes.append(Lane(f"model:{index}", self.lanes[0].actions,
+                ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"ocr-model-{index}"),
+                slot_index=index))
+        self.capacity, self.config_version = capacity, config["version"]
+
+    def _claim_recovery(self) -> Task | None:
+        from ocr_manager.review_recovery_store import claim
+
+        task = claim(self.store, self.last_repository_id, respect_initial_turn=False)
+        if task:
+            self.last_repository_id = int(task["repository_id"])
+        return task
 
     def _claim_job(self) -> Task | None:
         task = self.store.next_job(self.last_repository_id)
@@ -122,9 +148,9 @@ class WorkerScheduler:
     def _claim_premerge(self) -> Task | None:
         from ocr_manager.premerge import next_premerge
 
-        task = next_premerge(self.store, self.last_premerge_repository)
+        task = next_premerge(self.store, self.last_repository_id)
         if task:
-            self.last_premerge_repository = int(task["repository_id"])
+            self.last_repository_id = int(task["repository_id"])
         return task
 
     def _execute(self, execute: Execute, task: Task) -> None:
@@ -164,7 +190,7 @@ class WorkerScheduler:
                 publish_one(self.store, self.settings, task)
 
     def tick(self) -> bool:
-        """仅协调线程领取；每槽每轮最多一个，持续事件不能饿死通知、预审或诊断。"""
+        """先回收全部完成槽再按总配额领取；降低容量只排空，不取消在途任务。"""
 
         if self.closed:
             raise RuntimeError("调度器已停止")
@@ -181,9 +207,18 @@ class WorkerScheduler:
                 lane.future.result()
                 finish_slot(self.store, self.owner, lane.name, lane.generation)
                 lane.future = None
-            # 3. 每次成功领取后轮转类型，跨仓库继续使用原有 MR/事件顺序约束。
+        # 3. 所有模型槽共用总配额；超出新容量的在途槽仍保留，禁止趁低编号空闲超领。
+        self._refresh_capacity()
+        running = sum(lane.name.startswith("model") and lane.future is not None
+                      for lane in self.lanes)
+        for lane in self.lanes:
+            model = lane.name.startswith("model")
+            if lane.future is not None or (model and (
+                    lane.slot_index > self.capacity or running >= self.capacity)):
+                continue
+            cursor = self.model_cursor if model else lane.cursor
             for offset in range(len(lane.actions)):
-                index = (lane.cursor + offset) % len(lane.actions)
+                index = (cursor + offset) % len(lane.actions)
                 action = lane.actions[index]
                 task = action.claim()
                 if task is None:
@@ -191,12 +226,15 @@ class WorkerScheduler:
                 lane.generation = start_slot(self.store, self.owner, lane.name, action.kind, task)
                 lane.future = lane.executor.submit(self._execute, action.execute, task)
                 lane.cursor = (index + 1) % len(lane.actions)
+                if model:
+                    self.model_cursor = lane.cursor
+                    running += 1
                 handled = True
                 break
         return handled
 
     def close(self) -> None:
-        """停止领取，通知三个执行单元结束；等待进程组清理后才允许外层释放 Worker 栅栏。"""
+        """停止领取并通知全部执行单元结束；进程组均清理后才允许释放 Worker 栅栏。"""
 
         if self.closed:
             return

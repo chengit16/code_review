@@ -45,6 +45,7 @@ from ocr_manager.review_effectiveness import register_effectiveness
 from ocr_manager.review_finding_api import register_finding_api
 from ocr_manager.review_issues import register_review_issues
 from ocr_manager.review_recovery_api import register_recovery_api
+from ocr_manager.scheduler_api import register_scheduler_api
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import register_task_control
@@ -447,6 +448,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     admin = Depends(require_admin)
     register_auth(app, store, require_admin)
     register_operations(app, store, config, admin)
+    register_scheduler_api(app, store, admin)
     register_task_control(app, store, config, admin)
     register_recovery_api(app, store, config, admin)
     register_finding_api(app, store, config, admin)

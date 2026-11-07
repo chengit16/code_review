@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from ocr_manager.scheduler_config import read_scheduler_config
+
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
@@ -32,12 +34,37 @@ def initialize_slots(store: Store, owner: str) -> None:
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
+        db.execute("""UPDATE worker_execution_slots SET state='stopped',
+            heartbeat_at=CURRENT_TIMESTAMP,finished_at=CURRENT_TIMESTAMP""")
         for lane in LANES:
-            db.execute("""INSERT INTO worker_execution_slots(lane,owner,pid,state)
-                VALUES(?,?,?,'idle') ON CONFLICT(lane) DO UPDATE SET
+            db.execute("""INSERT INTO worker_execution_slots
+                (slot_id,lane,slot_index,owner,pid,state)
+                VALUES(?,?,1,?,?,'idle') ON CONFLICT(slot_id) DO UPDATE SET
                 owner=excluded.owner,pid=excluded.pid,state='idle',task_kind=NULL,task_id=NULL,
                 repository_id=NULL,heartbeat_at=CURRENT_TIMESTAMP,finished_at=CURRENT_TIMESTAMP""",
-                       (lane, owner, os.getpid()))
+                       (lane, lane, owner, os.getpid()))
+        db.execute("""UPDATE worker_scheduler_settings SET applied_concurrency=NULL,
+            applied_version=NULL,applied_owner=? WHERE id=1""", (owner,))
+
+
+def apply_capacity(store: Store, owner: str, concurrency: int, version: int) -> None:
+    """先登记独立模型槽再确认应用；旧 owner 无权确认，新上限不终止现有执行。"""
+
+    with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
+        identity = db.execute("SELECT owner FROM worker_execution_slots WHERE slot_id='model'")\
+            .fetchone()
+        if identity is None or identity["owner"] != owner:
+            raise RuntimeError("执行槽身份不匹配，拒绝应用并发配置")
+        for index in range(2, concurrency + 1):
+            db.execute("""INSERT INTO worker_execution_slots
+                (slot_id,lane,slot_index,owner,pid,state) VALUES(?,'model',?,?,?,'idle')
+                ON CONFLICT(slot_id) DO UPDATE SET owner=excluded.owner,pid=excluded.pid,
+                state=CASE WHEN worker_execution_slots.owner=excluded.owner
+                  THEN worker_execution_slots.state ELSE 'idle' END,
+                heartbeat_at=CURRENT_TIMESTAMP""", (f"model:{index}", index, owner, os.getpid()))
+        db.execute("""UPDATE worker_scheduler_settings SET applied_concurrency=?,
+            applied_version=?,applied_owner=? WHERE id=1""", (concurrency, version, owner))
 
 
 def start_slot(store: Store, owner: str, lane: str, kind: str,
@@ -48,7 +75,7 @@ def start_slot(store: Store, owner: str, lane: str, kind: str,
         row = db.execute("""UPDATE worker_execution_slots SET generation=generation+1,
             task_kind=?,task_id=?,repository_id=?,state='running',started_at=CURRENT_TIMESTAMP,
             heartbeat_at=CURRENT_TIMESTAMP,finished_at=NULL
-            WHERE lane=? AND owner=? AND state='idle' RETURNING generation""",
+            WHERE slot_id=? AND owner=? AND state='idle' RETURNING generation""",
                          (kind, task["id"], task.get("repository_id"), lane, owner)).fetchone()
         if row is None:
             raise RuntimeError("执行槽身份不匹配，拒绝启动任务")
@@ -62,7 +89,7 @@ def finish_slot(store: Store, owner: str, lane: str, generation: int,
     with store.connection() as db:
         db.execute("""UPDATE worker_execution_slots SET state=?,
             finished_at=CURRENT_TIMESTAMP,heartbeat_at=CURRENT_TIMESTAMP
-            WHERE owner=? AND lane=? AND generation=? AND state='running'""",
+            WHERE owner=? AND slot_id=? AND generation=? AND state='running'""",
                    ("interrupted" if interrupted else "idle", owner, lane, generation))
 
 
@@ -88,6 +115,17 @@ def scheduler_snapshot(store: Store) -> dict[str, Any]:
     with store.connection() as db:
         slots = [dict(row) for row in db.execute("""SELECT *,
             MAX(0,CAST((julianday('now')-julianday(heartbeat_at))*86400 AS INTEGER))
-            AS heartbeat_age_seconds FROM worker_execution_slots ORDER BY lane""")]
-    return {"model_task_concurrency": 1, "slots": slots,
+            AS heartbeat_age_seconds FROM worker_execution_slots ORDER BY lane,slot_index""")]
+        applied = db.execute("SELECT applied_concurrency,applied_version,applied_owner "
+                             "FROM worker_scheduler_settings WHERE id=1").fetchone()
+    config = read_scheduler_config(store)
+    live = any(slot["owner"] == applied["applied_owner"] and slot["state"] in {"idle", "running"}
+               and slot["heartbeat_age_seconds"] <= 15 for slot in slots)
+    running = sum(slot["lane"] == "model" and slot["state"] == "running" for slot in slots)
+    limit = applied["applied_concurrency"] if live else None
+    return {"model_task_concurrency": config["model_task_concurrency"],
+            "config_version": config["version"], "applied_concurrency": limit,
+            "applied_version": applied["applied_version"] if live else None,
+            "running_model_tasks": running, "draining": limit is not None and running > limit,
+            "slots": slots,
             "recovery_policy": "exclusive_process_fence"}

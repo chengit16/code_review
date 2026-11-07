@@ -269,7 +269,7 @@ def test_schema44_migration_no_automatic_promotion_or_duplicate_history(
     store.migrate()
     store.migrate()
     with store.connection() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 48
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 49
         assert db.execute('SELECT count(*) FROM review_recovery_aggregates').fetchone()[0] == 2
         assert db.execute('SELECT count(*) FROM review_effective_conclusions').fetchone()[0] == 0
         assert db.execute('SELECT count(*) FROM review_recovery_deliveries').fetchone()[0] == 0
@@ -303,7 +303,7 @@ def test_schema45_failure_rolls_back_and_replays(
     monkeypatch.setattr(storage, 'EFFECTIVE_MIGRATION', migration)
     store.migrate()
     with store.connection() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 48
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 49
 
 
 @pytest.mark.parametrize('value,projects,batches,tokens,valid', [

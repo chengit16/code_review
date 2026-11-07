@@ -110,31 +110,34 @@ with worker_lock(root), artifact_lock(root, 1, blocking=True):
 
 
 @pytest.mark.parametrize("adapter", ["git", "ocr"])
-def test_worker_stop_terminates_command_group(tmp_path: Path, adapter: str) -> None:
-    """协调器停止信号穿透用户取消域，Git 与 OCR 都清理进程组后才释放栅栏。"""
+@pytest.mark.parametrize("parallelism", [1, 3])
+def test_worker_stop_terminates_command_group(
+    tmp_path: Path, adapter: str, parallelism: int,
+) -> None:
+    """协调器停止信号穿透用户取消域，多个 Git/OCR 进程组都清理后才释放栅栏。"""
 
-    ready = tmp_path / "ready"
+    ready = [tmp_path / f"ready-{index}" for index in range(parallelism)]
     stopping = threading.Event()
     code = ("import os,sys,time; "
             "open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(60)")
-    command = [sys.executable, "-c", code, str(ready)]
-
-    def execute() -> None:
+    def execute(path: Path) -> None:
+        command = [sys.executable, "-c", code, str(path)]
         with stopping_scope(stopping):
             if adapter == "git":
                 run_git(command, tmp_path, dict(os.environ), 60)
             else:
                 execute_ocr_command(command, dict(os.environ), tmp_path, 60)
 
-    with worker_lock(tmp_path), ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(execute)
+    with worker_lock(tmp_path), ThreadPoolExecutor(max_workers=parallelism) as executor:
+        futures = [executor.submit(execute, path) for path in ready]
         try:
-            wait_until(ready.exists)
+            wait_until(lambda: all(path.exists() and path.stat().st_size for path in ready))
         finally:
             stopping.set()
-        with pytest.raises(WorkerStopping):
-            future.result(timeout=8)
-    assert not alive(int(ready.read_text()))
+        for future in futures:
+            with pytest.raises(WorkerStopping):
+                future.result(timeout=8)
+    assert all(not alive(int(path.read_text())) for path in ready)
     assert not worker_is_running(tmp_path)
 
 
@@ -177,8 +180,11 @@ def test_same_repository_mutations_serialize_but_other_repository_progresses(
     assert checkout.is_set()
 
 
-def test_real_worker_entrypoint_initializes_heartbeats_and_stops(settings: Settings) -> None:
-    """真实模块入口在空临时库启动三个槽，拒绝第二进程，SIGTERM 后记录停止并释放锁。"""
+@pytest.mark.parametrize("capacity", [1, 10])
+def test_real_worker_entrypoint_initializes_heartbeats_and_stops(
+    settings: Settings, capacity: int,
+) -> None:
+    """真实入口从临时库加载容量、拒绝第二进程，SIGTERM 后全部槽停止并释放锁。"""
 
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("OCR_APP_")}
@@ -186,9 +192,12 @@ def test_real_worker_entrypoint_initializes_heartbeats_and_stops(settings: Setti
                        OCR_APP_MASTER_KEY=settings.master_key)
     store = Store(settings.data_dir / "app.db")
     store.migrate()
+    from ocr_manager.scheduler_config import save_scheduler_config
+
+    save_scheduler_config(store, capacity, 1, "合成管理员")
 
     def initialized() -> bool:
-        return len(scheduler_snapshot(store)["slots"]) == 3
+        return len(scheduler_snapshot(store)["slots"]) == capacity + 2
 
     with subprocess.Popen([sys.executable, "-m", "ocr_manager.worker"], env=environment,
                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as process:
@@ -211,3 +220,38 @@ def test_real_worker_entrypoint_initializes_heartbeats_and_stops(settings: Setti
                 process.wait(timeout=5)
     assert all(slot["state"] == "stopped" for slot in scheduler_snapshot(store)["slots"])
     assert not worker_is_running(settings.data_dir)
+
+
+def test_cancel_one_ocr_does_not_cancel_other_active_process_group(tmp_path: Path) -> None:
+    """两个 OCR 命令同时运行，任务级取消仅终止自己的进程组，另一组继续受 Worker 栅栏保护。"""
+
+    from ocr_manager.cancellation import ReviewCancelled, cancellation_scope
+
+    cancelled = [threading.Event(), threading.Event()]
+    ready = [tmp_path / f"cancel-isolation-{index}" for index in range(2)]
+    code = ("import os,sys,time; "
+            "open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(60)")
+
+    def execute(index: int) -> None:
+        with cancellation_scope(cancelled[index].is_set), artifact_lock(tmp_path, index + 1):
+            execute_ocr_command([sys.executable, "-c", code, str(ready[index])],
+                                dict(os.environ), tmp_path, 60)
+
+    with worker_lock(tmp_path), ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(execute, index) for index in range(2)]
+        try:
+            wait_until(lambda: all(path.exists() and path.stat().st_size for path in ready))
+            cancelled[0].set()
+            with pytest.raises(ReviewCancelled):
+                futures[0].result(timeout=8)
+            assert not alive(int(ready[0].read_text()))
+            assert alive(int(ready[1].read_text())) and not futures[1].done()
+            assert worker_is_running(tmp_path)
+        finally:
+            for event in cancelled:
+                event.set()
+            for future in futures:
+                with pytest.raises(ReviewCancelled):
+                    future.result(timeout=8)
+    assert all(not alive(int(path.read_text())) for path in ready)
+    assert not worker_is_running(tmp_path)

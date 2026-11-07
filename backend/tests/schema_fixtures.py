@@ -119,5 +119,23 @@ def remove_chat_capture_schema(db: sqlite3.Connection) -> None:
 def remove_recovery_budget_schema(db: sqlite3.Connection) -> None:
     """仅隔离测试库退回 47 版，不修改真实业务库或导入历史。"""
 
+    remove_scheduler_capacity_schema(db)
     db.execute("DROP TABLE IF EXISTS review_recovery_authorizations")
     db.execute("DROP TABLE IF EXISTS review_recovery_budget_evidence")
+
+
+def remove_scheduler_capacity_schema(db: sqlite3.Connection) -> None:
+    """仅合成库还原 48 版单槽及移除容量配置，确保旧迁移测试完整回放。"""
+
+    from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
+
+    db.execute("DROP TABLE IF EXISTS worker_scheduler_changes")
+    db.execute("DROP TABLE IF EXISTS worker_scheduler_settings")
+    columns = {row[1] for row in db.execute("PRAGMA table_info(worker_execution_slots)")}
+    if "slot_id" in columns:
+        db.execute("ALTER TABLE worker_execution_slots RENAME TO worker_slots_test49")
+        db.execute(SCHEDULER_MIGRATION)
+        db.execute("""INSERT INTO worker_execution_slots SELECT
+            lane,owner,generation,task_kind,task_id,repository_id,pid,state,
+            started_at,heartbeat_at,finished_at FROM worker_slots_test49 WHERE slot_index=1""")
+        db.execute("DROP TABLE worker_slots_test49")

@@ -114,6 +114,10 @@ def test_premerge_round_robin_and_atomic_claims(
     with ThreadPoolExecutor(max_workers=4) as executor:
         reviews = list(executor.map(lambda _: next_premerge(store), range(8)))
     assert sum(item is not None for item in reviews) == 1
+    # 新的跨类型仓库互斥要求预审结束后才能领取同仓库初审。
+    active_review = next(item for item in reviews if item is not None)
+    assert store.next_job() is None
+    finish_premerge(store, active_review["id"], "skipped", None, None, None, [], None)
     job = store.next_job()
     assert job
     store.finish_job(job["id"], "complete", None, {"comments": []}, None)

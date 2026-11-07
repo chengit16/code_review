@@ -23,6 +23,7 @@ from ocr_manager.review_recovery_domain import (
     merge_candidate,
 )
 from ocr_manager.review_results import project_review_result
+from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES
 
 if TYPE_CHECKING:
     from ocr_manager.config import Settings
@@ -186,23 +187,28 @@ def enqueue(store: Store, settings: Settings, job_id: int, command: RecoveryCrea
             return int(cursor.lastrowid)
 
 
-def claim(store: Store) -> dict[str, Any] | None:
-    """只占现有模型槽；暂停项目不领取，成功领取建立一次性执行令牌，重启不自动重跑。"""
+def claim(store: Store, last_repository_id: int | None = None, *,
+          respect_initial_turn: bool = True) -> dict[str, Any] | None:
+    """补审与其他模型评审按仓库互斥；协调器统一轮转时不另用旧初审游标阻塞。"""
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
         turn = db.execute("SELECT next_kind FROM review_recovery_fairness WHERE id=1").fetchone()
-        if turn["next_kind"] == "initial" and db.execute("""SELECT 1 FROM review_jobs j
+        if respect_initial_turn and turn["next_kind"] == "initial" and db.execute(
+            f"""SELECT 1 FROM review_jobs j
             JOIN repositories r ON r.id=j.repository_id WHERE j.status='queued' AND r.enabled=1
+            AND j.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
             AND j.next_run_at<=CURRENT_TIMESTAMP LIMIT 1""").fetchone():
             return None
         db.execute("""UPDATE review_recoveries SET status='stale',error_code='source_expired',
             finished_at=CURRENT_TIMESTAMP WHERE status='queued'
             AND created_at<datetime('now','-7 days')""")
-        row = db.execute("""SELECT b.*,j.repository_id FROM review_recoveries b
+        row = db.execute(f"""SELECT b.*,j.repository_id FROM review_recoveries b
             JOIN review_jobs j ON j.id=b.job_id JOIN repositories r ON r.id=j.repository_id
             WHERE b.status='queued' AND r.enabled=1
-            ORDER BY b.id LIMIT 1""").fetchone()
+            AND j.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
+            ORDER BY CASE WHEN j.repository_id>? THEN 0 ELSE 1 END,
+            j.repository_id,b.id LIMIT 1""", (last_repository_id,)).fetchone()
         if row is None:
             return None
         token = uuid.uuid4().hex

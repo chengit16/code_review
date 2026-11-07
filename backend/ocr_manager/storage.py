@@ -42,10 +42,11 @@ from ocr_manager.review_observability_migration import OBSERVABILITY_MIGRATION
 from ocr_manager.review_policy_migration import REVIEW_POLICY_MIGRATION
 from ocr_manager.review_recovery_migration import RECOVERY_MIGRATION
 from ocr_manager.review_results import project_review_result
+from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES, CONCURRENCY_MIGRATION
 from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 48
+SCHEMA_VERSION = 49
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -364,6 +365,7 @@ class Store:
                 (46, DIAGNOSTIC_IMPORT_MIGRATION),
                 (47, CHAT_CAPTURE_MIGRATION),
                 (48, RECOVERY_BUDGET_MIGRATION),
+                (49, CONCURRENCY_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -406,7 +408,9 @@ class Store:
             allowed = kinds or ("git", "gitlab", "model", "feishu")
             row = db.execute(
                 "SELECT * FROM connection_checks WHERE status='queued' AND kind IN ("
-                + ",".join("?" for _ in allowed) + ") ORDER BY id LIMIT 1", allowed,
+                + ",".join("?" for _ in allowed) + f""") AND (kind<>'model'
+                OR repository_id IS NULL OR repository_id NOT IN ({BUSY_MODEL_REPOSITORIES}))
+                ORDER BY id LIMIT 1""", allowed,
             ).fetchone()
             if row:
                 db.execute("UPDATE connection_checks SET status='running' WHERE id=?", (row["id"],))
@@ -1229,15 +1233,16 @@ class Store:
             return True
 
     def next_job(self, last_repository_id: int | None = None) -> dict[str, Any] | None:
-        """同一 MR 保持顺序，不同仓库优先轮转领取。"""
+        """同仓库与其他模型任务互斥、MR 保持顺序，不同仓库优先轮转领取。"""
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                """SELECT j.* FROM review_jobs j
+                f"""SELECT j.* FROM review_jobs j
                 JOIN repositories r ON r.id=j.repository_id
                 WHERE j.status='queued' AND r.enabled=1
                 AND j.next_run_at<=CURRENT_TIMESTAMP
+                AND j.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
                 AND NOT EXISTS (
                   SELECT 1 FROM merge_events earlier
                   WHERE earlier.repository_id=j.repository_id AND earlier.id<j.event_id

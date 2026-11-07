@@ -20,6 +20,8 @@
 | [操作指南](configuration-guide.md) | 页面怎么配置、如何处理误报 / 已修复问题、如何批量处理。 |
 | [部署说明](deployment.md) | API、Worker、monitor、launchd、私有配置、备份和恢复。 |
 | [前端交互回归](frontend-interaction-checks.md) | 测试范围、执行命令、隔离数据和截图产物。 |
+| [运行监控页重设计规划](operations-redesign-plan.md) | 用户已确认的四分区设计、执行槽与并发前置、数据口径及分阶段验收；业务页面待实施。 |
+| [全站体验重设计规划](whole-site-ux-redesign-plan.md) | 各主要页面的信息层级、状态表达和操作可发现性排查，以及分批实施与验证边界。 |
 | [问题与改进台账](problem-improvement-log.md) | 持续记录问题、排查、解决办法和优化进展，分别标注代码修改、本地验证与部署生效状态。 |
 | [部分评审治理第一、二步](review-partial-phase12.md) | 分层诊断、历史只读复核、真实 CLI 合成恢复矩阵及独立失败子集路线；仅本地验证，未部署补审功能。 |
 | [部分评审补审后端核心](review-partial-phase3.md) | 默认关闭的独立失败子集队列、固定输入执行、候选聚合与迁移验证；消费者统一、按钮和补充通知尚未接入。 |
@@ -34,6 +36,7 @@
 | [评审优化第一阶段实施记录](review-performance-phase1.md) | 结果兼容、分类重试、超时诊断的本地实施与检查结果，以及升级和回滚边界。 |
 | [评审优化第二、三阶段实施记录](review-performance-phase23.md) | 范围预检、预算保护、耗时原因与历史成本、近七天指标；自动过滤关闭及版本 36 升级边界。 |
 | [评审优化第四阶段实施记录](review-performance-phase4.md) | 单协调器有界解耦、执行槽心跳、进程组栅栏、仓库轮转及版本 38 的本机生效边界。 |
+| [单 Worker 可配置任务并发](worker-task-concurrency.md) | 1～10 管理设置、热升降排空、跨类型同仓库互斥、schema 49 迁移与验证边界。 |
 | [OpenAPI 契约快照](openapi.json) | 管理 API 的提交版 schema；运行一致性命令检查是否漂移。 |
 | [后端代码规范](governance/backend-code-standards.md) | 后端分层、持久化、鉴权、重试与自动化验证。 |
 | [前端代码规范](governance/frontend-code-standards.md) | 组件、状态、异步反馈、草稿、布局、可访问性与验证。 |
