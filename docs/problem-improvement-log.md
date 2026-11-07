@@ -935,3 +935,108 @@
 - 关联文件或证据：frontend/src/pages/RecoveryBudgetPanel.tsx；frontend/src/styles.css；frontend/e2e/reviewRecovery.spec.ts；受限备份目录内 style-release-report.json、layout-before.json/png、budget-layout-1280.png、budget-layout-320.png、budget-layout-short-320.png、budget-dialog-1280.png、budget-dialog-320.png 和 deployed-style-browser-verification.json；本轮实际命令输出。
 - 遗留与下一步：关闭旧弹窗并刷新页面即可加载新版；若浏览器仍显示旧已加载页面，可使用 macOS Command+Shift+R 强制刷新。无需重新部署后端或手动配置样式开关。本轮不推断活动补审最终结果，不表示原初审 HTTP 504 已修复；原 HTTP 传输安全风险仍在。
 - 同步状态：{"kind":"problem","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261107-006｜整体主题对齐参考页面：已受理并排查样式
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：视觉改进；已受理，排查中。
+- 关联记录：PI-20261107-005；保留此前额度弹窗布局，不改变预算或补审功能。
+- 现象或目标：用户提供三张参考图，要求整体调整为浅灰背景、白色侧栏与卡片、亮蓝主色，仅修改颜色和样式，不影响现有功能。
+- 原因或分析：参考图作为视觉依据，不执行图片中的业务操作；当前项目使用绿色主题，尚待逐项核对全局变量、硬编码颜色和状态色。
+- 处理与改进：先登记事项，再检查主题与公共组件；优先统一设计变量，保留页面结构、路由、接口、权限、表单及交互逻辑。
+- 代码修改：受理时未修改业务代码，仅追加本条记录。
+- 本地验证：已检查工作区初始 git status，未发现已有改动；本轮自动化和浏览器验证尚未运行。~/.codex/comment-standards.md 不存在，遵守仓库中文注释规范，不臆造缺失规则。
+- 部署生效：未部署本轮主题，未操作业务数据库、配置或服务进程。
+- 关联文件或证据：本次三张用户参考图；frontend/src/styles.css；docs/governance/frontend-code-standards.md。
+- 遗留与下一步：完成主题调整后运行前端检查及桌面、窄屏浏览器回归，分别记录代码、验证、部署与 monitor 同步结果。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：全局灰白蓝主题已修改，功能与视觉回归进行中
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：视觉改进；代码已修改，浏览器验证中。
+- 关联记录：PI-20261107-006 的受理记录；保留 PI-20261107-005 的额度弹窗结构与短屏规则。
+- 现象或目标：参考图的蓝色操作、浅蓝选中态、白色侧栏和卡片、浅灰背景应覆盖全部页面，同时保留状态区分和原有交互。
+- 原因或分析：旧 CSS 包含 208 种颜色，单改根变量不能覆盖硬编码的侧栏、链接、表格、表单、图表与业务面板。原成功、警告、失败语义仍有必要，不将全部状态统一成蓝色。
+- 处理与改进：将主题色、辅助文字、边框、阴影和状态色收敛到根变量，取消局部绿色渐变；主按钮和焦点使用 #1677ff、选中背景 #e6f4ff、页面 #f5f5f5。已完成为蓝色，已启用/成功为绿色，警告为黄色，失败为红色；不改状态文本或业务判定。
+- 代码修改：仅修改 frontend/src/styles.css 并新增 frontend/e2e/theme.spec.ts；未修改 React 业务组件、路由、接口、权限、预算、重试或后端代码。
+- 本地验证：实际运行 npm --prefix frontend run lint、npm --prefix frontend test（123 passed）、frontend 内 npx tsc -b、npx vite build --outDir /tmp/ocr-blue-theme-dist 和 git diff --check，通过。首轮主题浏览器 1 passed、3 failed：桌面错误假设合成夹具有已完成任务，小屏错误断言透明表格外框而非白色行卡片；已调整为检查真实筛选值、现有行卡片，状态色另用隔离 DOM 验证，未修改业务数据或响应式规则迎合测试。全量浏览器回归正在运行，尚不宣称最终通过。
+- 部署生效：未部署；构建在隔离临时目录，不覆盖正在使用的 frontend/dist，不重启 API/Worker/monitor。
+- 关联文件或证据：frontend/src/styles.css；frontend/e2e/theme.spec.ts；浏览器桌面运行概览截图及实际命令输出。受理记录只读 improvement_log_check 已通过（1 条、页面 #16）。
+- 遗留与下一步：完成修正后的主题和全量浏览器回归、额度弹窗专项及截图核对，追加最终结果并只读核验 monitor 至少三条同步；原有构建包体积和测试依赖警告不冒称消除。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：灰白蓝主题回归通过，未部署业务实例
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：视觉改进；阶段完成，代码和隔离验证已完成。
+- 关联记录：PI-20261107-006 的受理与回归记录；不改变 PI-20261107-005 的额度弹窗功能。
+- 现象或目标：让全局页面接近参考图的浅灰画布、白色侧栏/卡片、亮蓝主操作和浅蓝选中态，同时保持成功、警告、失败等业务状态可区分。
+- 原因或分析：全局 CSS 原有绿色主题与大量局部硬编码颜色；已将其统一到设计变量，主色使用蓝色，状态色保持独立语义。未修改业务组件、路由、API、权限或持久化逻辑。
+- 处理与改进：更新 frontend/src/styles.css 的颜色、边框、阴影、焦点环、侧栏、按钮、下拉、表格、图表、提示、弹窗和响应式导航；新增 frontend/e2e/theme.spec.ts 覆盖桌面/390px/320px、主题变量、下拉、表单弹窗、状态色、窄屏无溢出及只读请求约束。
+- 代码修改：已修改 frontend/src/styles.css；已新增 frontend/e2e/theme.spec.ts；未修改 React 业务逻辑和后端代码。文档已追加本事项三段事实记录。
+- 本地验证：实际运行 npm --prefix frontend run lint（通过）、npm --prefix frontend test（26 个文件、123 passed）、frontend 内 npx tsc -b（通过）、npx vite build --outDir /tmp/ocr-blue-theme-dist（通过，保留主包约 501.52 kB 和 outDir/依赖弃用警告）、git diff --check（通过）。实际运行 OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-blue-theme-dist PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npx playwright test：61 passed、18 skipped；其中新增主题用例 4 passed，既有功能用例保持通过。已查看桌面概览、项目配置和 320px 导航/弹窗截图；未提交表单或调用外部模型/飞书。
+- 部署生效：未部署本轮主题；构建产物留在 /tmp/ocr-blue-theme-dist，未覆盖 frontend/dist，未重启 API、Worker 或 monitor，生产页面未宣称已生效。
+- 关联文件或证据：frontend/src/styles.css；frontend/e2e/theme.spec.ts；/tmp/ocr-blue-theme-dist；frontend/test-results/theme-overview-desktop.png；frontend/test-results/theme-repositories-1440.png；frontend/test-results/theme-navigation-320.png；frontend/test-results/theme-repository-modal-320.png；本轮实际命令输出。
+- 遗留与下一步：如需线上/本机实例生效，应按部署说明备份静态资源、原子替换并实际浏览器核验；当前无需改数据库或业务配置。保留原有主包体积与警告，不冒称零警告或已部署。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：主题专项重跑及台账同步核验完成
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：视觉改进；实现与验证完成，部署未执行。
+- 关联记录：PI-20261107-006 的受理及全局主题回归；无功能行为变更。
+- 现象或目标：确认最终主题验收断言在修改后代码上通过，并完成本轮来源与页面核对。
+- 原因或分析：全量浏览器套件运行 61 passed、18 skipped 后，对导航抽屉最终变换断言做了精确检查，使用最终代码再次独立执行主题专项。
+- 处理与改进：CSS 最终只有根主题变量中保留 24 个设计色值；主题专项再次通过 4 项（1440/390/320px 与状态色/页面覆盖）。所有写入断言为空。
+- 代码修改：无新增代码修改；沿用 frontend/src/styles.css 与 frontend/e2e/theme.spec.ts。
+- 本地验证：已实际执行 OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-blue-theme-dist PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npx playwright test e2e/theme.spec.ts，4 passed；git diff --check 通过。台账已追加第 4 段后，再次运行指定 improvement_log_check，待独立 monitor 同步后最终核验。
+- 部署生效：未部署，未操作业务实例或生产静态目录。
+- 关联文件或证据：frontend/e2e/theme.spec.ts；frontend/src/styles.css；/tmp/ocr-blue-theme-dist；本轮测试输出。
+- 遗留与下一步：如要求页面立即生效，后续按部署流程发布静态产物；不需要改变 API 或 SQLite。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：额度弹窗及补审交互专项通过，最终同步核验
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：视觉改进；本轮实现和本地验证结束，未部署。
+- 关联记录：PI-20261107-006；关联 PI-20261107-005 的短屏弹窗布局回归，不修改其历史结论。
+- 现象或目标：全局换色后，额度确认弹窗的间距、输入、滚动和操作区仍正常，原补审/预算交互不受影响。
+- 原因或分析：默认浏览器套件明确跳过独立补审通道，因此另外启用隔离合成夹具验证；此前“24 个设计色值”统计口径补充：实际有 24 个六位色值加白色 #fff，共 25 个颜色字面量，全部仅在根变量内定义，不代表只改了 24 处。
+- 处理与改进：完成最终主题专项和额度专项；截图保存至忽略目录 .local-data/visual-checks/blue-theme，供本机查看，不写入敏感配置或真实业务数据。
+- 代码修改：仍仅 frontend/src/styles.css、新增 frontend/e2e/theme.spec.ts 与追加本台账；没有新增业务改动。
+- 本地验证：实际再次运行 npm --prefix frontend run lint，通过；frontend 内 OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-blue-theme-dist OCR_BROWSER_REVIEW_RECOVERY=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npx playwright test e2e/reviewRecovery.spec.ts：12 passed，包含 1280/320px 预算弹窗几何、320×480 短屏滚动和可见操作、明确授权后单独排队、幂等及只读权限。实际查看 320×480 弹窗截图，标题、原因框与按钮布局正常。全部使用临时 SQLite、合成审核器和响应，不调用真实模型或飞书。git diff --check 通过。
+- 部署生效：未部署；未覆盖当前 frontend/dist、未重启服务、未修改业务预算或任务。不得将隔离补审测试当成真实补审完成。
+- 关联文件或证据：frontend/e2e/reviewRecovery.spec.ts；frontend/e2e/theme.spec.ts；frontend/src/styles.css；.local-data/visual-checks/blue-theme；实际命令输出。
+- 遗留与下一步：代码与本地验收已完成，若需运行实例生效，单独按部署说明发布静态资源并核验。当前第 4 段台账已通过只读核验，追加本段后等待独立 monitor，再以 minimum-entries 5 最终核验；不扩大聊天授权范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：用户授权发布灰白蓝主题，部署准备中
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一视觉改进继续；已获用户明确授权发布至运行实例，部署准备中。
+- 关联记录：PI-20261107-006 的主题实现与隔离验证；保留此前未部署结论，不覆盖历史。
+- 现象或目标：将已经本地验证的灰白蓝主题发布到当前运行实例，并实际查看效果。
+- 原因或分析：上一轮仅生成隔离静态产物，运行实例仍使用旧 frontend/dist；本轮只需发布静态文件，不需要数据库迁移或进程重启。
+- 处理与改进：核对运行实例、产物与现有静态资源；计划先备份旧资源，再复制哈希资源、原子替换首页，保留旧文件供已打开页面使用，最后通过只读浏览器检查桌面、窄屏及弹窗。
+- 代码修改：本轮受理时没有新增业务或样式改动，仅追加发布进展，保留上一轮三个工作区文件。
+- 本地验证：已核对 git status 与隔离产物存在；本轮运行实例与发布后浏览器验证尚未执行，不沿用前轮通过结果作为部署证据。
+- 部署生效：尚未部署；当前服务、业务配置及数据保持。
+- 关联文件或证据：本轮用户发布授权；frontend/src/styles.css；frontend/dist；/tmp/ocr-blue-theme-dist；docs/deployment.md。
+- 遗留与下一步：完成备份、静态发布和实际入口核验，追加最终事实并执行本 PI 至少七条来源的只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-006｜追加：灰白蓝主题已发布至运行实例，实际入口核验通过
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：同一视觉改进完成静态发布，本机及既有访问入口生效已确认。
+- 关联记录：PI-20261107-006 的主题实现、隔离验证与本轮用户发布授权；PI-20261107-005 的额度弹窗布局保持。
+- 现象或目标：将用户确认的灰白蓝主题发布到当前运行实例，并查看真实页面效果，不影响业务功能与在途任务。
+- 原因或分析：运行服务从 frontend/dist 实时提供静态资源，仅替换静态文件即可生效，无需后端重启或数据库迁移。
+- 处理与改进：重新生成干净构建并逐文件与上一轮已测产物比对一致（29 文件）；先备份原静态目录，保留旧哈希资源，再复制新资源并原子替换首页。发布脚本只读核对业务表及配置摘要，不执行业务写入。
+- 代码修改：本轮无新增业务或样式代码；沿用 frontend/src/styles.css 与 frontend/e2e/theme.spec.ts，仅追加台账。静态发布脚本和只读浏览器脚本保留在 /tmp，证据与回退备份保存在受限备份目录。
+- 本地验证：实际运行 frontend 内 npx tsc -b、npx vite build --outDir /tmp/ocr-blue-theme-release-20261107 --emptyOutDir，通过；新构建与已测产物逐文件一致。实际运行 .venv/bin/python /tmp/ocr-blue-theme-publish.py，通过，首页及引用资源与构建逐字节一致。实际运行 node /tmp/ocr-blue-theme-live-check.mjs，最终本机/既有 HTTP 入口各 1440px 与 320px 四种检查通过：灰白蓝主题、配置弹窗、设置页签、预算弹窗、窄屏导航及 Escape 焦点恢复、320×480 标题和操作可见，无横向溢出、页面异常或静态资源失败，零写入尝试。首次概览截图在数据加载时截取，补充等待指标和加载提示结束后完整重跑四种入口通过，并查看最终概览和短屏弹窗截图；未改业务响应迎合检查。保留既有 500 kB 主包警告，不称零警告。本轮未重跑全量组件和浏览器套件，上一轮测试仅作为已测产物依据。
+- 部署生效：2026-11-07 21:31（北京时间）发布到本机 8781 运行实例，既有 HTTP 入口同版确认。首页 SHA-256 为 3f2fc8eff742ba51fd7fc642db4ca09259fd8811c7ff28c20f8ca5aa8bddc685；发布前后 25 张业务表摘要一致，私有配置摘要未变；API 72707、Worker 72718、monitor 72719 进程保持，未重启。健康 status=ok、worker=running。没有数据库迁移、真实预算调整、付费补审或通知发送。
+- 关联文件或证据：.local-data/backups/blue-theme-20261107-213110/frontend-dist-before；同目录 release-report.json、facts-before.json、facts-after.json、browser-verification.json、overview-localhost-1440.png、budget-short-localhost.png；/tmp/ocr-blue-theme-release-20261107；本轮命令输出。
+- 遗留与下一步：已打开旧页需刷新加载新版，必要时 Command+Shift+R；旧静态资源保留供旧页面使用。仅确认本机与既有入口，不推断其他环境；原 HTTP 入口未加密的风险保持，优先本机回环或受控 HTTPS。本轮追加后执行本 PI 至少七条来源的只读同步核验，不扫描或绑定其他聊天。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
