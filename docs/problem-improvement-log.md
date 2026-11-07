@@ -1040,3 +1040,33 @@
 - 关联文件或证据：.local-data/backups/blue-theme-20261107-213110/frontend-dist-before；同目录 release-report.json、facts-before.json、facts-after.json、browser-verification.json、overview-localhost-1440.png、budget-short-localhost.png；/tmp/ocr-blue-theme-release-20261107；本轮命令输出。
 - 遗留与下一步：已打开旧页需刷新加载新版，必要时 Command+Shift+R；旧静态资源保留供旧页面使用。仅确认本机与既有入口，不推断其他环境；原 HTTP 入口未加密的风险保持，优先本机回环或受控 HTTPS。本轮追加后执行本 PI 至少七条来源的只读同步核验，不扫描或绑定其他聊天。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261107-007｜Ant Design 全量组件迁移影响评估：已受理
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：独立架构改进评估；已受理，范围分析中，未实施迁移。
+- 关联记录：PI-20261107-006 的灰白蓝主题；本事项是组件库迁移评估，不混同已完成的颜色调整或部署。
+- 现象或目标：用户希望先了解引入 Ant Design 并替换项目现有组件的改动规模、功能和样式风险，再讨论规划方案。
+- 原因或分析：当前前端为 React 19、Vite、原生控件与自建 UI，Select 使用 Radix；完整替换涉及组件事件、受控值、表单、表格、弹窗与测试，不只是换主色。具体影响正在基于源码核对。
+- 处理与改进：先盘点组件与页面、全局 CSS、状态和 URL 所有权、草稿与确认流程及自动化依赖；本轮只做影响评估，不安装依赖、不改代码或运行实例。
+- 代码修改：尚未修改业务或样式代码，仅追加本记录；保留之前主题的既有工作区改动。
+- 本地验证：已实际读取 package.json、UI 文件清单与原生控件文本匹配统计；这些是静态盘点，不是兼容性或迁移通过证据，本轮未运行迁移原型和自动化测试。
+- 部署生效：不适用；未迁移、未发布、未重启服务。
+- 关联文件或证据：本轮用户问题；frontend/package.json；frontend/src/ui；frontend/src/styles.css；frontend/src/pages；frontend/e2e。
+- 遗留与下一步：完成实际源码核对后给出分层影响与估算边界，规划和实施由后续用户确认，不承诺零回归或未经验证的包体收益。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_applicable"}
+
+### PI-20261107-007｜追加：Ant Design 迁移影响评估完成，未启动迁移
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：影响评估阶段完成；正式规划及实施范围待后续确认。
+- 关联记录：PI-20261107-007 的受理；PI-20261107-006 的已部署灰白蓝主题不变，本轮不重复发布。
+- 现象或目标：用户先了解全量组件替换的规模、收益与回归风险，再讨论规划，不把咨询自动扩展为实施。
+- 原因或分析：源码中基础控件与业务控制流耦合程度不同；简单展示控件较低风险，表单草稿、同步确认改异步、URL 分页与当前页选择、移动端表格、Portal 焦点及全局 CSS 是主要影响面。纯 UI 迁移可保留后端和数据库，但不代表前端行为零风险。
+- 处理与改进：新增 docs/ant-design-impact-assessment.md，记录静态盘点、风险分层、保留边界、版本/性能不确定性与估算口径。本项目全站通用 UI 替换评为中到偏大前端重构，保留领域封装、查询和 API；约 10～20 工程人日仅为熟悉项目单人条件下的讨论量级，不是排期承诺，需复杂页面原型后校准。未提交正式分期执行计划。
+- 代码修改：无业务代码或样式修改，仅新增影响评估文档和本台账。当前 git 核对没有继承上一轮未提交主题文件，因此受理条目中“保留之前三个工作区文件”仅表示不撤回此前成果，不应解释为本轮实际发现三份未提交改动。
+- 本地验证：实际运行 TypeScript AST 静态盘点（排除 src/test）：生产源码 96 文件、TSX 75、Page.tsx 入口 18；button 157/51文件、input 93/34文件、textarea 15/6文件、form 26/24文件、table 20/18文件、Modal 11/10文件、SelectField 42/23文件、Pagination 9/9文件；全局 CSS 931 行，window.confirm 声明 27 处，组件测试文件 26、浏览器文件 18。实际运行 npm view antd version peerDependencies engines dist.unpackedSize --json，registry 返回 6.7.0、React/ReactDOM >=18.0.0；仅核对声明，不证明兼容，不把包解压大小当首屏下载体积。git diff --check 和 Python 文档 UTF-8/章节/已跟踪修改仅文档检查通过。本轮未安装 antd、未执行组件原型、lint、构建或自动化功能测试，不声明迁移验证通过。
+- 部署生效：不适用；本轮仅评估文档，没有安装依赖、修改运行实例、迁移数据或发布产物，保留当前已部署主题。
+- 关联文件或证据：docs/ant-design-impact-assessment.md；frontend/package.json；frontend/src/ui/Modal.tsx、SelectField.tsx、Pagination.tsx、UnsavedChangesGuard.tsx、useConfigurationDraft.ts；frontend/src/pages/JobsPage.tsx、RecoveryBudgetPanel.tsx、SystemSettingsPage.tsx；frontend/src/styles.css；实际静态检查与 registry 输出。
+- 遗留与下一步：与用户确认通用 UI 替换、Form 状态接管、原生确认替换及移动端/图标/图表范围后，再提出正式规划。当前待用户决策，不把评估完成当迁移已实现；只读核验本 PI 至少两条来源同步，不扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_applicable"}
