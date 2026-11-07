@@ -82,15 +82,17 @@ test("百练模型单价配置与评审详情用量", async ({ page }) => {
 });
 
 test("告警设置布局与管理操作分页", async ({ page }) => {
-  await page.goto("/operations");
-  const alertControls = await page.locator(".alert-settings .alert-toggle, .alert-settings .select-trigger, .alert-settings button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().bottom));
+  await page.goto("/operations?tab=alerts");
+  await expect(page.getByRole("checkbox", { name: "主动飞书告警" })).toBeVisible();
+  const alertControls = await page.locator(".operations-alert-form .alert-toggle, .operations-alert-form .ant-select, .operations-alert-form > button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().bottom));
   expect(Math.max(...alertControls) - Math.min(...alertControls)).toBeLessThan(2);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/operations-mobile.png", fullPage: true });
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/operations");
+  await page.goto("/operations?tab=maintenance");
+  await page.getByText("管理操作审计", { exact: true }).click();
   const auditPages = page.getByLabel("审计日志分页");
   await expect(auditPages.getByRole("button", { name: "下一页", exact: true })).toBeEnabled();
   // 同一隔离库会积累其他用例的管理审计，不能将总页数固定为两页。

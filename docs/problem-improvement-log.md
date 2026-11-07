@@ -1266,6 +1266,36 @@
 - 遗留与下一步：完成解释后追加同编号结论并按实际条数只读核验同步，不扩大采集范围。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
 
+### PI-20261107-007｜追加：推荐 Ant Design 统一通用组件，采用规则和迁移边界已补充
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：可行性说明及规则建议完成；依赖安装、规则生效及页面迁移未执行。
+- 关联记录：PI-20261107-007 前期影响评估与本轮追加受理；PI-20261107-010/011 已有布局规划。
+- 现象或目标：说明组件库可用于重设计，并明确如何约束本仓库后续开发、优势、风险及与布局规划衔接。
+- 原因或分析：统一组件可减少重复控件与交互分歧，但不能替代信息架构、移动端设计或业务状态。现有全局样式和同步确认需要适配；直接重写所有表单、异步确认和表格会叠加风险。此前全站规划明确不新增组件库，若正式采用必须同步修订，而不是隐式扩大实施范围。
+- 处理与改进：在 docs/ant-design-impact-assessment.md 追加采用建议、拟写入 AGENTS/前端规范的七条规则，以及基础设施和风险试点前置安排；建议新增/重设计通用 UI 统一 Ant Design，允许业务封装、语义布局、图表和浏览器原生关闭确认例外。保留 API/路由/查询层和既有业务状态，存量分批迁移，不自动引入 ProComponents 或图表库，不强制所有复杂表单同时由 Form 接管。
+- 代码修改：只修改评估文档及追加台账；未修改生效 AGENTS.md/前端规范、package.json/锁文件、页面、样式或私有配置，保留既有工作区改动。
+- 本地验证：实际 npm view antd version peerDependencies engines --json 返回 6.7.0、React/ReactDOM >=18.0.0；声明包含当前 19.2，不等于运行兼容通过。实际读取当前依赖、前端规范、评估及全站规划，rg 核对全局元素样式，阅读 UnsavedChangesGuard.tsx 和 SelectField.tsx；未安装、运行功能测试、浏览器原型或构建，不沿用上轮测试次数为本轮验收。收尾实际运行 diff 检查和本编号累计四条只读同步核验，按命令结果报告。
+- 部署生效：未部署，没有更新 frontend/dist、重启服务、迁移数据库、调并发或触发外部调用；组件库尚未安装，不称规则已生效。
+- 关联文件或证据：docs/ant-design-impact-assessment.md 新增统一规范建议；frontend/package.json；docs/governance/frontend-code-standards.md；当前全局 CSS、草稿守卫和 SelectField；registry 实际输出。
+- 遗留与下一步：如正式采用，先同步两份布局规划的组件库边界，再建立主题/上下文/样式隔离和代表性表单/表格/额度弹窗验证，用已确认运行监控作为首批页面，后续分批迁移；包体积、短屏窄屏与完整兼容仍待实测。规则仅约束此仓库，不自动作用于其他项目，也不能替代评审和验证。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-007｜追加：已获采用授权，实施前发现工作区基线变化待确认
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：用户已授权按建议落实；实施前暂停核对工作区变化，不宣称迁移已开始或完成。
+- 关联记录：PI-20261107-007 的组件库评估与规则建议；PI-20261107-010/011 的页面重设计规划。
+- 现象或目标：拟落实 Ant Design 规则、基础设施、风险交互验证和首批运行监控改版；初始工作区与上一轮可见状态存在变化。
+- 原因或分析：本轮实际 git status --short 仅显示 docs/ant-design-impact-assessment.md 和 docs/problem-improvement-log.md 修改，而上一轮可见多份并发业务源码及规划等未提交变更。变化不是本轮处理者执行，尚未核对是否由用户提交或其他操作造成，不推断代码被删除或丢失；按执行约束暂停并请用户确认可使用当前基线。
+- 处理与改进：说明已接受实施请求，但在确认基线前不安装依赖、不改业务或生效规则；只读取了当前入口和弹窗用于初始检查，没有执行后续迁移。
+- 代码修改：仅追加本段台账；没有修改业务源码、AGENTS.md、依赖、锁文件或私有配置，没有撤回任何现有变更。
+- 本地验证：实际运行 git status --short，读取台账末尾、App.tsx、main.tsx 和 Modal.tsx；未运行兼容测试、lint、单元测试、浏览器检查或构建。收尾按本编号累计五条执行只读同步核验，结果不代替基线确认或迁移验收。
+- 部署生效：未部署，没有覆盖 frontend/dist、重启服务、迁移数据库或触发外部调用。
+- 关联文件或证据：本轮 git status 输出与上轮可见工作区状态；用户本轮采用授权。
+- 遗留与下一步：请用户确认这些业务变更是否已提交，以及是否以当前工作区作为实施基线；确认后继续已说明的基础接入和首批改版，不重复询问组件库选择。不强制台账同步或扩大聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
 ### PI-20261107-010｜追加：用户确认运行监控四分区设计基线
 
 - 记录日期：2026-11-07（北京时间）。
@@ -1310,3 +1340,109 @@
 - 关联文件或证据：docs/whole-site-ux-redesign-plan.md；docs/operations-redesign-plan.md；docs/README.md；实际静态阅读、只读结构核对与健康检查输出。
 - 遗留与下一步：按分批计划补隔离视觉/交互基线并实施，P0 未复现前不宣称修复；完整保留权限、冻结输入、版本冲突、费用提示、三维交付及采集授权边界。最后等待正常 monitor 同步，再以本编号 minimum-entries 2 和关联编号累计三条分别只读核验，不强制导入或扩大聊天范围。
 - 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-007｜追加：用户确认当前基线，恢复 Ant Design 首批实施
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：已获实施与基线确认，实施中。
+- 关联记录：PI-20261107-007 前次暂停；PI-20261107-010/011 的页面规划。
+- 现象或目标：按已确认建议落实本仓库通用组件规范、基础接入及运行监控试点，不进行全站机械替换。
+- 原因或分析：用户已明确可以使用当前工作区，保留两份既有文档修改；当前监控仍为所有模块纵向展开，配置轮询与草稿需隔离。
+- 处理与改进：先接入统一主题/中文上下文及样式隔离，再拆四个 URL 视图、按需查询与性能表；使用隔离服务验证草稿、批量选择、预算确认和窄屏。
+- 代码修改：本段仅登记恢复；业务、规则和依赖改造随后执行，未称完成。
+- 本地验证：实际读取 git status、AGENTS、前端规范、实施流程、监控源码与已有测试；尚未运行本轮 lint、构建或交互回归。
+- 部署生效：未部署，不覆盖 frontend/dist、不重启业务服务、不触发真实 OCR 或通知。
+- 关联文件或证据：用户“可以”确认；docs/operations-redesign-plan.md；frontend/src/pages/OperationsPage.tsx。
+- 遗留与下一步：完成首批实施后记录实际检查与未完成范围，按累计条数只读核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：四分区与运行口径改造已编码，进入隔离验收
+
+- 记录日期：2026-11-07（北京时间）。
+- 类型与进展：既定方案实施中，尚未完成验收或发布。
+- 关联记录：PI-20261107-010 已确认基线；PI-20261107-007 的 Ant Design 接入。
+- 现象或目标：运行状态与并发前置，性能比较改为分组表格，告警和维护按需访问。
+- 原因或分析：初审原始执行状态与有效结论不同，不能混用；视图卸载会丢失本地草稿，全量保留且无 enabled 控制又持续发请求。
+- 处理与改进：四个 URL 标签保留访问过的面板，隐藏停轮询；初审指标使用 execution_jobs、旧字段缺失显示未知；性能本地筛选和行详情；清理使用上下文二次确认，冻结保留天数；维护审计/对账折叠按需加载。告警编辑器移除配置变化重挂载，使用独立草稿。
+- 代码修改：OperationsPage 拆分运行/维护与契约；并发控件、告警控件和性能表采用 Ant Design；保留已有 API、调度、权限和维护子模块业务逻辑。
+- 本地验证：首次安装因本机 npm 缓存 EACCES 失败，使用 --cache /tmp/ocr-ant-design-npm-cache 安装 antd@6.7.0 成功，审计零漏洞；此前依赖未就绪的 tsc 失败后，重新 lint、tsc、27 文件 131 项测试及隔离 Vite 构建通过。新增分区测试和浏览器用例后仍待再次完整执行，不将前次通过覆盖后续未测代码。构建提示入口与监控分块超过 500 kB，需记录实测影响。
+- 部署生效：未部署；隔离产物 /tmp/ocr-ant-design-dist，不覆盖运行实例、重启服务、迁移数据库或触发外部调用。
+- 关联文件或证据：frontend/src/pages/operations；frontend/src/styles/operations.css；frontend/e2e/operations.spec.ts。
+- 遗留与下一步：补齐新测试与旧页面回归，核对样式层、草稿、十槽、清理弹窗和包体积；同编号追加结果并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-007｜追加：统一规则与 Ant Design 首批接入完成，本地验证通过、尚未发布
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：首批代码与本地验收完成；仍有存量分批迁移和本机发布，非全站迁移完成。
+- 关联记录：PI-20261107-007 的采用授权/基线确认；PI-20261107-010 运行监控首批；PI-20261107-011 全站后续规划。
+- 现象或目标：统一本仓库后续新增/重设计通用组件，先完成主题、中文与上下文、样式隔离和监控试点，保护现有高风险交互。
+- 原因或分析：组件库会增加前端体积，旧全局元素样式与 ant-app 链接重置存在真实冲突；不能靠规则文档宣称兼容，也不能同时重写全部 Form、同步守卫和业务层。
+- 处理与改进：锁定 antd@6.7.0；AGENTS 与前端规范写入采用/例外/渐进迁移规则，同步两份布局规划。统一 DesignProvider，App component=false 不重置存量链接，旧样式进 legacy 层并显式排除 Ant Design 基础控件；性能/告警/维护按分区加载。保留原生同步离开守卫、Radix 和有调用方的旧组件，不新增 Pro 或图表库。
+- 代码修改：前端依赖/锁文件、应用上下文、样式、运行监控相关组件、测试和说明已修改；未修改后端、数据库结构、调度策略或私有配置。存量项目表单、批量表和补审额度弹窗本轮只兼容验证，不称已迁移。
+- 本地验证：实际 npm --prefix frontend run lint、(cd frontend && npx tsc -b)、npm --prefix frontend test -- --reporter=dot 通过（28 文件、136 项）；(cd frontend && npx vite build --outDir /tmp/ocr-ant-design-dist --emptyOutDir) 通过。实际在 frontend 目录以 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-ant-design-dist npx playwright test operations.spec.ts workerConcurrency.spec.ts reviewExecution.spec.ts theme.spec.ts alignment.spec.ts workflows.spec.ts optimization.spec.ts ux.spec.ts navigation.spec.ts 运行 56 项通过；另加 OCR_BROWSER_REVIEW_RECOVERY=1 运行 npx playwright test reviewRecovery.spec.ts，12 项通过，无跳过。这是选定范围的 68 项隔离浏览器验证，非全部专项或真实外部验收。实际 git diff --check 与四份主文档本地链接存在性检查通过。
+- 排查与无效尝试：首次 npm 因旧缓存 EACCES 失败，改临时缓存安装成功，不改全局权限；依赖未就绪 tsc 缺包不计通过；两个新增 JSDOM 用例因响应式替身恢复失效失败，修正后通过。首轮浏览器发现旧导航 reset、窄屏标签点击及中文短按钮定位问题并修正；复选框对齐测试按 v6 DOM 调整，最终显式排除旧基础样式后完整 56+12 重跑通过。未用强制点击、删除业务断言或扩大超时规避。
+- 部署生效：未部署；未覆盖 frontend/dist、重启 API/Worker/monitor、修改真实并发或预算、迁移业务库，未调用真实 OCR/飞书。不能据本轮本地测试断言业务端口已更新。
+- 关联文件或证据：docs/ant-design-adoption.md 与 docs/frontend-interaction-checks.md；frontend/src/app/DesignProvider.tsx；隔离构建日志和测试输出。同工具链 git archive HEAD 临时构建比较：入口 JS 原始 501521→772703 字节，同算法 gzip 161523→255084 字节（约增加 91.4 KiB）；全部 JS 原始 740594→1523725 字节。监控入口拆分后约 164.5 kB，Table 约 327.9 kB；主入口超过 500 kB 的 Vite 提示仍在，未掩盖，也未当作实测首屏耗时。
+- 遗留与下一步：当前首批验证通过，后续页面/P0 状态问题仍按全站规划推进；业务实例发布需单独执行与核对。收尾按本编号累计七条只读核验正常 monitor 同步，不强制导入或扩大聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：运行监控四分区首批验收完成，等待本机发布
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本批监控改造代码与本地验证完成；部署未执行，保留阶段边界。
+- 关联记录：PI-20261107-010 设计基线及实施进展；PI-20261107-007 接入结果；PI-20261107-011 的其余页面规划。
+- 现象或目标：不再跨越性能长报告寻找并发控制，历史评审问题不冒充当前系统宕机，低频维护不占用默认页和后台查询。
+- 原因或分析：execution_jobs 与 jobs 分别表示原始初审执行和当前有效结论；模型槽还包含补审/诊断，不能混为初审。旧 API 字段缺失不是零，备份副本检查也不是完整恢复演练。
+- 处理与改进：四个 URL 标签、运行指标和待关注入口、桌面执行槽左/并发右与窄屏并发前置；性能表含 URL 项目/状态/规模筛选、分页、行详情和样本口径；告警设置和通知分区；维护地址、预览、清理、对账和审计保持可达。隐藏停读/轮询，已访问草稿保留；当前视图刷新；清理冻结天数二次确认、取消无写入、焦点恢复；并发 409 不重放，已保存/已应用/版本差异和排空可见。
+- 代码修改：OperationsPage 拆为页面编排、OperationsRuntime、OperationsMaintenance 和只读类型，修改并发/性能/告警及维护查询启用参数；新增局部布局与隔离测试。未变更后端调度、API 写入契约、OCR 内部并发或数据库。
+- 本地验证：实际执行 PI-20261107-007 本轮列明的 lint、tsc、136 项组件测试、隔离 Vite 构建、56 项基础/兼容浏览器与12项合成补审专项，全部通过；operations.spec.ts 覆盖 1440/1024/768/375/320px、十槽、排空、键盘筛选 URL、刷新/回退、草稿及隐藏不轮询、清理确认。workerConcurrency 验证 1～10/409/降低容量，旧表单草稿、当前页批量和额度确认均重新验证。已实际查看本轮桌面与窄屏运行截图；不将合成数值当作真实任务。早期失败和修正过程见同轮 007 收尾，不覆盖历史结论。git diff --check 和文档链接检查通过。
+- 部署生效：未部署；只运行临时 8791/SQLite 和 /tmp 构建，不覆盖业务静态目录、不重启服务或执行真实清理/评审/通知。没有将 UI 代码更新等同用户本机生效。
+- 关联文件或证据：docs/operations-redesign-plan.md 的实施追加；docs/ant-design-adoption.md；frontend/e2e/operations.spec.ts；frontend/src/test/operations.test.tsx；隔离输出与截图。
+- 遗留与下一步：本机发布后另做实际入口/版本核对；存量维护内部控件保留，其他页面重设计及 P0 状态修正未在本批完成。按本编号累计五条只读核验正常 monitor 同步，不自动调整并发或发起补审。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：受理本机生效操作说明，先核对静态资源提供方式
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：同一监控改造的本机生效说明，核对中；用户询问操作方法，未要求代为停止或发布。
+- 关联记录：PI-20261107-010 首批验收；PI-20261107-007 的 Ant Design 接入。
+- 现象或目标：给出使本机页面采用新构建的最小操作，避免无必要中断 Worker 或重新生成主密钥。
+- 原因或分析：8781 由 API 提供 frontend/dist，5173 是开发服务；本轮仅前端改造，是否需要重启要核对资源挂载与缓存，不套用历史数据库升级的全进程停机流程。
+- 处理与改进：先核对部署文档、前端脚本、资源挂载和现有监听状态，只给出准确命令与验证办法。
+- 代码修改：仅追加台账，未修改业务或构建目录。
+- 本地验证：实际读取 git status、docs/deployment.md 和 frontend/package.json，确认 build 为 tsc -b && vite build；尚未检查本轮 HTTP 缓存或执行发布。
+- 部署生效：未部署、未重启服务、未改配置或调用 OCR/通知。
+- 关联文件或证据：docs/deployment.md；frontend/package.json；用户本轮请求。
+- 遗留与下一步：说明推荐操作及开发预览区别，追加实际核对结果并核验累计条数同步；不把用户随后执行的命令当成已经执行。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-010｜追加：已核对本机仅需更新静态构建，无须停止 Worker
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本机生效步骤已核对；仅提供操作说明，没有代为发布。
+- 关联记录：PI-20261107-010 上一段操作说明受理；PI-20261107-007 已安装依赖。
+- 现象或目标：让用户在当前本机 8781 看到新四分区，而不无故中断在途评审。
+- 原因或分析：实际 FrontendFiles 每次请求读取 frontend/dist；本机入口已经挂载，当前 HTTP 入口引用与磁盘旧 index.html 一致。此次改造未修改后端或迁移库，因此更新静态资源后刷新即可，不需要按历史后端升级流程停止全部服务。
+- 处理与改进：建议先保存页面草稿、备份现有 frontend/dist，再在项目目录执行 npm --prefix frontend run build；成功后打开 http://127.0.0.1:8781/operations?tab=runtime 并使用 macOS 强制刷新。依赖本机已安装，不要求再次安装；构建失败不称生效，保留备份供恢复。5173 仅开发预览且当前无监听，不混为正式本机入口。
+- 代码修改：本轮仅主动追加两段台账；未修改业务文件、依赖或静态产物。
+- 本地验证：实际 lsof 核对 8781 监听及 5173 无监听；实际 GET / 返回 200，入口引用 index-nTipW7Q9.js 与 frontend/dist/index.html 一致；GET /api/health 返回 status=ok、auth_mode=dev、worker=running。实际读取 FrontendFiles.get_response、frontend_dist 挂载与本机 API 进程命令确认上述提供方式；git diff --check 通过。本轮未运行 build、复制备份或重启服务，源码静态结论不冒充新布局浏览器验收。
+- 部署生效：未执行；用户尚未执行建议命令的结果未知，不能将现有健康检查当作新版布局已生效。
+- 关联文件或证据：backend/ocr_manager/api.py 的 FrontendFiles 与静态目录挂载；frontend/package.json；本轮只读 HTTP/监听输出。
+- 遗留与下一步：用户构建成功并刷新后核对四分区、并发设置与性能视图；如仍旧版再核对资源路径、浏览器缓存或实际监听进程，不先盲目停 Worker。收尾按本编号累计七条只读核验正常同步，不扩大采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：受理其余页面第二批迁移，先保护状态事实与任务操作
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户已授权继续，实施中。
+- 关联记录：PI-20261107-011 全站规划；PI-20261107-007/010 首批组件规范与监控迁移。
+- 现象或目标：继续迁移接入引导和评审任务页面，并修正关联配置读取失败被显示为未配置的状态表达。
+- 原因或分析：上一批只完成监控试点；本轮按既定 P0 与评审主链路推进，不把全站换组件当成业务正确性证明。
+- 处理与改进：拟采用 Ant Design 控件与分层布局，保留 URL 筛选、当前页批量范围、费用确认及现有草稿守卫；先隔离验证，不自动覆盖本机服务。
+- 代码修改：本段仅登记受理，尚未修改本批业务源码；保留工作区既有变更。
+- 本地验证：实际 git status --short、阅读前端规范及台账；~/.codex/comment-standards.md 当前不存在，遵循项目中文注释与更严格规范。尚未运行本批自动化验证。
+- 部署生效：未部署；不覆盖 frontend/dist、不重启业务 API/Worker/monitor、不执行真实评审或通知。
+- 关联文件或证据：用户“再继续其他页面的迁移吧”；docs/whole-site-ux-redesign-plan.md。
+- 遗留与下一步：实施后追加实际变更与验证范围，按本编号累计条数只读核验正常同步，不强制抓取或扩大聊天范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}

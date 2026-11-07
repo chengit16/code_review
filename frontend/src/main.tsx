@@ -1,11 +1,13 @@
-/** @description 管理台入口；仅创建 React 根节点和查询上下文。 */
+/** @description 管理台入口；创建 React 根节点、查询和统一设计上下文，不执行业务请求。 */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { App } from "./app/App";
+import { DesignProvider } from "./app/DesignProvider";
 import "./styles.css";
+import "./styles/operations.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },
@@ -14,7 +16,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <DesignProvider><App /></DesignProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

@@ -82,7 +82,9 @@ for (const width of [1280, 390, 320]) {
       } } });
     });
     await page.goto("/operations");
+    await page.getByRole("tab", { name: "性能分析" }).click();
     await expect(page.getByRole("heading", { name: "近 7 天评审耗时与输入规模" })).toBeVisible();
+    await page.getByRole("tab", { name: "运行与并发" }).click();
     await expect(page.getByRole("heading", { name: "Worker 调度与执行槽" })).toBeVisible();
     await expect(page.getByText("执行中 · 合并后评审 #7")).toBeVisible();
     await expect(page.getByText("执行中 · 飞书通知 #8")).toBeVisible();

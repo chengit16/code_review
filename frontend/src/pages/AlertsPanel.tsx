@@ -1,32 +1,57 @@
-/** @description 主动告警配置与投递历史；配置草稿不会被后台轮询覆盖。 */
+/** @description 主动告警配置和通知历史；草稿跨视图及轮询保留，保存不代表已发送通知。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RotateCcw, Save } from "lucide-react";
-import { useState } from "react";
+import { Button, Card, Checkbox, Input, Select, Table } from "antd";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget } from "../api/types";
 import { QueryState } from "../ui/QueryState";
-import { SelectField } from "../ui/SelectField";
 import { Status } from "../ui/Status";
 import { formatTime } from "../ui/format";
+import { useConfigurationDraft } from "../ui/useConfigurationDraft";
 
 interface Config { enabled: number | boolean; target_id: number | null; queue_minutes: number }
 interface Alerts { config: Config; deliveries: { id: number; message: string; status: string; attempts: number; error: string | null; created_at: string }[] }
 
-function Editor({ token, config, targets }: { token: string; config: Config; targets: NotificationTarget[] }) {
-  const [enabled, setEnabled] = useState(Boolean(config.enabled));
-  const [target, setTarget] = useState(config.target_id ? String(config.target_id) : "none");
-  const [minutes, setMinutes] = useState(config.queue_minutes);
+function Editor({ token, config, targets, unavailable }: { token: string; config: Config; targets: NotificationTarget[]; unavailable: boolean }) {
+  const draft = useConfigurationDraft(config);
+  const value = draft.value;
   const client = useQueryClient();
-  const save = useMutation({ mutationFn: () => apiRequest(token, "/api/alerts/config", { method: "PUT", body: JSON.stringify({ enabled, target_id: target === "none" ? null : Number(target), queue_minutes: minutes }) }), onSuccess: () => void client.invalidateQueries({ queryKey: ["alerts"] }) });
-  return <form className="alert-settings" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}><label className="checkbox-label alert-toggle"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />主动飞书告警</label><SelectField label="告警通道" value={target} onValueChange={setTarget} options={[{ value: "none", label: "未选择" }, ...targets.map((item) => ({ value: String(item.id), label: item.name }))]} /><label className="alert-threshold">队列等待阈值（分钟）<input type="number" min="1" max="1440" value={minutes} onChange={(event) => setMinutes(Number(event.target.value))} /></label><button className="button button-secondary" disabled={save.isPending}><Save size={16} />保存告警设置</button>{save.error && <p className="form-error" role="alert">{save.error.message}</p>}</form>;
+  // 保存使用提交时快照；不以查询刷新重新挂载编辑器，避免丢失未提交输入。
+  const save = useMutation({ retry: false, mutationFn: (payload: Config) => apiRequest(token, "/api/alerts/config", { method: "PUT", body: JSON.stringify(payload) }), onSuccess: (_, payload) => {
+    client.setQueryData<Alerts>(["alerts"], (old) => old ? { ...old, config: payload } : old);
+    draft.saved(); void client.invalidateQueries({ queryKey: ["alerts"] });
+  } });
+  const valid = value && Number.isInteger(value.queue_minutes) && value.queue_minutes >= 1 && value.queue_minutes <= 1440 && (!value.enabled || value.target_id !== null);
+  if (!value) return null;
+  return <form className="operations-alert-form" onSubmit={(event) => { event.preventDefault(); if (valid && !save.isPending && !unavailable) save.mutate({ ...value }); }}>
+    <Checkbox className="alert-toggle" checked={Boolean(value.enabled)} disabled={save.isPending} onChange={(event) => draft.setValue({ ...value, enabled: event.target.checked })}>主动飞书告警</Checkbox>
+    <div><label htmlFor="alert-target">告警通道</label><Select id="alert-target" value={value.target_id ?? "none"} disabled={save.isPending || unavailable} options={[{ value: "none", label: "未选择" }, ...targets.map((target) => ({ value: target.id, label: target.name }))]} onChange={(target) => draft.setValue({ ...value, target_id: target === "none" ? null : Number(target) })} /></div>
+    <div><label htmlFor="alert-threshold">队列等待阈值（分钟）</label><Input id="alert-threshold" type="number" min={1} max={1440} value={Number.isNaN(value.queue_minutes) ? "" : value.queue_minutes} disabled={save.isPending} onChange={(event) => draft.setValue({ ...value, queue_minutes: event.target.value === "" ? NaN : Number(event.target.value) })} /></div>
+    <Button htmlType="submit" type="primary" loading={save.isPending} disabled={!draft.dirty || !valid || unavailable}>保存告警设置</Button>
+    {draft.dirty && <p role="status">告警设置有未保存更改，切换分区后仍保留。</p>}
+    {save.isSuccess && !draft.dirty && <p role="status">告警配置已保存，不代表告警已发送。</p>}
+    {save.error && <p className="form-error" role="alert">{save.error.message}；草稿保留。</p>}
+  </form>;
 }
 
-/** 独立监控服务投递后的事实在此展示，不把保存开关当作告警发送成功。 */
-export function AlertsPanel({ token }: { /** 内存口令。 */ token: string }) {
+/** 隐藏视图停止读取与轮询，但保留草稿和查询结果；单条重发不重跑评审。 */
+export function AlertsPanel({ token, active = true }: {
+  /** 内存管理口令。 */ token: string;
+  /** 当前分区可见时才启用后台请求。 */ active?: boolean;
+}) {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ["alerts"], queryFn: () => apiRequest<Alerts>(token, "/api/alerts"), refetchInterval: 30000 });
-  const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
-  const retry = useMutation({ mutationFn: (id: number) => apiRequest(token, `/api/alerts/${id}/retry`, { method: "POST" }), onSuccess: () => void client.invalidateQueries({ queryKey: ["alerts"] }) });
-  return <section className="section operations-alerts-section"><div className="section-head"><h2>告警与恢复通知</h2>{query.data && <span>{query.data.deliveries.length} 条记录</span>}</div><QueryState loading={query.isLoading} error={query.error || targets.error || retry.error} />{query.data && <><Editor key={JSON.stringify(query.data.config)} token={token} config={query.data.config} targets={targets.data ?? []} /><div className="table-scroll responsive-table"><table><thead><tr><th>消息</th><th>状态</th><th>尝试</th><th>时间</th><th>诊断</th><th aria-label="操作" /></tr></thead><tbody>{query.data.deliveries.map((item) => <tr key={item.id}><td data-label="消息">{item.message}</td><td data-label="状态"><Status value={item.status} /></td><td data-label="尝试">{item.attempts}</td><td data-label="时间">{formatTime(item.created_at)}</td><td data-label="诊断">{item.error ?? "—"}</td><td data-label="操作">{item.status === "failed" && <button className="icon-button" aria-label={`重发告警 ${item.id}`} title="重发告警" disabled={retry.isPending} onClick={() => retry.mutate(item.id)}><RotateCcw size={16} /></button>}</td></tr>)}{query.data.deliveries.length === 0 && <tr><td colSpan={6} className="empty-row">暂无告警通知</td></tr>}</tbody></table></div></>}</section>;
+  const query = useQuery({ queryKey: ["alerts"], enabled: active, queryFn: ({ signal }) => apiRequest<Alerts>(token, "/api/alerts", { signal }), refetchInterval: active ? 30000 : false });
+  const targets = useQuery({ queryKey: ["notification-targets"], enabled: active, queryFn: ({ signal }) => apiRequest<NotificationTarget[]>(token, "/api/notification-targets", { signal }) });
+  const retry = useMutation({ retry: false, mutationFn: (id: number) => apiRequest(token, `/api/alerts/${id}/retry`, { method: "POST" }), onSuccess: () => void client.invalidateQueries({ queryKey: ["alerts"] }) });
+  return <div className="operations-alerts-section"><QueryState loading={query.isLoading || targets.isLoading} error={query.error || targets.error || retry.error} />
+    {query.data && <>
+      <Card title="主动告警设置"><p className="operations-caption">由独立 monitor 检查与发送；配置成功和通知投递成功是两件事。</p><Editor token={token} config={query.data.config} targets={targets.data ?? []} unavailable={!targets.data || !!targets.error} /></Card>
+      <Card title="告警与恢复通知"><Table rowKey="id" dataSource={query.data.deliveries} size="small" scroll={{ x: 750 }} pagination={{ pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "暂无告警通知" }} columns={[
+        { title: "消息", dataIndex: "message", width: 300 }, { title: "状态", dataIndex: "status", render: (status: string) => <Status value={status} /> },
+        { title: "尝试", dataIndex: "attempts" }, { title: "时间", dataIndex: "created_at", render: (time: string) => formatTime(time) },
+        { title: "诊断", dataIndex: "error", render: (error: string | null) => error ?? "—" },
+        { title: "操作", render: (_, item) => item.status === "failed" && <Button aria-label={`重发告警 ${item.id}`} disabled={retry.isPending} onClick={() => retry.mutate(item.id)}>重发</Button> },
+      ]} /></Card>
+    </>}
+  </div>;
 }

@@ -10,13 +10,17 @@ import { QueryState } from "../ui/QueryState";
 import { formatTime } from "../ui/format";
 
 /** 最近审计记录分页展示；只读账号可查看，修改权限仍由 API 控制。 */
-export function AuditLogPanel({ token }: { /** 内存中的管理口令或会话。 */ token: string }) {
+export function AuditLogPanel({ token, active = true }: {
+  /** 内存中的管理口令或会话。 */ token: string;
+  /** 隐藏维护视图不轮询，分页状态继续保留。 */ active?: boolean;
+}) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const query = useQuery({
     queryKey: ["audit-logs", page, pageSize],
+    enabled: active,
     queryFn: ({ signal }) => apiRequest<AuditPage>(token, `/api/audit-logs?page=${page}&page_size=${pageSize}`, { signal }),
-    refetchInterval: 10000,
+    refetchInterval: active ? 10000 : false,
   });
   const data = query.data;
   return <section className="section"><div className="section-head"><h2>管理操作审计</h2><span>{data?.total ?? 0} 条</span></div>

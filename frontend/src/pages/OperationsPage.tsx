@@ -1,69 +1,52 @@
-/** @description 汇总运行指标、异常与旧工件维护；所有数字来自服务端。 */
-
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+/** @description 管理员运行工作台；URL 定位四个视图，保留已访问表单，仅激活当前视图查询。 */
+import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Tabs } from "antd";
+import { RefreshCw } from "lucide-react";
+import { lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
-import { formatTime } from "../ui/format";
-import { ServiceAddresses } from "./ServiceAddresses";
-import { AlertsPanel } from "./AlertsPanel";
-import { AuditLogPanel } from "./AuditLogPanel";
-import { ReconciliationPanel } from "./ReconciliationPanel";
-import type { PerformanceGroup, SchedulerSnapshot } from "../api/reviewExecution";
-import { ReviewPerformance } from "./ReviewPerformance";
-import { WorkerExecution } from "./WorkerExecution";
-import { WorkerConcurrency } from "./WorkerConcurrency";
+import { OperationsRuntime } from "./operations/OperationsRuntime";
+import type { OperationsSnapshot } from "./operations/types";
 
-interface Snapshot {
-  scheduler?: SchedulerSnapshot;
-  performance_7d?: PerformanceGroup[];
-  jobs: Record<string, number>; events: Record<string, number>;
-  recovery_deliveries?: Record<string, number>;
-  recovery_jobs?: Record<string, number>;
-  deliveries: Record<string, number>; retry_count: number;
-  average_review_seconds: number; review_count_7d: number;
-  oldest_pending_at: string | null; disk_free_bytes: number;
-  orphan_artifacts: number;
-  backup: { last_at: string | null; healthy: boolean; age_seconds: number | null };
-  alerts: string[];
-}
+// 表格和维护弹窗按分区加载，默认运行页不提前下载次要区域的实现。
+const AlertsPanel = lazy(() => import("./AlertsPanel").then((module) => ({ default: module.AlertsPanel })));
+const ReviewPerformance = lazy(() => import("./ReviewPerformance").then((module) => ({ default: module.ReviewPerformance })));
+const OperationsMaintenance = lazy(() => import("./operations/OperationsMaintenance").then((module) => ({ default: module.OperationsMaintenance })));
 
-/** 清理必须先展示服务端候选数量，并在二次确认后重新核算范围。 */
-export function OperationsPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
-  const [days, setDays] = useState(90);
-  const [message, setMessage] = useState("");
-  const queryClient = useQueryClient();
-  const metrics = useQuery({ queryKey: ["operations"], queryFn: () => apiRequest<Snapshot>(token, "/api/operations"), refetchInterval: 30000 });
-  const preview = useQuery({ queryKey: ["maintenance-preview", days], queryFn: () => apiRequest<{ count: number; bytes: number }>(token, `/api/maintenance/preview?days=${days}`) });
-  const prune = useMutation({ mutationFn: () => apiRequest<{ count: number; bytes: number }>(token, `/api/maintenance/prune?days=${days}`, { method: "POST" }), onSuccess: (result) => { setMessage(`已清理 ${result.count} 个旧工件目录`); void queryClient.invalidateQueries({ queryKey: ["maintenance-preview"] }); void queryClient.invalidateQueries({ queryKey: ["operations"] }); } });
-  const orphanPrune = useMutation({ mutationFn: () => apiRequest<{ count: number }>(token, "/api/maintenance/orphans/prune", { method: "POST" }), onSuccess: (result) => { setMessage(`已清理 ${result.count} 个已删除项目目录`); void queryClient.invalidateQueries({ queryKey: ["operations"] }); } });
-  const data = metrics.data;
-  return <div className="page operations-page"><PageHeader title="运行监控" subtitle="队列、通知、备份与存储" actions={<button className="icon-button" title="刷新监控" aria-label="刷新监控" onClick={() => { void metrics.refetch(); void preview.refetch(); }}><RefreshCw size={18} /></button>} />
-    <QueryState loading={metrics.isLoading} error={metrics.error} />
-    {data && <><section className="metrics operations-metrics" aria-label="运行指标">
-      <div className="metric"><span>排队 / 运行</span><strong>{(data.jobs.queued ?? 0) + (data.jobs.running ?? 0)}</strong><small>最早 {formatTime(data.oldest_pending_at)}</small></div>
-      <div className="metric"><span>评审异常</span><strong>{(data.jobs.failed ?? 0) + (data.jobs.partial ?? 0)}</strong><small>失败与部分覆盖</small></div>
-      <div className="metric"><span>成功任务末次平均执行</span><strong>{data.review_count_7d ? `${data.average_review_seconds} 秒` : "未知"}</strong><small>近 7 天 {data.review_count_7d} 个初审成功任务，不含补审、跳过</small></div>
-      <div className="metric"><span>重试 / 通知失败</span><strong>{data.retry_count} / {data.deliveries.failed ?? 0}</strong><small>初审重试与通知失败；补审排队/运行 {(data.recovery_jobs?.queued ?? 0) + (data.recovery_jobs?.running ?? 0)}，补充通知失败 {data.recovery_deliveries?.failed ?? 0}</small></div>
-    </section><div className="operations-health-grid">
-      <section className="section operation-card operation-alert-card"><div className="section-head"><h2>运行异常</h2><span>{data.alerts.length} 项</span></div>{data.alerts.length ? <ul className="operation-alerts">{data.alerts.map((alert) => <li key={alert}><AlertTriangle size={16} />{alert}</li>)}</ul> : <p className="empty-inline">当前没有达到告警阈值的项目</p>}</section>
-      <section className="section operation-card operation-storage-card"><div className="section-head"><h2>存储与备份</h2></div><div className="operation-facts"><div><span>可用空间</span><strong>{(data.disk_free_bytes / 1024 ** 3).toFixed(1)} GB</strong></div><div><span>最近成对备份</span><strong>{formatTime(data.backup.last_at)}</strong></div><div><span>完整性</span><strong>{data.backup.healthy ? "已通过" : "待检查"}</strong></div></div></section>
-    </div></>}
-    {data && <ReviewPerformance groups={data.performance_7d} />}
-    {data && <WorkerExecution snapshot={data.scheduler} />}
-    <section className="section"><div className="section-head"><h2>模型任务并发设置</h2></div><WorkerConcurrency token={token} /></section>
-    <div className="operations-tools-grid">
-      <section className="section operation-card maintenance-card"><div className="section-head"><h2>旧评审工件</h2></div><div className="maintenance-list">
-        <div className="maintenance-item"><label>评审工件保留天数<input type="number" min="7" max="3650" value={days} onChange={(event) => setDays(Math.max(7, Math.min(3650, Number(event.target.value) || 7)))} /></label><div className="maintenance-summary"><span>可清理工件</span><strong>{preview.data ? `${preview.data.count} 个目录 · ${(preview.data.bytes / 1024 ** 2).toFixed(1)} MB` : "计算中"}</strong></div><button className="button button-secondary" disabled={!preview.data?.count || prune.isPending} onClick={() => { if (window.confirm(`清理 ${preview.data?.count} 个超过 ${days} 天的终态评审工件？任务和报告摘要会保留。`)) prune.mutate(); }}><Trash2 size={16} />清理工件</button></div>
-      <div className="maintenance-item"><div className="maintenance-summary"><span>已删除项目待清理</span><strong>{data?.orphan_artifacts ?? 0} 个任务目录</strong></div><button className="button button-secondary" disabled={!data?.orphan_artifacts || orphanPrune.isPending} onClick={() => { const count = data?.orphan_artifacts ?? 0; if (count && window.confirm(`将永久清理 ${count} 个已删除项目关联的遗留任务目录；已删除的数据库记录不会恢复。正在使用的目录会跳过，是否继续？`)) orphanPrune.mutate(); }}><Trash2 size={16} />清理遗留目录</button></div>
-      </div>{message && <p className="form-success" role="status">{message}</p>}<QueryState loading={preview.isLoading} error={preview.error || prune.error || orphanPrune.error} /></section>
-      <ServiceAddresses token={token} />
-    </div>
-    <AlertsPanel token={token} />
-    <ReconciliationPanel token={token} />
-    <AuditLogPanel token={token} />
+const views = ["runtime", "performance", "alerts", "maintenance"] as const;
+type View = typeof views[number];
+const queryKeys: Record<View, string[]> = {
+  runtime: ["operations", "worker-scheduler-config"], performance: ["operations"],
+  alerts: ["alerts", "notification-targets"],
+  maintenance: ["operations", "maintenance-preview", "service-addresses", "reconciliation", "audit-logs"],
+};
+
+/** 保留同页草稿和浏览器历史，不将保存配置等同 Worker 应用或评审成功。 */
+export function OperationsPage({ token }: { /** 内存管理会话，服务端仍负责授权。 */ token: string }) {
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("tab");
+  const active: View = views.find((view) => view === requested) ?? "runtime";
+  const client = useQueryClient();
+  const currentQueries = (key: readonly unknown[]) => queryKeys[active].includes(String(key[0]));
+  const fetching = useIsFetching({ predicate: (query) => currentQueries(query.queryKey) }) > 0;
+  // 隐藏视图不轮询；已访问面板由 Tabs 保留，不能用卸载表单来节省查询。
+  const metrics = useQuery({ queryKey: ["operations"], enabled: active !== "alerts",
+    queryFn: ({ signal }) => apiRequest<OperationsSnapshot>(token, "/api/operations", { signal }), refetchInterval: active === "alerts" ? false : 30000 });
+  const received = Math.max(0, ...client.getQueryCache().findAll({ predicate: (query) => currentQueries(query.queryKey) }).map((query) => query.state.dataUpdatedAt));
+  const state = <QueryState loading={metrics.isLoading} error={metrics.error} onRetry={() => void metrics.refetch()} />;
+  return <div className="page operations-page">
+    <PageHeader title="运行监控" subtitle="实时运行优先 · 历史性能、告警和维护各自归位" actions={
+      <Button icon={<RefreshCw size={16} />} loading={fetching} onClick={() => void client.refetchQueries({ type: "active", predicate: (query) => currentQueries(query.queryKey) })}>刷新当前视图</Button>
+    } />
+    <p className="operations-received" aria-live="polite">{fetching ? "当前视图更新中；保留上次数据与未保存输入" : received ? `本机最近接收：${new Date(received).toLocaleTimeString("zh-CN")}（不代表业务发生时间）` : "当前视图尚未成功接收数据"}</p>
+    <Tabs size="small" tabBarGutter={12} activeKey={active} destroyOnHidden={false} onChange={(key) => { const next = new URLSearchParams(params); next.set("tab", key); setParams(next); }} items={[
+      { key: "runtime", label: "运行与并发", children: <>{state}<OperationsRuntime data={metrics.data} token={token} active={active === "runtime"} /></> },
+      { key: "performance", label: "性能分析", children: <>{state}{metrics.data && <Suspense fallback={<QueryState loading error={null} />}><ReviewPerformance groups={metrics.data.performance_7d} /></Suspense>}</> },
+      { key: "alerts", label: "告警与通知", children: <Suspense fallback={<QueryState loading error={null} />}><AlertsPanel token={token} active={active === "alerts"} /></Suspense> },
+      { key: "maintenance", label: "维护与审计", children: <>{state}<Suspense fallback={<QueryState loading error={null} />}><OperationsMaintenance token={token} data={metrics.data} active={active === "maintenance"} /></Suspense></> },
+    ]} />
   </div>;
 }

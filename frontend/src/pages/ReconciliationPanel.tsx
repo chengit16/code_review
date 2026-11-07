@@ -22,10 +22,14 @@ interface ReconciliationReport {
 }
 
 /** 差异报告只读；修复仍需管理员按具体业务事实单独处理。 */
-export function ReconciliationPanel({ token }: { /** 管理台内存会话。 */ token: string }) {
+export function ReconciliationPanel({ token, active = true }: {
+  /** 管理台内存会话。 */ token: string;
+  /** 仅激活维护诊断区时发起检查。 */ active?: boolean;
+}) {
   const report = useQuery({
     queryKey: ["reconciliation"],
-    queryFn: () => apiRequest<ReconciliationReport>(token, "/api/reconciliation"),
+    enabled: active,
+    queryFn: ({ signal }) => apiRequest<ReconciliationReport>(token, "/api/reconciliation", { signal }),
   });
   const download = useMutation({
     mutationFn: () => apiRequest<Record<string, unknown>>(token, "/api/diagnostics/export"),

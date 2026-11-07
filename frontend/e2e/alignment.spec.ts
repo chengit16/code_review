@@ -16,13 +16,25 @@ async function expectCheckboxAlignment(page: Page) {
     const labelBox = label.getBoundingClientRect();
     return { text: label.textContent, centerOffset: Math.abs((textBox.top + textBox.bottom - inputBox.top - inputBox.bottom) / 2), gap: textBox.left - inputBox.right, inputWidth: inputBox.width, inputHeight: inputBox.height, labelHeight: labelBox.height, right: labelBox.right };
   }));
-  expect(rows.length).toBeGreaterThan(0);
+  const designRows = await page.locator(".ant-checkbox-wrapper").evaluateAll((labels) => labels.filter((label) => label.getClientRects().length > 0).map((label) => {
+    const input = label.querySelector(".ant-checkbox")?.getBoundingClientRect();
+    const text = label.querySelector(".ant-checkbox-label")?.getBoundingClientRect();
+    if (!input || !text) throw new Error("组件库复选框缺少控件或可读文字");
+    const bounds = label.getBoundingClientRect();
+    return { centerOffset: Math.abs((text.top + text.bottom - input.top - input.bottom) / 2), height: bounds.height, right: bounds.right };
+  }));
+  expect(rows.length + designRows.length).toBeGreaterThan(0);
   for (const row of rows) {
     expect(row.centerOffset, row.text ?? "").toBeLessThanOrEqual(2.5);
     expect(row.gap, row.text ?? "").toBeGreaterThanOrEqual(7);
     expect(row.inputWidth).toBe(20);
     expect(row.inputHeight).toBe(20);
     expect(row.labelHeight).toBeGreaterThanOrEqual(44);
+    expect(row.right).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
+  }
+  for (const row of designRows) {
+    expect(row.centerOffset).toBeLessThanOrEqual(2.5);
+    expect(row.height).toBeGreaterThanOrEqual(40);
     expect(row.right).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -46,7 +58,7 @@ for (const width of [1280, 390, 320]) {
     await page.getByRole("button", { name: "编辑 alignment-user" }).click();
     await expect(page.getByRole("checkbox", { name: "启用账号", exact: true })).toBeVisible();
     await expectCheckboxAlignment(page);
-    await page.goto("/operations");
+    await page.goto("/operations?tab=alerts");
     await expect(page.getByRole("checkbox", { name: "主动飞书告警" })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.goto("/repositories");
