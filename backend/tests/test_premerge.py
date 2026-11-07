@@ -217,7 +217,8 @@ def test_worker_uses_full_range_and_requeues_authoritative_head(
 
     def fake_review(_settings: Settings, _checkout: Path, _run: Path, head: str,
                     *_args: Any, base_sha: str | None = None,
-                    background: str | None = None) -> tuple[str, dict[str, Any]]:
+                    background: str | None = None,
+                    **_kwargs: Any) -> tuple[str, dict[str, Any]]:
         seen.append((head, base_sha))
         assert background is None
         return "complete", {"comments": [], "manifest": {"terminal_state": "complete"}}
@@ -303,7 +304,8 @@ def test_premerge_freezes_verified_context_and_invalidates_changed_settings(
 
     def fake_review(_settings: Settings, _checkout: Path, _run: Path, _head: str,
                     *_args: Any, base_sha: str | None = None,
-                    background: str | None = None) -> tuple[str, dict[str, Any]]:
+                    background: str | None = None,
+                    **_kwargs: Any) -> tuple[str, dict[str, Any]]:
         nonlocal description
         assert base_sha == base
         captured.append(background)

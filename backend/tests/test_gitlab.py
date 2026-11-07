@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import threading
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import pytest
 from ocr_manager import gitlab
+from ocr_manager.execution_guard import WorkerStopping, stopping_scope
 from ocr_manager.gitlab import GitLabClient, project_web_url
 
 
@@ -54,3 +57,34 @@ def test_project_web_url_supports_ssh_remote_forms() -> None:
         )
         == base
     )
+
+
+@pytest.mark.parametrize("method", ["commits", "backfill", "diffs", "discussion"])
+def test_worker_stop_between_gitlab_pages_does_not_issue_next_request(
+    monkeypatch: pytest.MonkeyPatch, method: str,
+) -> None:
+    """停止只等待当前 HTTP 边界，不继续扫描后续百页或继续发布评论。"""
+
+    stopping = threading.Event()
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        stopping.set()
+        return httpx.Response(200, json=[], headers={"x-next-page": "2"})
+
+    original_client = httpx.Client
+    monkeypatch.setattr(gitlab.httpx, "Client", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(handler), **kwargs))
+    client = GitLabClient("https://gitlab.example.test", "synthetic-token")
+    with stopping_scope(stopping), pytest.raises(WorkerStopping):
+        if method == "commits":
+            client.list_commits(42, 7)
+        elif method == "backfill":
+            client.list_merged_requests(42, datetime(2026, 1, 1, tzinfo=UTC),
+                                        datetime(2026, 1, 2, tzinfo=UTC))
+        elif method == "diffs":
+            client.list_merge_request_diffs(42, 7)
+        else:
+            client.post_inline_discussion(42, 7, "合成评论", {}, "synthetic-marker")
+    assert len(calls) == 1

@@ -42,7 +42,9 @@ export function ReviewRulesPage({ token, embedded = false }: {
 
   useEffect(() => {
     const saved = configurations.data?.find((item) => item.repository_id === repositoryId);
-    setForm(saved ? structuredClone(saved.content) : emptyRule());
+    // 规则是固定 JSON 结构，显式复制避免依赖较新的全局克隆 API，也不共享缓存中的数组。
+    setForm(saved ? { include: [...saved.content.include], exclude: [...saved.content.exclude],
+      rules: saved.content.rules.map((rule) => ({ ...rule })) } : emptyRule());
     setIncludeText(saved?.content.include.join("\n") ?? "");
     setExcludeText(saved?.content.exclude.join("\n") ?? "");
     setLocalError("");

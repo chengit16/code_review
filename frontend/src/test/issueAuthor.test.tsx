@@ -23,7 +23,7 @@ function renderIssues(canEdit: boolean, empty = false) {
       ...items[0], occurrences: ["合成作者乙", "合成作者甲", null].map((author, index) => ({
         id: index + 1, job_id: index + 1, attempt_number: 1, mr_iid: 7,
         commit_sha: "a".repeat(40), commit_author: author, path: "app.py",
-        start_line: 4, created_at: "2026-01-01",
+        recovery_id: index === 1 ? 7 : null, start_line: 4, created_at: "2026-01-01",
       })), events: [],
     }));
     return new Response("[]");
@@ -53,6 +53,8 @@ it("出现记录分别显示对应提交人，不把最新作者套用到历史�
   expect(await within(drawer).findByText("提交人：合成作者乙")).toBeVisible();
   expect(within(drawer).getByText("提交人：合成作者甲")).toBeVisible();
   expect(within(drawer).getByText("提交人：未记录")).toBeVisible();
+  expect(within(drawer).getByRole("link", { name: /补审 #7（候选来源）/ })).toHaveAttribute("href", "/jobs/2");
+  expect(within(drawer).getAllByRole("link", { name: /初审/ })).toHaveLength(2);
 });
 
 it.each([true, false])("空列表占满新增列后的表格（可编辑：%s）", async (canEdit) => {

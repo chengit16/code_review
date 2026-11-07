@@ -12,9 +12,16 @@ import { ServiceAddresses } from "./ServiceAddresses";
 import { AlertsPanel } from "./AlertsPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
 import { ReconciliationPanel } from "./ReconciliationPanel";
+import type { PerformanceGroup, SchedulerSnapshot } from "../api/reviewExecution";
+import { ReviewPerformance } from "./ReviewPerformance";
+import { WorkerExecution } from "./WorkerExecution";
 
 interface Snapshot {
+  scheduler?: SchedulerSnapshot;
+  performance_7d?: PerformanceGroup[];
   jobs: Record<string, number>; events: Record<string, number>;
+  recovery_deliveries?: Record<string, number>;
+  recovery_jobs?: Record<string, number>;
   deliveries: Record<string, number>; retry_count: number;
   average_review_seconds: number; review_count_7d: number;
   oldest_pending_at: string | null; disk_free_bytes: number;
@@ -38,12 +45,14 @@ export function OperationsPage({ token }: { /** 内存中的管理口令。 */ t
     {data && <><section className="metrics operations-metrics" aria-label="运行指标">
       <div className="metric"><span>排队 / 运行</span><strong>{(data.jobs.queued ?? 0) + (data.jobs.running ?? 0)}</strong><small>最早 {formatTime(data.oldest_pending_at)}</small></div>
       <div className="metric"><span>评审异常</span><strong>{(data.jobs.failed ?? 0) + (data.jobs.partial ?? 0)}</strong><small>失败与部分覆盖</small></div>
-      <div className="metric"><span>平均耗时</span><strong>{data.average_review_seconds} 秒</strong><small>近 7 天 {data.review_count_7d} 次</small></div>
-      <div className="metric"><span>重试 / 通知失败</span><strong>{data.retry_count} / {data.deliveries.failed ?? 0}</strong><small>累计任务重试与飞书异常</small></div>
+      <div className="metric"><span>成功任务末次平均执行</span><strong>{data.review_count_7d ? `${data.average_review_seconds} 秒` : "未知"}</strong><small>近 7 天 {data.review_count_7d} 个初审成功任务，不含补审、跳过</small></div>
+      <div className="metric"><span>重试 / 通知失败</span><strong>{data.retry_count} / {data.deliveries.failed ?? 0}</strong><small>初审重试与通知失败；补审排队/运行 {(data.recovery_jobs?.queued ?? 0) + (data.recovery_jobs?.running ?? 0)}，补充通知失败 {data.recovery_deliveries?.failed ?? 0}</small></div>
     </section><div className="operations-health-grid">
       <section className="section operation-card operation-alert-card"><div className="section-head"><h2>运行异常</h2><span>{data.alerts.length} 项</span></div>{data.alerts.length ? <ul className="operation-alerts">{data.alerts.map((alert) => <li key={alert}><AlertTriangle size={16} />{alert}</li>)}</ul> : <p className="empty-inline">当前没有达到告警阈值的项目</p>}</section>
       <section className="section operation-card operation-storage-card"><div className="section-head"><h2>存储与备份</h2></div><div className="operation-facts"><div><span>可用空间</span><strong>{(data.disk_free_bytes / 1024 ** 3).toFixed(1)} GB</strong></div><div><span>最近成对备份</span><strong>{formatTime(data.backup.last_at)}</strong></div><div><span>完整性</span><strong>{data.backup.healthy ? "已通过" : "待检查"}</strong></div></div></section>
     </div></>}
+    {data && <ReviewPerformance groups={data.performance_7d} />}
+    {data && <WorkerExecution snapshot={data.scheduler} />}
     <div className="operations-tools-grid">
       <section className="section operation-card maintenance-card"><div className="section-head"><h2>旧评审工件</h2></div><div className="maintenance-list">
         <div className="maintenance-item"><label>评审工件保留天数<input type="number" min="7" max="3650" value={days} onChange={(event) => setDays(Math.max(7, Math.min(3650, Number(event.target.value) || 7)))} /></label><div className="maintenance-summary"><span>可清理工件</span><strong>{preview.data ? `${preview.data.count} 个目录 · ${(preview.data.bytes / 1024 ** 2).toFixed(1)} MB` : "计算中"}</strong></div><button className="button button-secondary" disabled={!preview.data?.count || prune.isPending} onClick={() => { if (window.confirm(`清理 ${preview.data?.count} 个超过 ${days} 天的终态评审工件？任务和报告摘要会保留。`)) prune.mutate(); }}><Trash2 size={16} />清理工件</button></div>

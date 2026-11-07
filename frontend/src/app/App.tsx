@@ -16,6 +16,9 @@ import { PageErrorBoundary } from "../ui/PageErrorBoundary";
 const ConfigHistoryPage = lazy(() => import("../pages/ConfigHistoryPage").then((module) => ({ default: module.ConfigHistoryPage })));
 const EventCenterPage = lazy(() => import("../pages/EventCenterPage").then((module) => ({ default: module.EventCenterPage })));
 const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
+const ImprovementsPage = lazy(() => import("../pages/ImprovementsPage").then((module) => ({ default: module.ImprovementsPage })));
+const ImprovementDetailPage = lazy(() => import("../pages/ImprovementDetailPage").then((module) => ({ default: module.ImprovementDetailPage })));
+const ImprovementThemeDetailPage = lazy(() => import("../pages/ImprovementThemeDetailPage").then((module) => ({ default: module.ImprovementThemeDetailPage })));
 const OperationsPage = lazy(() => import("../pages/OperationsPage").then((module) => ({ default: module.OperationsPage })));
 const OnboardingPage = lazy(() => import("../pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
 const PremergePage = lazy(() => import("../pages/PremergePage").then((module) => ({ default: module.PremergePage })));
@@ -41,6 +44,7 @@ const navigation = [
   { heading: "运维与审计", links: [
     { to: "/operations", label: "运行监控", icon: Wrench },
     { to: "/config-history", label: "配置历史", icon: History },
+    { to: "/improvements", label: "问题与改进", icon: ClipboardList },
   ] },
   { heading: "接入配置", links: [
     { to: "/onboarding", label: "首次接入引导", icon: CheckCircle2 },
@@ -132,6 +136,9 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/premerge" element={<PremergePage token={token} />} />
             <Route path="/jobs/:id" element={<JobDetailPage token={token} canEdit={role === "admin"} />} />
             <Route path="/operations" element={role === "admin" ? <OperationsPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/improvements" element={role === "admin" ? <ImprovementsPage token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/improvements/:id" element={role === "admin" ? <ImprovementDetailPage key={location.pathname} token={token} /> : <Navigate to="/" replace />} />
+            <Route path="/improvements/themes/:id" element={role === "admin" ? <ImprovementThemeDetailPage key={location.pathname} token={token} /> : <Navigate to="/" replace />} />
             <Route path="/settings" element={role === "admin" ? <SystemSettingsPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/review-rules" element={role === "admin" ? <Navigate to="/settings?tab=rules" replace /> : <Navigate to="/" replace />} />
             <Route path="/config-history" element={role === "admin" ? <ConfigHistoryPage token={token} /> : <Navigate to="/" replace />} />

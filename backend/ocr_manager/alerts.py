@@ -7,11 +7,14 @@ import logging
 import os
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from cryptography.fernet import InvalidToken
 
+from ocr_manager.chat_capture_adapter import sync_chat_capture
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.feishu import FeishuDeliveryError, post_message
+from ocr_manager.improvement_maintenance import monitor_maintenance
 from ocr_manager.monitoring import operations_snapshot, prune_orphan_artifacts
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
@@ -31,7 +34,8 @@ def alert_conditions(store: Store, settings: Settings, queue_minutes: int) -> di
             "队列等待超时": delayed,
             "存在失败或部分完成的评审": bool(metrics["jobs"].get("failed") or
                                           metrics["jobs"].get("partial")),
-            "飞书评审通知失败": bool(metrics["deliveries"].get("failed")),
+            "飞书评审通知失败": bool(metrics["deliveries"].get("failed") or
+                                     metrics["recovery_deliveries"].get("failed")),
             "备份缺失、损坏或超过 48 小时": not metrics["backup"]["healthy"] or
              (metrics["backup"]["age_seconds"] or 10**9) > 48 * 3600,
             "可用磁盘空间少于 2 GB": metrics["disk_free_bytes"] < 2 * 1024**3}
@@ -111,6 +115,13 @@ def main() -> None:
         with store.connection() as db:
             db.execute("UPDATE alert_deliveries SET status='pending' WHERE status='sending'")
         while True:
+            # 已授权会话只在本项目目录内摄取；失败留绑定错误，不阻断评审和告警循环。
+            try:
+                sync_chat_capture(store, Path.cwd())
+            except Exception:
+                logging.getLogger(__name__).warning("聊天收件箱摄取未完成：capture_failed")
+            # 台账同步独立于飞书告警开关；自身失败不能中断原有监控。
+            monitor_maintenance(store, settings)
             prune_orphan_artifacts(store, settings.data_dir)
             with store.connection() as db:
                 config = dict(db.execute("SELECT * FROM alert_config WHERE id=1").fetchone())

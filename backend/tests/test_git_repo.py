@@ -32,7 +32,7 @@ def test_network_git_commands_allow_large_repository_transfer(
         observed.update(kwargs)
         return subprocess.CompletedProcess(_command, 0, "", "")
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("ocr_manager.git_repo.run_git", fake_run)
     git._git(operation, "test", cwd=tmp_path)
     assert observed["timeout"] == expected_timeout
 

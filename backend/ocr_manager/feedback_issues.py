@@ -7,19 +7,22 @@ import sqlite3
 
 def sync_feedback_issue(
     db: sqlite3.Connection, job_id: int, attempt_number: int, comment_index: int,
-    verdict: str | None, actor: str,
+    verdict: str | None, actor: str, *, recovery_id: int | None = None,
 ) -> None:
     """仅处理当前尝试关联的问题；重复反馈幂等，撤销只重开本卡片关闭的问题。"""
 
     # 1. 只使用当前尝试的出现记录，重审后的同一索引不会修改旧问题。
     issue = db.execute("""SELECT i.id,i.status FROM review_issue_occurrences o
         JOIN review_issues i ON i.id=o.issue_id
-        WHERE o.job_id=? AND o.attempt_number=? AND o.comment_index=?""",
-        (job_id, attempt_number, comment_index)).fetchone()
+        WHERE o.job_id=? AND o.attempt_number=? AND o.comment_index=? AND o.recovery_id IS ?""",
+        (job_id, attempt_number, comment_index, recovery_id)).fetchone()
     if issue is None or issue["status"] == "merged":
         return
     # 2. 来源说明用于识别本卡片的关闭决定；调整文案时须兼容已有审计记录。
     source = f"任务 #{job_id} 第 {attempt_number} 次发现 {comment_index + 1}"
+    if recovery_id is not None:
+        source = (f"任务 #{job_id} 第 {attempt_number} 次补审 #{recovery_id} "
+                  f"发现 {comment_index + 1}")
     notes = {
         "false_positive": f"{source}：标记为误报，同步忽略",
         "fixed": f"{source}：标记为已修复，同步关闭",

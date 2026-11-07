@@ -22,6 +22,9 @@ from ocr_manager.monitoring import (
     prune_orphan_artifacts,
 )
 from ocr_manager.reconciliation import reconcile
+from ocr_manager.review_conclusions import read_conclusion
+from ocr_manager.review_contracts import TaskSearchResponse
+from ocr_manager.review_recovery_domain import RecoveryConflict
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.tasks import job_neighbors, report_projection, search_jobs
@@ -192,7 +195,7 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
             ) from error
         return {"status": "restored"}
 
-    @app.get("/api/task-search", dependencies=[admin])
+    @app.get("/api/task-search", dependencies=[admin], response_model=TaskSearchResponse)
     def task_search(
         filters: Annotated[dict[str, Any], Depends(task_filters)],
         page: int = Query(1, ge=1, le=1000000),
@@ -214,8 +217,9 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
             raise HTTPException(404, "任务不存在") from error
 
     @app.get("/api/jobs/{job_id}/report", dependencies=[admin])
-    def download_report(job_id: int, attempt: int | None = Query(None, ge=1)) -> Response:
-        """下载白名单报告；额外移除当前已知凭据，绝不返回原始 thinking。"""
+    def download_report(job_id: int, attempt: int | None = Query(None, ge=1),
+                        recovery_revision: int | None = Query(None, ge=0)) -> Response:
+        """下载白名单报告；补审需显式版本，原报告保留初审，额外移除当前已知凭据。"""
 
         job = store.get_job(job_id)
         if job is None:
@@ -225,7 +229,21 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
                 job = attempt_job(job, attempt)
             except ValueError as error:
                 raise HTTPException(404, "尝试不存在") from error
-        content = json.dumps(report_projection(job), ensure_ascii=False, indent=2)
+        report = report_projection(job)
+        if recovery_revision is not None:
+            try:
+                with store.connection() as db:
+                    db.execute("BEGIN")
+                    document = read_conclusion(
+                        db, job_id, source_attempt=attempt or job["attempts"],
+                        revision=recovery_revision)
+                # 显式请求的不可变版本和初审并列，不把后来的候选塞进历史尝试报告。
+                report["requested_conclusion"] = document.model_dump()
+            except RecoveryConflict as error:
+                raise HTTPException(409, {"code": str(error)}) from error
+            except LookupError as error:
+                raise HTTPException(404, {"code": "conclusion_not_found"}) from error
+        content = json.dumps(report, ensure_ascii=False, indent=2)
         box = SecretBox(settings.master_key)
         secret_values = [settings.master_key, settings.admin_token]
         repository = store.get_repository(job["repository_id"]) or {}

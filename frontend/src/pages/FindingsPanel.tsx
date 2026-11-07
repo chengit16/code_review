@@ -16,8 +16,10 @@ const feedbackOptions = [
 ] as const;
 
 /** 文件、级别和反馈筛选只改变视图，服务端继续校验原始发现索引。 */
-export function FindingsPanel({ comments, feedback, issueIds = {}, issueStatuses = {}, status, coverageWaived, onFeedback, pending, canEdit = true }: {
+export function FindingsPanel({ comments, findingIds, findingSources, feedback, issueIds = {}, issueStatuses = {}, status, coverageWaived, onFeedback, pending, canEdit = true }: {
   /** OCR 发现原始顺序。 */ comments: ReviewComment[];
+  /** 聚合后的稳定来源身份，不作为旧接口索引。 */ findingIds?: string[];
+  /** 每条发现的可读来源。 */ findingSources?: string[];
   /** 原始索引对应的人工标记。 */ feedback: Record<number, Verdict>;
   /** 当前尝试中原始发现索引对应的待跟进问题。 */ issueIds?: Record<number, number>;
   /** 服务端返回的关联问题状态，不能由反馈替代。 */ issueStatuses?: ReviewJobDetail["issue_statuses"];
@@ -52,12 +54,12 @@ export function FindingsPanel({ comments, feedback, issueIds = {}, issueStatuses
       const marked = feedback[index];
       // 旧反馈可能尚未同步问题，允许原地重新确认，不在升级时批量改写人工决定。
       const needsSync = issueStatus === "open" && (marked === "false_positive" || marked === "fixed");
-      return <article className="finding" data-severity={comment.severity ?? "none"} key={`${comment.path}-${index}`}>
+      return <article className="finding" data-severity={comment.severity ?? "none"} key={findingIds?.[index] ?? `${comment.path}-${index}`}>
         <div className="finding-head">
           <span className="mono finding-path">{comment.path}{comment.start_line ? `:${comment.start_line}` : ""}</span>
           <span className="finding-severity">{formatSeverity(comment.severity)}</span>
         </div>
-        <div className="finding-body"><p>{comment.content}</p></div>
+        <div className="finding-body">{findingSources?.[index] && <small>{findingSources[index]}</small>}<p>{comment.content}</p></div>
         <div className="finding-footer">
           {issueIds[index] ? <Link className="finding-issue-link" to={`/issues?issue=${issueIds[index]}`}>
             跟进问题 #{issueIds[index]}{issueStatus ? ` · ${issueLabels[issueStatus]}` : ""}

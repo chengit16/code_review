@@ -1,4 +1,7 @@
 /** @description 管理 API 的稳定前端投影；密文字段不进入浏览器类型。 */
+import type { CumulativeUsage, ReviewTiming, ScopeAnalysis } from "./reviewExecution";
+import type { FailureAnalysis } from "./reviewDiagnostics";
+import type { ConclusionDocument, ConclusionOverview, ConclusionVersion } from "./reviewConclusions";
 
 /** 仓库接入信息与 GitLab 回调地址。 */
 export interface Repository {
@@ -176,6 +179,22 @@ export interface WebhookDiagnostic {
 
 /** 单提交或 Push 范围评审任务列表数据。 */
 export interface ReviewJob {
+  /** 初审/候选并列，不把候选状态写成旧任务执行状态。 */
+  conclusions?: ConclusionOverview | null;
+  /** 有效结论与初审执行状态独立；旧后端缺失时回退初审。 */ effective_status?: string;
+  /** 当前已验证有效版本。 */ effective_conclusion?: ConclusionVersion | null;
+  /** 完整有效发现仅在详情返回。 */ effective_document?: ConclusionDocument | null;
+  /** 全任务费用包含的实际开始补审次数。 */ recovery_execution_count?: number;
+  /** 活动补审期间禁止全量重审。 */ active_recovery_id?: number | null;
+  /** 当前源尝试的失败补充通知数量。 */ recovery_delivery_failed_count?: number;
+  /** 初审尝试累计费用，便于与全任务累计复核。 */ initial_cumulative_usage?: CumulativeUsage;
+  /** 已持久化摘要；历史未保存时不回填。 */ failure_summary?: string | null;
+  /** 详情提供，列表省略请求和分组明细。 */ failure_analysis?: FailureAnalysis | null;
+  /** 独立历史诊断导入时间，不代表重跑模型。 */ failure_analysis_imported_at?: string | null;
+  /** 旧记录可缺失，不能由前端猜测累计时间。 */ timing?: ReviewTiming;
+  /** 稳定原因码与安全中文文案，不含原始模型响应。 */ reason?: { code: string; message: string };
+  /** 仅分析不排除时必须如实说明。 */ scope_analysis?: ScopeAnalysis | null;
+  /** 各次历史单价和已知用量的累计，未知部分不作为零。 */ cumulative_usage?: CumulativeUsage;
   /** 当前尝试已持久化的发现数量；不代表完整覆盖。 */ finding_count?: number;
   /** 当前尝试发现的最高严重级别。 */ highest_severity?: string | null;
   /** 飞书发送状态，与评审状态相互独立。 */ delivery_status?: string | null;
@@ -251,6 +270,8 @@ export interface ReviewPreview {
 
 /** 评审详情包含 OCR 的机器可读发现与覆盖情况。 */
 export interface ReviewJobDetail extends ReviewJob {
+  /** 稳定主身份的当前人工反馈。 */ finding_feedback?: Record<string, "helpful" | "false_positive" | "fixed">;
+  /** 稳定主身份的问题关联，不与初审下标混用。 */ finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" | "merged" }>;
   /** 与飞书通知相互独立的 MR 行内发布记录。 */
   publications?: Array<{ id: number; comment_index: number; attempt_number: number; status: string; attempts: number; error: string | null; discussion_id: string | null }>;
   /** Worker 确认停止前保持 running 状态。 */
@@ -261,10 +282,25 @@ export interface ReviewJobDetail extends ReviewJob {
     comments?: ReviewComment[];
     manifest?: ReviewManifest;
     preview?: ReviewPreview;
+    /** 策略排除独立于 OCR 选中覆盖，不代表模型已审查这些文件。 */
+    input_filter?: { excluded_count: number } | null;
     usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
     estimated_cost?: { currency: "CNY" | "USD"; input: string; output: string; total: string } | null;
     summary?: { budget_exceeded?: boolean };
     message?: string;
+    /** 错误是否可重试与是否实际安排重试分别记录，达到上限时不再排队。 */
+    diagnostic?: {
+      category: string;
+      http_status: number | null;
+      retryable: boolean;
+      retry_scheduled: boolean;
+    } | null;
+    /** OCR 内部请求计数，不等同于平台整批尝试次数。 */
+    retry_summary?: {
+      total_requests?: number;
+      total_retries?: number;
+      failed_requests?: number;
+    } | null;
   } | null;
   result_path: string | null;
   notification_min_severity: "critical" | "high" | "medium" | "low";
@@ -281,7 +317,13 @@ export interface ReviewJobDetail extends ReviewJob {
     error: string | null;
     finished_at: string;
     failure_stage?: string | null;
+    started_at?: string | null;
+    scheduled_at?: string | null;
+    retry_ready_at?: string | null;
+    reason_code?: string | null;
   }>;
+  /** 逐阶段实际开始和结束时间，旧记录不会回填。 */
+  stage_timings?: Array<{ attempt_number: number; stage: string; started_at: string; finished_at: string | null }>;
   delivery: {
     id: number;
     correlation_id?: string;

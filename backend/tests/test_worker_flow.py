@@ -107,7 +107,8 @@ def test_merged_mr_runs_review_and_notification(
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
     monkeypatch.setattr(
-        worker, "run_review", lambda *_args: ("complete", {"comments": [], "manifest": {}})
+        worker, "run_review", lambda *_args, **_kwargs: (
+            "complete", {"comments": [], "manifest": {}})
     )
     monkeypatch.setattr(
         worker,

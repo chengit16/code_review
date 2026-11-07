@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { apiRequest } from "../api/client";
 import type { WebhookTokenResponse } from "../api/types";
+import { copyText } from "../ui/clipboard";
 
 interface WebhookTokenCellProps {
   /** 当前管理会话口令，开发模式为空。 */
@@ -43,14 +44,14 @@ export function WebhookTokenCell({ token, repositoryId, repositoryName }: Webhoo
       );
       if (controller.signal.aborted) return;
       if (action === "copy") {
-        await navigator.clipboard.writeText(result.webhook_token);
-        setNotice("已复制");
+        await copyText(result.webhook_token);
+        if (!controller.signal.aborted) setNotice("已复制");
       } else {
         setWebhookToken(result.webhook_token);
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setError(cause instanceof Error ? cause.message : "读取令牌失败");
+        setError(action === "copy" ? "复制失败，请点击查看令牌后手动选择复制" : cause instanceof Error ? cause.message : "读取令牌失败");
       }
     } finally {
       if (!controller.signal.aborted) setPending(false);
@@ -69,12 +70,14 @@ export function WebhookTokenCell({ token, repositoryId, repositoryName }: Webhoo
   }
 
   async function handleCopy() {
+    setNotice("");
+    setError("");
     if (webhookToken === null) {
       await loadToken("copy");
       return;
     }
     try {
-      await navigator.clipboard.writeText(webhookToken);
+      await copyText(webhookToken);
       setNotice("已复制");
       setError("");
     } catch {

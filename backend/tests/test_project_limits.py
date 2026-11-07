@@ -20,7 +20,7 @@ def test_project_limits_override_model_and_hash(client: TestClient, settings: Se
                                          SecretBox(settings.master_key).encrypt("synthetic-key"))
     before = config_hash(store, settings, repository_id=repository_id)
     payload = {"model_profile_id": profile_id, "timeout_seconds": 120,
-               "max_files": 10, "max_tokens_budget": 1000}
+               "max_files": 10, "max_tokens_budget": 1000, "newline_filter_enabled": False}
     url = f"/api/repositories/{repository_id}/limits"
     assert client.put(url, headers=ADMIN, json=payload).status_code == 200
     assert client.get(url, headers=ADMIN).json() == payload

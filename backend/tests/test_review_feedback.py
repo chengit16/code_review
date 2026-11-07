@@ -9,6 +9,7 @@ from ocr_manager.config import Settings
 from ocr_manager.feishu import build_review_card
 from ocr_manager.storage import SCHEMA_VERSION, Store
 from ocr_manager.worker import config_hash
+from schema_fixtures import remove_observability_schema
 
 ADMIN = {"X-Admin-Token": "test-admin-token"}
 SHA = "a" * 40
@@ -191,6 +192,7 @@ def test_feedback_migration_from_existing_database(tmp_path: Path) -> None:
     store.migrate()
     repository_id = add_repository(store)
     with store.connection() as db:
+        remove_observability_schema(db)
         db.execute("DROP TABLE review_feedback")
         db.execute("DROP TABLE project_policies")
         db.execute("ALTER TABLE review_jobs DROP COLUMN notification_min_severity")

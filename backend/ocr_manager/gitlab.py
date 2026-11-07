@@ -9,6 +9,8 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from ocr_manager.cancellation import check_cancellation
+
 
 class GitLabClient:
     """统一 GitLab API 认证、超时与分页，避免信任 webhook 中的提交范围。"""
@@ -25,8 +27,10 @@ class GitLabClient:
         branch_path = quote(branch, safe="")
         base = f"{self.base_url}/api/v4/projects/{project_id}"
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
+            check_cancellation()
             project = client.get(base)
             project.raise_for_status()
+            check_cancellation()
             branch_response = client.get(f"{base}/repository/branches/{branch_path}")
             branch_response.raise_for_status()
         project_data = project.json()
@@ -49,6 +53,7 @@ class GitLabClient:
 
         url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests/{mr_iid}"
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
+            check_cancellation()
             response = client.get(url)
             response.raise_for_status()
             data = response.json()
@@ -64,6 +69,7 @@ class GitLabClient:
         page = 1
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
             while True:
+                check_cancellation()
                 response = client.get(url, params={"per_page": 100, "page": page})
                 response.raise_for_status()
                 data = response.json()
@@ -87,6 +93,7 @@ class GitLabClient:
         result: list[int] = []
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
             for page in range(1, 101):
+                check_cancellation()
                 response = client.get(url, params={"state": "merged", "updated_after":
                                       since.isoformat(), "per_page": 100, "page": page})
                 response.raise_for_status()
@@ -114,6 +121,7 @@ class GitLabClient:
         result: list[dict[str, Any]] = []
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
             for page in range(1, 101):
+                check_cancellation()
                 response = client.get(url, params={"per_page": 100, "page": page})
                 response.raise_for_status()
                 rows = response.json()
@@ -137,6 +145,7 @@ class GitLabClient:
         url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests/{mr_iid}/discussions"
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
             for page in range(1, 101):
+                check_cancellation()
                 existing = client.get(url, params={"per_page": 100, "page": page})
                 existing.raise_for_status()
                 rows = existing.json()
@@ -153,6 +162,7 @@ class GitLabClient:
                     break
             else:
                 raise ValueError("GitLab discussion 超过 100 页，无法确认幂等")
+            check_cancellation()
             posted = client.post(url, data={"body": f"{body}\n\n{marker}",
                                             **{f"position[{key}]": value
                                                for key, value in position.items()}})

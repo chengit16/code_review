@@ -5,10 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sqlite3
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+
+from ocr_manager.range_preflight import input_policy
+from ocr_manager.review_failures import REVIEW_POLICY
+from ocr_manager.review_results import project_review_result
 
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
@@ -48,6 +53,16 @@ ALTER TABLE premerge_reviews ADD COLUMN context_json TEXT;
 """
 
 SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
+
+
+def premerge_policy(db: sqlite3.Connection, repository_id: int) -> str:
+    """在队列写事务内冻结项目过滤开关，避免排队后静默改变输入语义。"""
+
+    row = db.execute("SELECT newline_filter_enabled FROM project_review_limits "
+                     "WHERE repository_id=?",
+                     (repository_id,)).fetchone()
+    return json.dumps({"review_policy": REVIEW_POLICY,
+                       "input_policy": input_policy(bool(row and row[0]))}, sort_keys=True)
 
 
 def parse_premerge_event(
@@ -106,8 +121,9 @@ def invalidate_premerge(store: Store, repository_id: int, mr_iid: int) -> None:
                              (repository_id,)).fetchone()
         if latest and latest["status"] != "superseded" and enabled and enabled["enabled"]:
             db.execute("""INSERT INTO premerge_reviews
-                (repository_id,mr_iid,head_sha,context_hint) VALUES(?,?,?,?)""",
-                (repository_id, mr_iid, latest["head_sha"], latest["context_hint"]))
+                (repository_id,mr_iid,head_sha,context_hint,execution_policy) VALUES(?,?,?,?,?)""",
+                (repository_id, mr_iid, latest["head_sha"], latest["context_hint"],
+                 premerge_policy(db, repository_id)))
 
 
 def enqueue_premerge(store: Store, repository_id: int, mr_iid: int, head_sha: str,
@@ -130,12 +146,14 @@ def enqueue_premerge(store: Store, repository_id: int, mr_iid: int, head_sha: st
         db.execute("""UPDATE premerge_reviews SET status='superseded',
             finished_at=CURRENT_TIMESTAMP WHERE repository_id=? AND mr_iid=?
             AND status!='superseded'""", (repository_id, mr_iid))
-        db.execute("""INSERT INTO premerge_reviews(repository_id,mr_iid,head_sha,context_hint)
-            VALUES(?,?,?,?)""", (repository_id, mr_iid, head_sha, context_hint))
+        db.execute("""INSERT INTO premerge_reviews
+            (repository_id,mr_iid,head_sha,context_hint,execution_policy)
+            VALUES(?,?,?,?,?)""", (repository_id, mr_iid, head_sha, context_hint,
+                                   premerge_policy(db, repository_id)))
         return True
 
 
-def next_premerge(store: Store) -> dict[str, Any] | None:
+def next_premerge(store: Store, last_repository_id: int | None = None) -> dict[str, Any] | None:
     """单 Worker 领取开启合并前审查的最新待处理版本。"""
 
     with store.connection() as db:
@@ -144,7 +162,10 @@ def next_premerge(store: Store) -> dict[str, Any] | None:
             JOIN repositories r ON r.id=p.repository_id
             JOIN premerge_settings s ON s.repository_id=r.id
             WHERE p.status='queued' AND p.next_run_at<=CURRENT_TIMESTAMP
-            AND r.enabled=1 AND s.enabled=1 ORDER BY p.id LIMIT 1""").fetchone()
+            AND r.enabled=1 AND s.enabled=1
+            ORDER BY CASE WHEN p.repository_id>? THEN 0 ELSE 1 END,
+            p.repository_id,p.id LIMIT 1""",
+                         (last_repository_id,)).fetchone()
         if row:
             db.execute("""UPDATE premerge_reviews SET status='running',
                 attempts=attempts+1 WHERE id=?""", (row["id"],))
@@ -198,9 +219,9 @@ def retry_premerge(store: Store, review_id: int) -> int | None:
             finished_at=COALESCE(finished_at,CURRENT_TIMESTAMP)
             WHERE id=?""", (review_id,))
         cursor = db.execute("""INSERT INTO premerge_reviews
-            (repository_id,mr_iid,head_sha,context_hint) VALUES(?,?,?,?)""",
+            (repository_id,mr_iid,head_sha,context_hint,execution_policy) VALUES(?,?,?,?,?)""",
                             (row["repository_id"], row["mr_iid"], row["head_sha"],
-                             row["context_hint"]))
+                             row["context_hint"], premerge_policy(db, row["repository_id"])))
         assert cursor.lastrowid is not None
         return int(cursor.lastrowid)
 
@@ -211,17 +232,7 @@ def finish_premerge(store: Store, review_id: int, status: str, base_sha: str | N
                     context: dict[str, Any] | None = None) -> None:
     """只允许当前运行版本写回；过期 OCR 结果不能复活旧结论。"""
 
-    projection = None
-    if result is not None:
-        projection = {
-            "comments": [{key: item[key] for key in
-                          ("path", "content", "start_line", "end_line", "severity", "category")
-                          if key in item} for item in result.get("comments", [])
-                         if isinstance(item, dict)],
-            "manifest": {"terminal_state": result.get("manifest", {}).get("terminal_state"),
-                         "coverage": result.get("manifest", {}).get("coverage")},
-            "preview": result.get("preview"),
-        }
+    projection = project_review_result(result) if result is not None else None
     with store.connection() as db:
         db.execute("""UPDATE premerge_reviews SET status=?,base_sha=?,result_json=?,
             result_path=?,changed_files=?,error=?,context_json=?,finished_at=CURRENT_TIMESTAMP
@@ -229,6 +240,25 @@ def finish_premerge(store: Store, review_id: int, status: str, base_sha: str | N
             (status, base_sha, json.dumps(projection, ensure_ascii=False) if projection else None,
              result_path, json.dumps(changed_files) if changed_files is not None else None,
              error, json.dumps(context, ensure_ascii=False) if context else None, review_id))
+
+
+def defer_premerge(store: Store, review_id: int, error: str, delay_seconds: int,
+                   base_sha: str | None, result: dict[str, Any] | None = None,
+                   result_path: str | None = None,
+                   changed_files: list[dict[str, Any]] | None = None) -> None:
+    """暂时故障保留安全结果并退避；条件写回不能使已取消或失效的版本复活。"""
+
+    projection = project_review_result(result) if result is not None else None
+    if projection and isinstance(projection.get("diagnostic"), dict):
+        projection["diagnostic"]["retry_scheduled"] = True
+    with store.connection() as db:
+        db.execute("""UPDATE premerge_reviews SET status='queued',error=?,base_sha=?,
+            result_json=?,result_path=?,changed_files=?,finished_at=NULL,
+            next_run_at=datetime('now',printf('+%d seconds',?))
+            WHERE id=? AND status='running'""",
+            (error, base_sha, json.dumps(projection, ensure_ascii=False) if projection else None,
+             result_path, json.dumps(changed_files) if changed_files is not None else None,
+             delay_seconds, review_id))
 
 
 class PremergeSetting(BaseModel):
@@ -296,8 +326,10 @@ def register_premerge(app: FastAPI, store: Store, admin: Any) -> None:
                     AND status!='superseded'""", (repository_id,))
                 if payload.enabled:
                     db.executemany("""INSERT INTO premerge_reviews
-                        (repository_id,mr_iid,head_sha,context_hint) VALUES(?,?,?,?)""",
-                        [(repository_id, row["mr_iid"], row["head_sha"], row["context_hint"])
+                        (repository_id,mr_iid,head_sha,context_hint,execution_policy)
+                        VALUES(?,?,?,?,?)""",
+                        [(repository_id, row["mr_iid"], row["head_sha"], row["context_hint"],
+                          premerge_policy(db, repository_id))
                          for row in current])
         return {"enabled": payload.enabled, "include_description": payload.include_description,
                 "context_paths": paths}

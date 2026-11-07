@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ocr_manager.review_conclusions import candidate_counts
+from ocr_manager.review_effective import status_sql
 from ocr_manager.storage import Store
 from ocr_manager.tasks import search_jobs, task_view_clause
 
@@ -13,12 +15,13 @@ def overview_snapshot(store: Store) -> dict[str, Any]:
 
     with store.connection() as db:
         db.execute("BEGIN")
-        summary = dict(db.execute("""SELECT COUNT(*) AS total,
+        summary = dict(db.execute(f"""SELECT COUNT(*) AS total,
             SUM(status='queued') AS queued, SUM(status='running') AS running,
-            SUM(status='complete') AS complete, SUM(status='failed') AS historical_failed
-            FROM review_jobs""").fetchone())
+            SUM({status_sql()}='complete') AS complete, SUM(status='failed') AS historical_failed
+            FROM review_jobs j""").fetchone())
         summary = {key: value or 0 for key, value in summary.items()}
         summary["repositories"] = db.execute("SELECT COUNT(*) FROM repositories").fetchone()[0]
+        conclusions = candidate_counts(db)
         todo = {"events_attention": db.execute(
             """SELECT COUNT(*) FROM merge_events e JOIN repositories r ON r.id=e.repository_id
             WHERE e.status='needs_attention' AND r.enabled=1"""
@@ -42,7 +45,8 @@ def overview_snapshot(store: Store) -> dict[str, Any]:
             summary[key] = db.execute(
                 f"SELECT COUNT(*) FROM review_jobs j WHERE {task_view_clause(view)}"
             ).fetchone()[0]
-    return {"summary": summary, "todo": todo, "recent": search_jobs(store, {}, 1, 8)["items"]}
+    return {"summary": summary, "todo": todo, "conclusion_candidates": conclusions,
+            "recent": search_jobs(store, {}, 1, 8)["items"]}
 
 
 def search_premerge(store: Store, repository_id: int | None, mr_iid: int | None,

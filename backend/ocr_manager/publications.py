@@ -53,6 +53,7 @@ def next_publication(store: Store) -> dict[str, Any] | None:
     """只领取项目仍启用发布且任务已完成的待发项。"""
 
     with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("""SELECT p.*, j.repository_id, j.mr_iid, j.commit_sha,
             j.result_json FROM gitlab_publications p
             JOIN review_jobs j ON j.id=p.job_id

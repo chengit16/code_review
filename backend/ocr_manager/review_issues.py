@@ -76,17 +76,22 @@ def _fingerprint(comment: dict[str, Any]) -> str:
 
 
 def capture_findings(db: sqlite3.Connection, job: dict[str, Any],
-                     comments: list[Any]) -> None:
-    """在评审写回事务中记录出现；重审和重复调用不会复制同一次发现。"""
+                     comments: list[Any], *, recovery_id: int | None = None,
+                     comment_indices: list[int] | None = None) -> None:
+    """调用方持有写事务；独立批次仅捕获主身份索引，重审和重复写回不会复制出现。"""
 
+    selected = set(comment_indices) if comment_indices is not None else None
     for index, comment in enumerate(comments):
+        if selected is not None and index not in selected:
+            continue
         if (not isinstance(comment, dict) or not isinstance(comment.get("path"), str)
             or not isinstance(comment.get("content"), str)
             or not comment["path"].strip() or not comment["content"].strip()):
             continue
-        existing = db.execute("""SELECT 1 FROM review_issue_occurrences
-            WHERE job_id=? AND attempt_number=? AND comment_index=?""",
-                              (job["id"], job["attempts"], index)).fetchone()
+        source = f":r{recovery_id}" if recovery_id is not None else ""
+        identifier = f"j{job['id']}:a{job['attempts']}{source}:c{index}"
+        existing = db.execute("SELECT 1 FROM review_issue_occurrences WHERE finding_id=?",
+                              (identifier,)).fetchone()
         if existing:
             continue
         fingerprint = _fingerprint(comment)
@@ -116,13 +121,14 @@ def capture_findings(db: sqlite3.Connection, job: dict[str, Any],
         line = comment.get("start_line")
         db.execute("""INSERT INTO review_issue_occurrences
             (issue_id,job_id,attempt_number,comment_index,mr_iid,commit_sha,path,
-             start_line,content,severity,category) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+             start_line,content,severity,category,recovery_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
             (issue_id, job["id"], job["attempts"], index, job["mr_iid"],
              job["commit_sha"], comment["path"],
              line if isinstance(line, int) and not isinstance(line, bool) else None,
              comment["content"],
              comment.get("severity") if isinstance(comment.get("severity"), str) else None,
-             comment.get("category") if isinstance(comment.get("category"), str) else None))
+             comment.get("category") if isinstance(comment.get("category"), str) else None,
+             recovery_id))
 
 
 def backfill_existing_issues(db: sqlite3.Connection) -> None:

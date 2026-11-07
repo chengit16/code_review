@@ -6,6 +6,8 @@ export interface PremergeReview {
   id: number; repository_id: number; repository_name: string; mr_iid: number;
   head_sha: string; status: string; result_json: string | null;
   changed_files?: string | null; context_json?: string | null;
+  /** 安全执行策略快照；旧记录为空，不代表已经采用当前策略。 */
+  execution_policy?: string | null;
   error: string | null; created_at: string;
 }
 
@@ -48,7 +50,8 @@ export function parsePremergeResult(text: string | null) {
       [...completed, ...reused].every((path) => selected.includes(path)) &&
       Array.isArray(coverage.failed) && coverage.failed.length === 0 &&
       Array.isArray(coverage.waived) && coverage.waived.length === 0;
-    return { comments, valid: true, completeCoverage };
+    const excludedCount = object(raw.input_filter) && typeof raw.input_filter.excluded_count === "number" ? raw.input_filter.excluded_count : 0;
+    return { comments, valid: true, completeCoverage, excludedCount };
   } catch {
     return { comments, valid: false, completeCoverage: false };
   }

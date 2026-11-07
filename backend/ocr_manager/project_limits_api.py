@@ -19,13 +19,14 @@ class ProjectLimits(BaseModel):
     timeout_seconds: int | None = Field(None, ge=60, le=14400)
     max_files: int | None = Field(None, ge=1, le=5000)
     max_tokens_budget: int | None = Field(None, ge=1000, le=100000000)
+    newline_filter_enabled: bool = False
 
 
 def register_project_limits(app: FastAPI, store: Store, admin: Any) -> None:
     """模型配置可独立维护，项目只保存引用和审查上限。"""
 
     @app.get("/api/repositories/{repository_id}/limits", dependencies=[admin])
-    def read(repository_id: int) -> dict[str, int | None]:
+    def read(repository_id: int) -> dict[str, int | bool | None]:
         """返回项目当前覆盖值，不回显模型凭据。"""
 
         if store.get_repository(repository_id) is None:
@@ -33,7 +34,7 @@ def register_project_limits(app: FastAPI, store: Store, admin: Any) -> None:
         return get_limits(store, repository_id)
 
     @app.put("/api/repositories/{repository_id}/limits", dependencies=[admin])
-    def save(repository_id: int, payload: ProjectLimits) -> dict[str, int | None]:
+    def save(repository_id: int, payload: ProjectLimits) -> dict[str, int | bool | None]:
         """队列运行中拒绝改动，避免任务执行时的快照和参数分离。"""
 
         with store.connection() as db:
@@ -47,15 +48,19 @@ def register_project_limits(app: FastAPI, store: Store, admin: Any) -> None:
             busy = db.execute("""SELECT EXISTS(SELECT 1 FROM review_jobs WHERE repository_id=?
                               AND status IN ('queued','running')) OR EXISTS(
                               SELECT 1 FROM merge_events WHERE repository_id=?
+                              AND status IN ('queued','running')) OR EXISTS(
+                              SELECT 1 FROM premerge_reviews WHERE repository_id=?
                               AND status IN ('queued','running'))""",
-                              (repository_id, repository_id)).fetchone()[0]
+                              (repository_id, repository_id, repository_id)).fetchone()[0]
             if busy:
                 raise HTTPException(409, "项目队列运行期间不能修改评审参数")
             db.execute("""INSERT INTO project_review_limits
-                       (repository_id,model_profile_id,timeout_seconds,max_files,max_tokens_budget)
-                       VALUES(?,?,?,?,?) ON CONFLICT(repository_id) DO UPDATE SET
+                       (repository_id,model_profile_id,timeout_seconds,max_files,max_tokens_budget,
+                        newline_filter_enabled)
+                       VALUES(?,?,?,?,?,?) ON CONFLICT(repository_id) DO UPDATE SET
                        model_profile_id=excluded.model_profile_id,
                        timeout_seconds=excluded.timeout_seconds,max_files=excluded.max_files,
-                       max_tokens_budget=excluded.max_tokens_budget""",
+                       max_tokens_budget=excluded.max_tokens_budget,
+                       newline_filter_enabled=excluded.newline_filter_enabled""",
                        (repository_id, *payload.model_dump().values()))
         return get_limits(store, repository_id)

@@ -62,7 +62,7 @@ test("百练模型单价配置与评审详情用量", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "模型用量" })).toBeVisible();
   await expect(page.getByText("500,000")).toBeVisible();
   await expect(page.getByText("250,000")).toBeVisible();
-  await expect(page.getByText("¥3.0000")).toBeVisible();
+  await expect(page.getByText("¥3.0000", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByText("历史报告与对比", { exact: true }).first().click();
@@ -90,11 +90,20 @@ test("告警设置布局与管理操作分页", async ({ page }) => {
   await page.screenshot({ path: "test-results/operations-mobile.png", fullPage: true });
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/settings");
-  await expect(page.getByLabel("管理操作下一页")).toBeEnabled();
-  await page.getByLabel("管理操作下一页").click();
-  await expect(page.getByText(/第 2 \/ 2 页/)).toBeVisible();
-  await expect(page.getByLabel("管理操作下一页")).toBeDisabled();
+  await page.goto("/operations");
+  const auditPages = page.getByLabel("审计日志分页");
+  await expect(auditPages.getByRole("button", { name: "下一页", exact: true })).toBeEnabled();
+  // 同一隔离库会积累其他用例的管理审计，不能将总页数固定为两页。
+  const lastPage = Number(await auditPages.getByRole("spinbutton", { name: "跳转页码" }).getAttribute("max"));
+  expect(lastPage).toBeGreaterThanOrEqual(2);
+  await auditPages.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(auditPages.getByText(`第 2 / ${lastPage} 页`, { exact: false })).toBeVisible();
+  if (lastPage > 2) {
+    await auditPages.getByRole("spinbutton", { name: "跳转页码" }).fill(String(lastPage));
+    await auditPages.getByRole("button", { name: "跳转", exact: true }).click();
+    await expect(auditPages.getByText(`第 ${lastPage} / ${lastPage} 页`, { exact: false })).toBeVisible();
+  }
+  await expect(auditPages.getByRole("button", { name: "下一页", exact: true })).toBeDisabled();
   await page.screenshot({ path: "test-results/audit-pagination-desktop.png", fullPage: true });
 });
 
@@ -233,7 +242,7 @@ test("详情连续导航跨页保留筛选、刷新与首尾边界", async ({ pa
   await expect(page.getByRole("heading", { name: "任务 #4", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "返回任务列表" }).click();
   await expect(page).toHaveURL(`/jobs${search}`);
-  await expect(page.getByRole("link", { name: "查看任务 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "任务 #2", exact: true })).toBeVisible();
 });
 
 test("账号模式登录与只读界面", async ({ page }) => {

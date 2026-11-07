@@ -25,13 +25,16 @@ ALTER TABLE review_jobs ADD COLUMN usage_json TEXT;
 def get_limits(store: Store, repository_id: int | None) -> dict[str, int | None]:
     """未指定项目时返回无限制配置，连接检查不会继承任意项目。"""
 
-    keys = ("model_profile_id", "timeout_seconds", "max_files", "max_tokens_budget")
+    keys = ("model_profile_id", "timeout_seconds", "max_files", "max_tokens_budget",
+            "newline_filter_enabled")
     if repository_id is None:
-        return dict.fromkeys(keys)
+        return dict.fromkeys(keys) | {"newline_filter_enabled": False}
     with store.connection() as db:
         row = db.execute("SELECT * FROM project_review_limits WHERE repository_id=?",
                          (repository_id,)).fetchone()
-        return {key: row[key] if row else None for key in keys}
+        return {key: (bool(row[key]) if row else False) if key == "newline_filter_enabled"
+                else row[key] if row else None
+                for key in keys}
 
 
 def apply_limits(settings: Settings, limits: dict[str, int | None]) -> Settings:
@@ -40,4 +43,5 @@ def apply_limits(settings: Settings, limits: dict[str, int | None]) -> Settings:
     return replace(settings, ocr_timeout_seconds=limits["timeout_seconds"] or
                    settings.ocr_timeout_seconds,
                    ocr_max_files=limits["max_files"] or 0,
-                   ocr_max_tokens_budget=limits["max_tokens_budget"] or 0)
+                   ocr_max_tokens_budget=limits["max_tokens_budget"] or 0,
+                   ocr_newline_filter_enabled=bool(limits.get("newline_filter_enabled", False)))

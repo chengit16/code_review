@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import uvicorn
 from cryptography.fernet import Fernet
-from ocr_manager.api import create_app
+from ocr_manager.api import FrontendFiles, create_app
 from ocr_manager.attempt_history import save_snapshot
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
@@ -26,6 +27,31 @@ def main() -> None:
         )
         app = create_app(settings)
         store = Store(settings.data_dir / "app.db")
+        if os.environ.get("OCR_BROWSER_CHAT_CAPTURE") == "1":
+            from chat_capture_browser_fixture import install
+
+            install(store, settings)
+            if frontend := os.environ.get("OCR_BROWSER_FRONTEND_DIST"):
+                app.router.routes[:] = [route for route in app.router.routes
+                                        if getattr(route, "name", None) != "frontend"]
+                app.mount("/", FrontendFiles(directory=frontend, html=True), name="frontend")
+            uvicorn.run(app, host="127.0.0.1", port=8791)
+            return
+        if os.environ.get("OCR_BROWSER_REVIEW_RECOVERY") == "1":
+            from recovery_browser_fixture import install
+
+            install(app, store, settings)
+            if frontend := os.environ.get("OCR_BROWSER_FRONTEND_DIST"):
+                app.router.routes[:] = [route for route in app.router.routes
+                                        if getattr(route, "name", None) != "frontend"]
+                app.mount("/", FrontendFiles(directory=frontend, html=True), name="frontend")
+            uvicorn.run(app, host="127.0.0.1", port=8791)
+            return
+        # 隔离构建目录仅用于浏览器测试，避免覆盖业务服务正在使用的 frontend/dist。
+        if frontend := os.environ.get("OCR_BROWSER_FRONTEND_DIST"):
+            app.router.routes[:] = [route for route in app.router.routes
+                                    if getattr(route, "name", None) != "frontend"]
+            app.mount("/", FrontendFiles(directory=frontend, html=True), name="frontend")
         repository_id = store.add_repository({
             "name": "验收任务项目", "gitlab_url": "https://gitlab.example.test",
             "project_id": 999, "remote_url": "https://gitlab.example.test/team/fixture.git",

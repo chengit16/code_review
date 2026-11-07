@@ -1,5 +1,7 @@
 /** @description 管理 API 的统一认证、错误映射和取消边界。 */
 
+import { createRequestSignal } from "./requestSignal";
+
 /** 服务端拒绝或网络边界失败时保留状态、稳定错误码和请求关联信息。 */
 export class ApiError extends Error {
   /** 创建统一 API 错误；status 为 0 表示请求未收到 HTTP 响应。 */
@@ -22,13 +24,11 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const timeout = AbortSignal.timeout(30000);
-  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-  let response: Response;
+  const request = createRequestSignal(options.signal);
   try {
-    response = await fetch(path, {
+    const response = await fetch(path, {
       ...options,
-      signal,
+      signal: request.signal,
       headers: {
         ...(token.startsWith("session:") ? { Authorization: `Bearer ${token.slice(8)}` } :
           token ? { "X-Admin-Token": token } : {}),
@@ -36,12 +36,20 @@ export async function apiRequest<T>(
         ...options.headers,
       },
     });
+    return await readResponse<T>(response);
   } catch (error) {
     if (options.signal?.aborted) throw error;
-    if (timeout.aborted) throw new ApiError(0, "请求超时，请检查服务状态后重试。", "timeout");
+    if (request.hasTimedOut()) throw new ApiError(0, "请求超时，请检查服务状态后重试。", "timeout");
+    if (error instanceof ApiError) throw error;
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "无法连接管理服务，请确认服务已启动后重试。", "network");
+  } finally {
+    // 成功、失败和取消都释放资源；超时也覆盖响应体读取，不留下后台定时器。
+    request.dispose();
   }
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     // 网关错误不能说明写请求是否已落库，不自动重试，避免重复创建配置。
     let message = response.status === 502

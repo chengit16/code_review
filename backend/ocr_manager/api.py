@@ -23,9 +23,12 @@ from starlette.staticfiles import StaticFiles
 
 from ocr_manager.alerts_api import register_alerts
 from ocr_manager.auth import register_auth, session_identity, users_mode
+from ocr_manager.chat_capture_api import register_chat_capture
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.event_search import register_event_search
 from ocr_manager.gitlab import project_web_url
+from ocr_manager.improvement_themes_api import register_improvement_themes
+from ocr_manager.improvements_api import register_improvements
 from ocr_manager.model_catalog import fetch_model_catalog
 from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.operations_api import register_operations
@@ -37,8 +40,11 @@ from ocr_manager.premerge import (
 )
 from ocr_manager.project_limits_api import register_project_limits
 from ocr_manager.publications import register_publications
+from ocr_manager.review_contracts import TaskExecutionResponse
 from ocr_manager.review_effectiveness import register_effectiveness
+from ocr_manager.review_finding_api import register_finding_api
 from ocr_manager.review_issues import register_review_issues
+from ocr_manager.review_recovery_api import register_recovery_api
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import register_task_control
@@ -379,6 +385,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "connection-checks": "connection_check",
                     "events": "merge_event",
                     "jobs": "review_job",
+                    "review-recoveries": "review_recovery",
+                    "recovery-deliveries": "recovery_delivery",
+                    "improvements": "project_improvement",
+                    "improvement-themes": "improvement_theme",
                 }.get(resource, "management")
                 params = request.path_params
                 object_id = next(
@@ -386,7 +396,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         params[name]
                         for name in (
                             "repository_id", "target_id", "event_id", "job_id",
-                            "profile_id", "object_id",
+                            "profile_id", "object_id", "record_id", "theme_id", "recovery_id",
+                            "delivery_id",
                         )
                         if name in params
                     ),
@@ -437,6 +448,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_auth(app, store, require_admin)
     register_operations(app, store, config, admin)
     register_task_control(app, store, config, admin)
+    register_recovery_api(app, store, config, admin)
+    register_finding_api(app, store, config, admin)
     register_alerts(app, store, admin)
     register_project_limits(app, store, admin)
     register_event_search(app, store, admin)
@@ -444,6 +457,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_review_issues(app, store, admin)
     register_effectiveness(app, store, admin)
     register_premerge(app, store, admin)
+    register_improvements(app, store, admin, config)
+    register_improvement_themes(app, store, admin)
+    register_chat_capture(app, store, admin)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
@@ -1051,7 +1067,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         return store.list_jobs()
 
-    @app.get("/api/jobs/{job_id}", dependencies=[admin])
+    @app.get("/api/jobs/{job_id}", dependencies=[admin], response_model=TaskExecutionResponse)
     def get_job(job_id: int) -> dict[str, Any]:
         """获取评审详情及原始机器可读结果。"""
 
@@ -1074,6 +1090,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             attempt.pop("result_json", None)
             attempt.pop("result_path", None)
             attempt.pop("config_snapshot", None)
+            attempt.pop("historical_failure_analysis", None)
         job.pop("config_snapshot", None)
         return job
 

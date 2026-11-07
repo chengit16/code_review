@@ -113,7 +113,8 @@ def test_ocr_receives_global_fallback_and_project_override(
             return 0, ""
         output = Path(command[command.index("--output") + 1])
         if "--preview" in command:
-            output.write_text(json.dumps({"reviewable_count": 1, "files": [{}]}), encoding="utf-8")
+            output.write_text(json.dumps({"reviewable_count": 1, "files": [
+                {"path": "main.py", "will_review": True}]}), encoding="utf-8")
         else:
             output.write_text(json.dumps({
                 "manifest": {

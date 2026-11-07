@@ -55,6 +55,9 @@ for (const width of [1280, 390, 320]) {
     await page.getByRole("button", { name: "取消", exact: true }).click();
     await page.getByRole("button", { name: "编辑 验收任务项目" }).click();
     await expectCheckboxAlignment(page);
+    await page.getByRole("tab", { name: "评审参数" }).click();
+    await expect(page.getByRole("checkbox", { name: "自动过滤纯换行文件" })).toBeVisible();
+    await expectCheckboxAlignment(page);
     await page.getByRole("tab", { name: "发布审查" }).click();
     await expect(page.getByRole("checkbox", { name: "包含 GitLab MR 描述" })).toBeVisible();
     await expectCheckboxAlignment(page);

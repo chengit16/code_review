@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException, Query
 
+from ocr_manager.review_feedback_queries import CURRENT_FEEDBACK
+
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
@@ -45,6 +47,7 @@ def effectiveness_snapshot(store: Store, repository_id: int | None,
             JOIN review_issues i ON i.id=o.issue_id
             LEFT JOIN gitlab_publications p ON p.job_id=o.job_id
               AND p.attempt_number=o.attempt_number AND p.comment_index=o.comment_index
+              AND o.recovery_id IS NULL
             WHERE (? IS NULL OR i.repository_id=?) AND o.created_at>=?""",
             (*args, since)).fetchone()
         issues = db.execute(f"""SELECT COUNT(*) AS created,
@@ -57,10 +60,10 @@ def effectiveness_snapshot(store: Store, repository_id: int | None,
             AND status='ignored' AND closed_at>=?""", (*args, since)).fetchone()[0]
         open_now = db.execute(f"""SELECT COUNT(*) FROM review_issues WHERE {scope}
             AND status='open'""", args).fetchone()[0]
-        feedback = db.execute("""SELECT COUNT(*) AS marked,
+        feedback = db.execute(f"""SELECT COUNT(*) AS marked,
             SUM(CASE WHEN f.verdict='false_positive' THEN 1 ELSE 0 END) AS false_positive
-            FROM review_feedback f JOIN review_jobs j ON j.id=f.job_id
-            WHERE (? IS NULL OR j.repository_id=?) AND j.finished_at>=?""",
+            FROM ({CURRENT_FEEDBACK}) f
+            WHERE (? IS NULL OR f.repository_id=?) AND f.generated_at>=?""",
             (*args, since)).fetchone()
         categories = [dict(row) for row in db.execute("""SELECT
             COALESCE(NULLIF(o.category,''),'未分类') AS category,
@@ -91,6 +94,7 @@ def effectiveness_snapshot(store: Store, repository_id: int | None,
             (SELECT COUNT(*) FROM review_issue_occurrences o JOIN review_issues i
               ON i.id=o.issue_id JOIN gitlab_publications p ON p.job_id=o.job_id
               AND p.attempt_number=o.attempt_number AND p.comment_index=o.comment_index
+              AND o.recovery_id IS NULL
               WHERE i.repository_id=r.id AND o.created_at>=? AND p.status='sent')
               AS published
             FROM repositories r WHERE (? IS NULL OR r.id=?) ORDER BY r.name,r.id""",

@@ -8,6 +8,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ocr_manager.execution_guard import resource_fence
+
 
 @contextmanager
 def artifact_lock(data_dir: Path, job_id: int, blocking: bool = False) -> Iterator[bool]:
@@ -23,6 +25,7 @@ def artifact_lock(data_dir: Path, job_id: int, blocking: bool = False) -> Iterat
             yield False
         else:
             # 文件描述符在事务和目录操作结束后关闭，进程退出也会自动释放。
-            yield True
+            with resource_fence(descriptor):
+                yield True
     finally:
         os.close(descriptor)

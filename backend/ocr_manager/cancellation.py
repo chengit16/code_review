@@ -6,6 +6,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from ocr_manager.execution_guard import check_stopping
+
 _check: ContextVar[Callable[[], bool] | None] = ContextVar("review_cancellation", default=None)
 
 
@@ -16,6 +18,7 @@ class ReviewCancelled(Exception):
 def check_cancellation() -> None:
     """Worker 在外部调用边界检查，子进程执行期间也定期调用。"""
 
+    check_stopping()
     checker = _check.get()
     if checker and checker():
         raise ReviewCancelled("用户请求停止评审")

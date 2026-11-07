@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
+
+from ocr_manager.execution_guard import run_git
+from ocr_manager.repository_lock import repository_lock
 
 
 class GitRepository:
@@ -23,15 +25,12 @@ class GitRepository:
     def _git(self, *args: str, cwd: Path | None = None) -> str:
         """执行有截止时间的 Git 查询，保留可诊断的 stderr。"""
 
-        result = subprocess.run(
+        result = run_git(
             ["git", "-c", "core.hooksPath=/dev/null", *args],
             cwd=cwd or self.path,
             env=self._git_environment(with_token=args[0] in {"clone", "fetch"}),
-            capture_output=True,
-            text=True,
             # 首次克隆需要完整历史；大仓库不能沿用本地 Git 查询的短超时。
             timeout=self.FETCH_TIMEOUT_SECONDS if args[0] in {"clone", "fetch"} else 90,
-            check=False,
         )
         if result.returncode:
             raise RuntimeError(f"Git 命令失败：{result.stderr.strip()[:500]}")
@@ -65,7 +64,7 @@ class GitRepository:
         }
         if with_token and self.gitlab_token and self.remote_url.startswith("https://"):
             # Git 通过受控 askpass 读取令牌；URL、命令参数和持久 Git 配置均不包含明文。
-            helper = self.path.parent / ".gitlab-askpass"
+            helper = self.path.parent / f".gitlab-askpass-{self.path.name}"
             helper.parent.mkdir(parents=True, exist_ok=True)
             helper.write_text(
                 '#!/bin/sh\ncase "$1" in *Username*) printf "%s" oauth2 ;; '
@@ -92,6 +91,10 @@ class GitRepository:
     def fetch(self) -> None:
         """初次克隆或更新目标分支；历史必须完整才能比较 merge 父提交。"""
 
+        with repository_lock(self.path):
+            self._fetch()
+
+    def _fetch(self) -> None:
         if not (self.path / ".git").exists():
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._git(
@@ -105,6 +108,10 @@ class GitRepository:
     def fetch_mr_head(self, mr_iid: int, expected_sha: str) -> None:
         """只从已配置项目的 MR 引用拉取，且核对 GitLab 当前版本，拒绝竞态中的旧头。"""
 
+        with repository_lock(self.path):
+            self._fetch_mr_head(mr_iid, expected_sha)
+
+    def _fetch_mr_head(self, mr_iid: int, expected_sha: str) -> None:
         if mr_iid <= 0:
             raise ValueError("MR IID 无效")
         expected_sha = self._commit_sha(expected_sha)
@@ -153,7 +160,7 @@ class GitRepository:
         """确保 webhook 或 MR API 指向的提交属于配置目标分支。"""
 
         sha = self._commit_sha(sha)
-        result = subprocess.run(
+        result = run_git(
             [
                 "git",
                 "-c",
@@ -165,9 +172,7 @@ class GitRepository:
             ],
             cwd=self.path,
             env=self._git_environment(),
-            capture_output=True,
             timeout=30,
-            check=False,
         )
         if result.returncode not in (0, 1):
             raise RuntimeError("无法验证提交与目标分支的关系")
@@ -241,7 +246,8 @@ class GitRepository:
 
         sha = self._commit_sha(sha)
         target.parent.mkdir(parents=True, exist_ok=True)
-        self._git("worktree", "add", "--detach", str(target), sha)
+        with repository_lock(self.path):
+            self._git("worktree", "add", "--detach", str(target), sha)
 
     def changed_files(self, sha: str) -> list[dict[str, str | int | None]]:
         """仅取路径及增删行数；合并提交以第一父提交为基准，二进制数量为空。"""
@@ -260,5 +266,6 @@ class GitRepository:
     def remove_checkout(self, target: Path) -> None:
         """评审结束后释放 worktree，原始结果工件仍保留。"""
 
-        if target.exists():
-            self._git("worktree", "remove", "--force", str(target))
+        with repository_lock(self.path):
+            if target.exists():
+                self._git("worktree", "remove", "--force", str(target))

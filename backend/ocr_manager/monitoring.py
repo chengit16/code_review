@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from ocr_manager.artifact_lock import artifact_lock
+from ocr_manager.review_conclusions import candidate_counts
+from ocr_manager.review_effective import status_sql
+from ocr_manager.review_metrics import performance_metrics
+from ocr_manager.scheduler_state import scheduler_snapshot
 from ocr_manager.storage import Store
 
 
@@ -16,8 +20,10 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
     """由 SQLite 事实计算指标，备份只检查最近副本的完整性。"""
 
     with store.connection() as db:
+        db.execute("BEGIN")
         queue = [dict(row) for row in db.execute(
-            """SELECT status, COUNT(*) AS count FROM review_jobs GROUP BY status"""
+            f"""SELECT {status_sql()} AS status, COUNT(*) AS count FROM review_jobs j
+            GROUP BY {status_sql()}"""
         )]
         oldest = db.execute(
             """SELECT MIN(created_at) FROM review_jobs WHERE status IN ('queued','running')"""
@@ -27,6 +33,7 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
               (julianday(finished_at)-julianday(started_at))*86400
             ) AS average_seconds FROM review_jobs
             WHERE started_at IS NOT NULL AND finished_at IS NOT NULL
+            AND status='complete'
             AND created_at>=datetime('now','-7 days')"""
         ).fetchone()
         retries = db.execute(
@@ -35,9 +42,17 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
         delivery = [dict(row) for row in db.execute(
             "SELECT status, COUNT(*) AS count FROM notification_deliveries GROUP BY status"
         )]
+        recovery_deliveries = dict(db.execute(
+            "SELECT status,count(*) FROM review_recovery_deliveries GROUP BY status").fetchall())
+        recovery_jobs = dict(db.execute(
+            "SELECT status,count(*) FROM review_recoveries GROUP BY status").fetchall())
+        execution_jobs = dict(db.execute(
+            "SELECT status,count(*) FROM review_jobs GROUP BY status").fetchall())
         events = [dict(row) for row in db.execute(
             "SELECT status, COUNT(*) AS count FROM merge_events GROUP BY status"
         )]
+        performance = performance_metrics(db)
+        conclusions = candidate_counts(db)
         orphan_count = db.execute("SELECT COUNT(*) FROM orphan_artifacts").fetchone()[0]
     disk = shutil.disk_usage(data_dir)
     snapshots = sorted(backup_dir.glob("app-*.db"), key=lambda path: path.stat().st_mtime,
@@ -60,6 +75,8 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
         alerts.append("存在失败或部分完成的评审")
     if delivery_map.get("failed", 0):
         alerts.append("存在飞书投递失败")
+    if recovery_deliveries.get("failed", 0):
+        alerts.append("存在补审补充通知失败，仅需重试通知")
     if not backup_ok or age is None or age > 48 * 3600:
         alerts.append("最近备份缺失、损坏或超过 48 小时")
     if disk.free < 2 * 1024**3:
@@ -71,8 +88,14 @@ def operations_snapshot(store: Store, data_dir: Path, backup_dir: Path) -> dict[
                 alerts.append("最早任务已等待超过 30 分钟")
         except ValueError:
             alerts.append("队列时间格式无效")
-    return {"jobs": queue_map, "events": {r["status"]: r["count"] for r in events},
+    return {"scheduler": scheduler_snapshot(store),
+            "conclusion_candidates": conclusions,
+            "execution_jobs": execution_jobs, "recovery_jobs": recovery_jobs,
+            "recovery_deliveries": recovery_deliveries,
+            "duration_scope": "initial_complete_execution",
+            "jobs": queue_map, "events": {r["status"]: r["count"] for r in events},
             "deliveries": delivery_map, "retry_count": retries,
+            "performance_7d": performance,
             "average_review_seconds": round(durations["average_seconds"] or 0),
             "review_count_7d": durations["count"], "oldest_pending_at": oldest,
             "disk_free_bytes": disk.free, "orphan_artifacts": orphan_count, "backup": {
@@ -93,7 +116,10 @@ def eligible_artifacts(
             AND j.status IN ('complete','partial','failed','skipped')
             AND (? IS NULL OR j.id=?)
             AND NOT EXISTS (SELECT 1 FROM notification_deliveries d
-              WHERE d.job_id=j.id AND d.status IN ('pending','sending'))""",
+              WHERE d.job_id=j.id AND d.status IN ('pending','sending'))
+            AND NOT EXISTS (SELECT 1 FROM review_recoveries b WHERE b.job_id=j.id
+              AND (b.status='running' OR (b.status='queued'
+                AND b.created_at>=datetime('now','-7 days'))))""",
             (cutoff, job_id, job_id),
         ).fetchall()
     root = data_dir / "runs"

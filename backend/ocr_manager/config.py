@@ -33,6 +33,10 @@ class Settings:
     ocr_concurrency: int = 4
     ocr_effort: str = "low"
     review_language: str = "zh-CN"
+    ocr_newline_filter_enabled: bool = False
+    improvement_log_path: str = ""
+    review_recovery_max_batches: int = 3
+    review_recovery_max_total_tokens: int = 100_000
 
     @property
     def webhook_base_url(self) -> str:
@@ -128,6 +132,13 @@ def load_settings() -> Settings:
     ocr_effort = setting("OCR_APP_OCR_EFFORT", "low").strip().lower()
     if ocr_effort not in {"low", "medium", "high"}:
         raise RuntimeError("OCR_APP_OCR_EFFORT 必须是 low、medium 或 high")
+    try:
+        recovery_batches = int(setting("OCR_APP_REVIEW_RECOVERY_MAX_BATCHES", "3"))
+        recovery_tokens = int(setting("OCR_APP_REVIEW_RECOVERY_MAX_TOTAL_TOKENS", "100000"))
+    except ValueError as error:
+        raise RuntimeError("补审批次数和总预算必须是整数") from error
+    if not 1 <= recovery_batches <= 10 or not 1 <= recovery_tokens <= 100_000_000:
+        raise RuntimeError("补审批次上限为 1 至 10，总 Token 上限须为正数")
     return Settings(
         data_dir=Path(setting("OCR_APP_DATA_DIR", ".local-data")).resolve(),
         admin_token=admin_token,
@@ -147,4 +158,7 @@ def load_settings() -> Settings:
         ocr_concurrency=ocr_concurrency,
         ocr_effort=ocr_effort,
         review_language=review_language,
+        improvement_log_path=setting("OCR_APP_IMPROVEMENT_LOG_PATH"),
+        review_recovery_max_batches=recovery_batches,
+        review_recovery_max_total_tokens=recovery_tokens,
     )

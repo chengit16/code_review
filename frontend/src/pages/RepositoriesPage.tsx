@@ -7,6 +7,7 @@ import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, Repository, RepositoryInput, RepositoryUpdateInput } from "../api/types";
+import { copyText } from "../ui/clipboard";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
@@ -158,11 +159,10 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     update.mutate({ id: editing.id, input });
   }
 
-  function copyCallback(url: string) {
-    setCopyError("");
-    void navigator.clipboard.writeText(url)
-      .then(() => setCallbackCopied(true))
-      .catch(() => setCopyError("复制失败，请手动选择回调地址"));
+  async function copyCallback(url: string) {
+    setCopyError(""); setCallbackCopied(false);
+    try { await copyText(url); setCallbackCopied(true); }
+    catch { setCopyError("复制失败，请手动选择回调地址"); }
   }
 
   function rotateToken(repo: Repository) {
@@ -180,7 +180,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   return <div className="page"><UnsavedChangesGuard dirty={editDirty || (open && JSON.stringify(form) !== JSON.stringify(initial))} /><PageHeader title="项目配置" subtitle="GitLab 仓库、Webhook 与评审开关" actions={
     <button className="button button-primary" type="button" onClick={() => setOpen(true)}><Plus size={17} />添加仓库</button>
   } /><QueryState loading={query.isLoading} error={query.error} />{!query.isLoading && !query.error && <>
-    {callbackUrl && <div className="webhook-callback"><span>GitLab 回调地址</span><input className="mono" aria-label="GitLab 回调地址" value={callbackUrl} readOnly onFocus={(event) => event.target.select()} /><button className="button button-secondary" type="button" onClick={() => copyCallback(callbackUrl)}>{callbackCopied ? <Check size={16} /> : <Copy size={16} />}{callbackCopied ? "已复制" : "复制地址"}</button></div>}
+    {callbackUrl && <div className="webhook-callback"><span>GitLab 回调地址</span><input className="mono" aria-label="GitLab 回调地址" value={callbackUrl} readOnly onFocus={(event) => event.target.select()} /><button className="button button-secondary" type="button" onClick={() => void copyCallback(callbackUrl)}>{callbackCopied ? <Check size={16} /> : <Copy size={16} />}{callbackCopied ? "已复制" : "复制地址"}</button></div>}
     {copyError && <p className="form-error" role="alert">{copyError}</p>}
     <section className="section"><div className="table-scroll responsive-table"><table><thead><tr><th>仓库</th><th>项目 ID</th><th>目标分支</th><th>接入状态</th><th>飞书配置</th><th>Webhook Token</th><th>接收</th><th aria-label="操作" /></tr></thead><tbody>
       {query.data?.map((repo) => <tr key={repo.id}><td data-label="仓库"><strong>{repo.name}</strong><small className="table-sub">{repo.path_with_namespace || repo.gitlab_url}</small></td><td data-label="项目 ID" className="mono">{repo.project_id}</td><td data-label="目标分支" className="mono">{repo.target_branch}</td><td data-label="接入状态">{({ ready: "已验证", needs_check: "待重新测试", paused: "已暂停" } as Record<string, string>)[readiness.data?.find((item) => item.repository_id === repo.id)?.status ?? "needs_check"]}</td><td data-label="飞书配置">{targets.data?.find((target) => target.id === repo.feishu_target_id)?.name ?? "未配置"}</td><td data-label="Webhook Token"><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /><small className="table-sub">最近验证 {formatTime(repo.last_webhook_at)}</small></td><td data-label="接收"><label className="toggle-hit"><input className="repo-toggle" type="checkbox" checked={Boolean(repo.enabled)} disabled={toggle.isPending} onChange={(event) => toggle.mutate({ id: repo.id, enabled: event.target.checked })} aria-label={`${repo.name} 接收 webhook`} title={repo.enabled ? "暂停接收" : "恢复接收"} /></label></td><td data-label="操作"><div className="row-actions"><button className="icon-button" type="button" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></button><button className="icon-button icon-button-danger" type="button" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></button></div></td></tr>)}

@@ -318,8 +318,8 @@ def test_preview_and_review_share_one_deadline(
     """预览耗时会扣减正式评审预算，不能让一次任务使用两倍超时。"""
 
     remaining: list[float] = []
-    ticks = iter((100.0, 100.0, 105.0))
-    monkeypatch.setattr(ocr.time, "monotonic", lambda: next(ticks))
+    now = [100.0]
+    monkeypatch.setattr(ocr.time, "monotonic", lambda: now[0])
 
     def fake_run(
         command: list[str], _env: dict[str, str], _checkout: Path, timeout: float
@@ -330,9 +330,11 @@ def test_preview_and_review_share_one_deadline(
         output = Path(command[command.index("--output") + 1])
         if "--preview" in command:
             output.write_text(
-                json.dumps({"reviewable_count": 1, "files": [{"path": "main.py"}]}),
+                json.dumps({"reviewable_count": 1,
+                            "files": [{"path": "main.py", "will_review": True}]}),
                 encoding="utf-8",
             )
+            now[0] += 5
         else:
             output.write_text(json.dumps(result("complete")), encoding="utf-8")
         return 0, ""

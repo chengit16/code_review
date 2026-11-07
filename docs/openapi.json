@@ -33,6 +33,34 @@
         "title": "AlertConfig",
         "type": "object"
       },
+      "ArchiveChange": {
+        "additionalProperties": false,
+        "description": "显式指定目标状态及读取版本；重复或过期请求拒绝，不重复追加历史。",
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "archived",
+          "expected_version",
+          "reason"
+        ],
+        "title": "ArchiveChange",
+        "type": "object"
+      },
       "BackfillRequest": {
         "additionalProperties": false,
         "description": "时间范围最多 31 天，避免一个运维命令占用 Worker 太久。",
@@ -75,6 +103,630 @@
         "title": "BatchIds",
         "type": "object"
       },
+      "BudgetAuthorization": {
+        "additionalProperties": false,
+        "description": "仅管理员显式提高或调整单任务上限；保存不是付费执行，不修改源快照约束。",
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "max_batches": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Batches",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "maximum": 100000000.0,
+            "minimum": 1.0,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "max_batches",
+          "max_total_tokens",
+          "reason"
+        ],
+        "title": "BudgetAuthorization",
+        "type": "object"
+      },
+      "BudgetGate": {
+        "description": "只公开经过算术及用量复核的整数，不透传 warnings 原文、路径或模型响应。",
+        "properties": {
+          "budget_tokens": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000.0,
+            "title": "Budget Tokens",
+            "type": "integer"
+          },
+          "group_estimate_tokens": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000.0,
+            "title": "Group Estimate Tokens",
+            "type": "integer"
+          },
+          "projected_tokens": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000.0,
+            "title": "Projected Tokens",
+            "type": "integer"
+          },
+          "used_tokens": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Used Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used_tokens",
+          "group_estimate_tokens",
+          "projected_tokens",
+          "budget_tokens"
+        ],
+        "title": "BudgetGate",
+        "type": "object"
+      },
+      "ChatBinding": {
+        "description": "显式绑定及后台事实；新鲜度由页面按最近检查时间判断，不能仅看 enabled。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error_code": {
+            "title": "Last Error Code",
+            "type": "string"
+          },
+          "last_message_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message Ms"
+          },
+          "last_scan_count": {
+            "title": "Last Scan Count",
+            "type": "integer"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "since_ms": {
+            "title": "Since Ms",
+            "type": "integer"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "thread_id",
+          "enabled",
+          "version",
+          "since_ms",
+          "last_checked_at",
+          "last_success_at",
+          "last_error_code",
+          "last_message_ms",
+          "last_scan_count"
+        ],
+        "title": "ChatBinding",
+        "type": "object"
+      },
+      "ChatBindingChange": {
+        "additionalProperties": false,
+        "description": "仅暂停或恢复已有授权，不支持通过 HTTP 指定新路径或新会话。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "expected_version"
+        ],
+        "title": "ChatBindingChange",
+        "type": "object"
+      },
+      "ChatEvent": {
+        "description": "用户内容只返回有界脱敏摘要；助手仅保存答复存在的元数据，不作为验收事实。",
+        "properties": {
+          "binding_id": {
+            "title": "Binding Id",
+            "type": "integer"
+          },
+          "classification": {
+            "enum": [
+              "issue",
+              "pending",
+              "progress"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "improvement_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improvement Id"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_ms": {
+            "title": "Source Ms",
+            "type": "integer"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "binding_id",
+          "turn_id",
+          "message_id",
+          "role",
+          "classification",
+          "excerpt",
+          "source_ms",
+          "improvement_id",
+          "version",
+          "created_at"
+        ],
+        "title": "ChatEvent",
+        "type": "object"
+      },
+      "ChatEventLink": {
+        "additionalProperties": false,
+        "description": "显式建立或解除关联；空关联与 promote 区分，错误关联可回退且保留审计。",
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "improvement_id": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improvement Id"
+          },
+          "promote": {
+            "default": false,
+            "title": "Promote",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ChatEventLink",
+        "type": "object"
+      },
+      "ChatInbox": {
+        "description": "绑定状态、待核实计数和有界分页；后台未运行也必须可见。",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ChatBinding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChatEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bindings",
+          "items",
+          "pending",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ChatInbox",
+        "type": "object"
+      },
+      "ConclusionCoverage": {
+        "description": "覆盖数量来自持久化集合；历史缺失时整个覆盖对象为空而非伪造零。",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "reused": {
+            "title": "Reused",
+            "type": "integer"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "integer"
+          },
+          "waived": {
+            "title": "Waived",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selected",
+          "completed",
+          "reused",
+          "failed",
+          "waived"
+        ],
+        "title": "ConclusionCoverage",
+        "type": "object"
+      },
+      "ConclusionDocument": {
+        "description": "管理员只读版本，不透出工件、配置或外部正文，不触发反馈/问题/投递副作用。",
+        "properties": {
+          "consumer_integration_ready": {
+            "default": false,
+            "title": "Consumer Integration Ready",
+            "type": "boolean"
+          },
+          "execution_usage": {
+            "$ref": "#/components/schemas/CumulativeUsage"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ConclusionFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "input_filter_excluded_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Filter Excluded Count"
+          },
+          "is_current_source": {
+            "title": "Is Current Source",
+            "type": "boolean"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "initial",
+              "candidate",
+              "effective"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "platform.review-conclusion/v1",
+            "default": "platform.review-conclusion/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "usage_through_recovery_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Through Recovery Id"
+          },
+          "version": {
+            "$ref": "#/components/schemas/ConclusionVersion"
+          }
+        },
+        "required": [
+          "job_id",
+          "version",
+          "role",
+          "is_current_source",
+          "findings",
+          "input_filter_excluded_count",
+          "execution_usage",
+          "usage_through_recovery_id"
+        ],
+        "title": "ConclusionDocument",
+        "type": "object"
+      },
+      "ConclusionFinding": {
+        "description": "只读发现白名单；finding_id 供后续版本化反馈使用，不能提交到旧索引接口。",
+        "properties": {
+          "also_seen_in": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOrigin"
+            },
+            "title": "Also Seen In",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "end_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Line"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FindingOrigin"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "start_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Line"
+          }
+        },
+        "required": [
+          "finding_id",
+          "origin",
+          "also_seen_in",
+          "path",
+          "content"
+        ],
+        "title": "ConclusionFinding",
+        "type": "object"
+      },
+      "ConclusionOverview": {
+        "description": "所有消费者使用同一选择规则；仅经过完整验证提升的候选标记为有效。",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consumer_integration_ready": {
+            "default": false,
+            "title": "Consumer Integration Ready",
+            "type": "boolean"
+          },
+          "effective": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "initial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "initial",
+          "candidate"
+        ],
+        "title": "ConclusionOverview",
+        "type": "object"
+      },
+      "ConclusionVersion": {
+        "description": "revision=0 是根尝试，正数是候选版本；不改变任务执行状态。",
+        "properties": {
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finding_count": {
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "recovery_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Id"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "terminal_state": {
+            "title": "Terminal State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_attempt",
+          "revision",
+          "terminal_state",
+          "coverage",
+          "finding_count"
+        ],
+        "title": "ConclusionVersion",
+        "type": "object"
+      },
       "ConnectionCheckInput": {
         "additionalProperties": false,
         "description": "诊断目标由服务端配置决定，浏览器不能传入外部 URL。",
@@ -108,6 +760,312 @@
         "title": "ConnectionCheckInput",
         "type": "object"
       },
+      "CumulativeUsage": {
+        "description": "逐次历史单价的累计及完整性，未知用量不填零。",
+        "properties": {
+          "cost_complete": {
+            "title": "Cost Complete",
+            "type": "boolean"
+          },
+          "known_costs": {
+            "items": {
+              "$ref": "#/components/schemas/KnownCost"
+            },
+            "title": "Known Costs",
+            "type": "array"
+          },
+          "known_tokens": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known Tokens"
+          },
+          "known_usage_attempts": {
+            "title": "Known Usage Attempts",
+            "type": "integer"
+          },
+          "priced_attempts": {
+            "title": "Priced Attempts",
+            "type": "integer"
+          },
+          "total_attempts": {
+            "title": "Total Attempts",
+            "type": "integer"
+          },
+          "usage_complete": {
+            "title": "Usage Complete",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "known_usage_attempts",
+          "total_attempts",
+          "usage_complete",
+          "priced_attempts",
+          "known_tokens",
+          "known_costs",
+          "cost_complete"
+        ],
+        "title": "CumulativeUsage",
+        "type": "object"
+      },
+      "DiagnosticSignal": {
+        "description": "固定中文类别和出现次数，不把外部错误原文透传给页面。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "count"
+        ],
+        "title": "DiagnosticSignal",
+        "type": "object"
+      },
+      "FailureAnalysis": {
+        "description": "版本化诊断，partial 的错误证据不授予平台整批重试资格。",
+        "properties": {
+          "completed_count": {
+            "title": "Completed Count",
+            "type": "integer"
+          },
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "failed_group_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Group Count"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/FailureGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "notes": {
+            "description": "缺失与截断边界；不推断成功请求的耗时分布",
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "report_state": {
+            "enum": [
+              "available",
+              "missing",
+              "unsupported",
+              "malformed",
+              "limited"
+            ],
+            "title": "Report State",
+            "type": "string"
+          },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/RequestEvidence"
+            },
+            "title": "Requests",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "platform.failure-analysis/v1",
+            "default": "platform.failure-analysis/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "selected_count": {
+            "title": "Selected Count",
+            "type": "integer"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticSignal"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "selected_count",
+          "completed_count",
+          "failed_count",
+          "failed_group_count",
+          "report_state",
+          "groups",
+          "requests",
+          "signals",
+          "notes"
+        ],
+        "title": "FailureAnalysis",
+        "type": "object"
+      },
+      "FailureGroup": {
+        "description": "分组路径仅来自可信覆盖集合；序号只在本次结果内稳定。",
+        "properties": {
+          "failed_count": {
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_id",
+          "paths",
+          "failed_count"
+        ],
+        "title": "FailureGroup",
+        "type": "object"
+      },
+      "FindingFeedbackRecord": {
+        "description": "反馈随稳定发现身份保留；重审后旧版本可读但不可继续写入。",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "helpful",
+              "false_positive",
+              "fixed"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "verdict",
+          "actor",
+          "updated_at"
+        ],
+        "title": "FindingFeedbackRecord",
+        "type": "object"
+      },
+      "FindingFeedbackWrite": {
+        "additionalProperties": false,
+        "description": "操作者只从服务端鉴权身份取得，不接收客户端提供的作者。",
+        "properties": {
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_attempt": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "verdict": {
+            "enum": [
+              "helpful",
+              "false_positive",
+              "fixed"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_attempt",
+          "revision",
+          "verdict"
+        ],
+        "title": "FindingFeedbackWrite",
+        "type": "object"
+      },
+      "FindingOrigin": {
+        "description": "身份固定到根尝试或独立补审批次，不随聚合评论位置变化。",
+        "properties": {
+          "comment_index": {
+            "minimum": 0.0,
+            "title": "Comment Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "attempt",
+              "recovery"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recovery_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Id"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "source_attempt",
+          "comment_index"
+        ],
+        "title": "FindingOrigin",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -119,6 +1077,1758 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ImprovementActivityDay": {
+        "description": "每日新增与历史追加次数（含归档、恢复）；初始版本不重复计为追加。",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "record_updates": {
+            "default": 0,
+            "title": "Record Updates",
+            "type": "integer"
+          },
+          "records_created": {
+            "default": 0,
+            "title": "Records Created",
+            "type": "integer"
+          },
+          "theme_updates": {
+            "default": 0,
+            "title": "Theme Updates",
+            "type": "integer"
+          },
+          "themes_created": {
+            "default": 0,
+            "title": "Themes Created",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "ImprovementActivityDay",
+        "type": "object"
+      },
+      "ImprovementAttentionGroup": {
+        "description": "每组返回最久未更新的前十条；总数来自完整筛选而非样本长度。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementAttentionItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "ImprovementAttentionGroup",
+        "type": "object"
+      },
+      "ImprovementAttentionItem": {
+        "description": "仅投影定位信息，不返回问题正文、内部证据或操作者。",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "updated_at"
+        ],
+        "title": "ImprovementAttentionItem",
+        "type": "object"
+      },
+      "ImprovementContent": {
+        "additionalProperties": false,
+        "description": "完整保存当前摘要；历史快照单独追加，不能以修改摘要抹去原结论。",
+        "properties": {
+          "analysis": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Analysis",
+            "type": "string"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "code_state": {
+            "default": "unchanged",
+            "enum": [
+              "unchanged",
+              "modified",
+              "not_applicable"
+            ],
+            "title": "Code State",
+            "type": "string"
+          },
+          "deployment_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Deployment Evidence",
+            "type": "string"
+          },
+          "deployment_state": {
+            "default": "not_deployed",
+            "enum": [
+              "not_deployed",
+              "confirmed",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "default": "problem",
+            "enum": [
+              "problem",
+              "improvement"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "solution": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Solution",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "investigating",
+              "planned",
+              "verifying",
+              "resolved",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "validation_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Validation Evidence",
+            "type": "string"
+          },
+          "verification_state": {
+            "default": "not_run",
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "blocked",
+              "not_applicable"
+            ],
+            "title": "Verification State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "ImprovementContent",
+        "type": "object"
+      },
+      "ImprovementCreate": {
+        "additionalProperties": false,
+        "description": "创建键由调用方生成；网络重试复用同一键，防止重复建档。",
+        "properties": {
+          "analysis": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Analysis",
+            "type": "string"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "client_key": {
+            "format": "uuid",
+            "title": "Client Key",
+            "type": "string"
+          },
+          "code_state": {
+            "default": "unchanged",
+            "enum": [
+              "unchanged",
+              "modified",
+              "not_applicable"
+            ],
+            "title": "Code State",
+            "type": "string"
+          },
+          "deployment_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Deployment Evidence",
+            "type": "string"
+          },
+          "deployment_state": {
+            "default": "not_deployed",
+            "enum": [
+              "not_deployed",
+              "confirmed",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "default": "problem",
+            "enum": [
+              "problem",
+              "improvement"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "solution": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Solution",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "investigating",
+              "planned",
+              "verifying",
+              "resolved",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "validation_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Validation Evidence",
+            "type": "string"
+          },
+          "verification_state": {
+            "default": "not_run",
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "blocked",
+              "not_applicable"
+            ],
+            "title": "Verification State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "client_key"
+        ],
+        "title": "ImprovementCreate",
+        "type": "object"
+      },
+      "ImprovementDistribution": {
+        "description": "按实体当前字段计数，固定枚举补零；不统计历史快照的重复实体。",
+        "properties": {
+          "by_category": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "by_code_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Code State",
+            "type": "object"
+          },
+          "by_deployment_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Deployment State",
+            "type": "object"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "by_verification_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Verification State",
+            "type": "object"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_status",
+          "by_category",
+          "by_code_state",
+          "by_verification_state",
+          "by_deployment_state"
+        ],
+        "title": "ImprovementDistribution",
+        "type": "object"
+      },
+      "ImprovementHistory": {
+        "description": "历史按版本倒序分页，不一次返回所有长文本。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementRevision"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ImprovementHistory",
+        "type": "object"
+      },
+      "ImprovementPage": {
+        "description": "同一读取快照中的分页记录和总数。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ImprovementPage",
+        "type": "object"
+      },
+      "ImprovementPhase": {
+        "additionalProperties": false,
+        "description": "主题中的有序工作阶段及其独立证据。",
+        "properties": {
+          "code_state": {
+            "default": "unchanged",
+            "enum": [
+              "unchanged",
+              "modified",
+              "not_applicable"
+            ],
+            "title": "Code State",
+            "type": "string"
+          },
+          "deployment_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Deployment Evidence",
+            "type": "string"
+          },
+          "deployment_state": {
+            "default": "not_deployed",
+            "enum": [
+              "not_deployed",
+              "confirmed",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "goal": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "solution": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Solution",
+            "type": "string"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "active",
+              "completed",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "validation_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Validation Evidence",
+            "type": "string"
+          },
+          "verification_state": {
+            "default": "not_run",
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "blocked",
+              "not_applicable"
+            ],
+            "title": "Verification State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "goal"
+        ],
+        "title": "ImprovementPhase",
+        "type": "object"
+      },
+      "ImprovementRecord": {
+        "additionalProperties": false,
+        "description": "当前记录及其版本；创建键不作为列表或详情公开字段。",
+        "properties": {
+          "analysis": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Analysis",
+            "type": "string"
+          },
+          "archive_reason": {
+            "default": "",
+            "title": "Archive Reason",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "default": "",
+            "title": "Archived By",
+            "type": "string"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "code_state": {
+            "default": "unchanged",
+            "enum": [
+              "unchanged",
+              "modified",
+              "not_applicable"
+            ],
+            "title": "Code State",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Deployment Evidence",
+            "type": "string"
+          },
+          "deployment_state": {
+            "default": "not_deployed",
+            "enum": [
+              "not_deployed",
+              "confirmed",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "default": "problem",
+            "enum": [
+              "problem",
+              "improvement"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "solution": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Solution",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "investigating",
+              "planned",
+              "verifying",
+              "resolved",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validation_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Validation Evidence",
+            "type": "string"
+          },
+          "verification_state": {
+            "default": "not_run",
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "blocked",
+              "not_applicable"
+            ],
+            "title": "Verification State",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "id",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImprovementRecord",
+        "type": "object"
+      },
+      "ImprovementRecordSummary": {
+        "description": "问题和阶段改进共同构成台账；显式关联的记录按编号去重。",
+        "properties": {
+          "by_category": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "by_code_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Code State",
+            "type": "object"
+          },
+          "by_deployment_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Deployment State",
+            "type": "object"
+          },
+          "by_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Kind",
+            "type": "object"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "by_verification_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Verification State",
+            "type": "object"
+          },
+          "linked_records": {
+            "title": "Linked Records",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_status",
+          "by_category",
+          "by_code_state",
+          "by_verification_state",
+          "by_deployment_state",
+          "by_kind",
+          "linked_records"
+        ],
+        "title": "ImprovementRecordSummary",
+        "type": "object"
+      },
+      "ImprovementRevision": {
+        "description": "保留每次保存时的完整事实与操作者，旧快照不会被新摘要覆盖。",
+        "properties": {
+          "action": {
+            "default": "update",
+            "enum": [
+              "create",
+              "update",
+              "archive",
+              "restore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "archive_reason": {
+            "default": "",
+            "title": "Archive Reason",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "default": "",
+            "title": "Archived By",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ImprovementContent"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "actor",
+          "note",
+          "created_at",
+          "snapshot"
+        ],
+        "title": "ImprovementRevision",
+        "type": "object"
+      },
+      "ImprovementSummary": {
+        "description": "同一 SQLite 读取快照中的累计统计、活动趋势和待办，不执行任何写入。",
+        "properties": {
+          "activity": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementActivityDay"
+            },
+            "title": "Activity",
+            "type": "array"
+          },
+          "archived_records": {
+            "default": 0,
+            "title": "Archived Records",
+            "type": "integer"
+          },
+          "archived_themes": {
+            "default": 0,
+            "title": "Archived Themes",
+            "type": "integer"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "stability",
+                  "performance",
+                  "integration",
+                  "deployment",
+                  "experience",
+                  "security",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "deployment_pending": {
+            "$ref": "#/components/schemas/ImprovementAttentionGroup",
+            "description": "仅本地验证通过且部署未确认的记录，不包含部署不适用"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "records": {
+            "$ref": "#/components/schemas/ImprovementRecordSummary"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "themes": {
+            "$ref": "#/components/schemas/ImprovementThemeSummary"
+          },
+          "timezone": {
+            "default": "Asia/Shanghai",
+            "title": "Timezone",
+            "type": "string"
+          },
+          "unfinished_themes": {
+            "$ref": "#/components/schemas/ImprovementAttentionGroup"
+          },
+          "unresolved": {
+            "$ref": "#/components/schemas/ImprovementAttentionGroup"
+          },
+          "verification_attention": {
+            "$ref": "#/components/schemas/ImprovementAttentionGroup"
+          }
+        },
+        "required": [
+          "generated_at",
+          "start_date",
+          "end_date",
+          "category",
+          "records",
+          "themes",
+          "activity",
+          "unresolved",
+          "verification_attention",
+          "deployment_pending",
+          "unfinished_themes"
+        ],
+        "title": "ImprovementSummary",
+        "type": "object"
+      },
+      "ImprovementThemeContent": {
+        "additionalProperties": false,
+        "description": "主题摘要及完整有序阶段；关联问题单独存为关系表。",
+        "properties": {
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Outcome",
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementPhase"
+            },
+            "maxItems": 50,
+            "title": "Phases",
+            "type": "array"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "active",
+              "paused",
+              "completed",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective"
+        ],
+        "title": "ImprovementThemeContent",
+        "type": "object"
+      },
+      "ImprovementThemeCreate": {
+        "additionalProperties": false,
+        "description": "创建幂等键和问题关联列表。",
+        "properties": {
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "client_key": {
+            "format": "uuid",
+            "title": "Client Key",
+            "type": "string"
+          },
+          "improvement_ids": {
+            "items": {
+              "exclusiveMinimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "title": "Improvement Ids",
+            "type": "array"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Outcome",
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementPhase"
+            },
+            "maxItems": 50,
+            "title": "Phases",
+            "type": "array"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "active",
+              "paused",
+              "completed",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "client_key"
+        ],
+        "title": "ImprovementThemeCreate",
+        "type": "object"
+      },
+      "ImprovementThemeHistory": {
+        "description": "主题历史独立分页。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementThemeRevision"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ImprovementThemeHistory",
+        "type": "object"
+      },
+      "ImprovementThemePage": {
+        "description": "主题卡片的分页摘要与总数。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementThemeRecord"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ImprovementThemePage",
+        "type": "object"
+      },
+      "ImprovementThemeRecord": {
+        "additionalProperties": false,
+        "description": "当前主题、阶段和问题关联及乐观并发版本。",
+        "properties": {
+          "archive_reason": {
+            "default": "",
+            "title": "Archive Reason",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "default": "",
+            "title": "Archived By",
+            "type": "string"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "improvement_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Improvement Ids",
+            "type": "array"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Outcome",
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementPhase"
+            },
+            "maxItems": 50,
+            "title": "Phases",
+            "type": "array"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "active",
+              "paused",
+              "completed",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "id",
+          "version",
+          "improvement_ids",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ImprovementThemeRecord",
+        "type": "object"
+      },
+      "ImprovementThemeRevision": {
+        "description": "主题的历史摘要、完整阶段及当时关联编号。",
+        "properties": {
+          "action": {
+            "default": "update",
+            "enum": [
+              "create",
+              "update",
+              "archive",
+              "restore"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "archive_reason": {
+            "default": "",
+            "title": "Archive Reason",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_by": {
+            "default": "",
+            "title": "Archived By",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "improvement_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Improvement Ids",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ImprovementThemeContent"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "actor",
+          "note",
+          "created_at",
+          "snapshot",
+          "improvement_ids"
+        ],
+        "title": "ImprovementThemeRevision",
+        "type": "object"
+      },
+      "ImprovementThemeSummary": {
+        "description": "主题和阶段使用各自分母；阶段归属范围由主题当前分类决定。",
+        "properties": {
+          "by_category": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "phases": {
+            "$ref": "#/components/schemas/ImprovementDistribution"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_status",
+          "by_category",
+          "phases"
+        ],
+        "title": "ImprovementThemeSummary",
+        "type": "object"
+      },
+      "ImprovementThemeUpdate": {
+        "additionalProperties": false,
+        "description": "完整快照更新按主题版本保护，并追加变更说明。",
+        "properties": {
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "improvement_ids": {
+            "items": {
+              "exclusiveMinimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "title": "Improvement Ids",
+            "type": "array"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Outcome",
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/ImprovementPhase"
+            },
+            "maxItems": 50,
+            "title": "Phases",
+            "type": "array"
+          },
+          "progress_note": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Progress Note",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "status": {
+            "default": "planned",
+            "enum": [
+              "planned",
+              "active",
+              "paused",
+              "completed",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "expected_version",
+          "progress_note"
+        ],
+        "title": "ImprovementThemeUpdate",
+        "type": "object"
+      },
+      "ImprovementUpdate": {
+        "additionalProperties": false,
+        "description": "按读取版本保存；并发冲突保留调用方草稿，不静默覆盖。",
+        "properties": {
+          "analysis": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Analysis",
+            "type": "string"
+          },
+          "category": {
+            "default": "other",
+            "enum": [
+              "stability",
+              "performance",
+              "integration",
+              "deployment",
+              "experience",
+              "security",
+              "other"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "code_state": {
+            "default": "unchanged",
+            "enum": [
+              "unchanged",
+              "modified",
+              "not_applicable"
+            ],
+            "title": "Code State",
+            "type": "string"
+          },
+          "deployment_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Deployment Evidence",
+            "type": "string"
+          },
+          "deployment_state": {
+            "default": "not_deployed",
+            "enum": [
+              "not_deployed",
+              "confirmed",
+              "unknown",
+              "not_applicable"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "kind": {
+            "default": "problem",
+            "enum": [
+              "problem",
+              "improvement"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_steps": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Next Steps",
+            "type": "string"
+          },
+          "progress_note": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Progress Note",
+            "type": "string"
+          },
+          "references": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "References",
+            "type": "string"
+          },
+          "scope": {
+            "default": "平台",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "solution": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Solution",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "enum": [
+              "open",
+              "investigating",
+              "planned",
+              "verifying",
+              "resolved",
+              "deferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "validation_evidence": {
+            "default": "",
+            "maxLength": 10000,
+            "title": "Validation Evidence",
+            "type": "string"
+          },
+          "verification_state": {
+            "default": "not_run",
+            "enum": [
+              "not_run",
+              "passed",
+              "failed",
+              "blocked",
+              "not_applicable"
+            ],
+            "title": "Verification State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "expected_version",
+          "progress_note"
+        ],
+        "title": "ImprovementUpdate",
         "type": "object"
       },
       "IssueBatchResult": {
@@ -266,6 +2976,58 @@
         "title": "IssueUpdate",
         "type": "object"
       },
+      "KnownCost": {
+        "description": "同一币种的已知历史费用，不能当作完整账单。",
+        "properties": {
+          "currency": {
+            "enum": [
+              "CNY",
+              "USD"
+            ],
+            "title": "Currency",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "currency",
+          "total"
+        ],
+        "title": "KnownCost",
+        "type": "object"
+      },
+      "LogSyncResult": {
+        "description": "本次真正提交的数量；冲突来源不写入，不把跳过或失败当成同步成功。",
+        "properties": {
+          "conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "created": {
+            "default": 0,
+            "title": "Created",
+            "type": "integer"
+          },
+          "unchanged": {
+            "default": 0,
+            "title": "Unchanged",
+            "type": "integer"
+          },
+          "updated": {
+            "default": 0,
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "title": "LogSyncResult",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "description": "账号登录输入，不允许夹带额外授权字段。",
@@ -290,6 +3052,126 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "MaintenancePolicy": {
+        "additionalProperties": false,
+        "description": "策略变更使用严格版本；启用仅授权后台归档，不隐含已执行。",
+        "properties": {
+          "archive_after_days": {
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Archive After Days",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "archive_after_days",
+          "expected_version"
+        ],
+        "title": "MaintenancePolicy",
+        "type": "object"
+      },
+      "MaintenanceResult": {
+        "description": "本轮同步和归档的实际提交数；错误码独立于成功时间。",
+        "properties": {
+          "archived_records": {
+            "default": 0,
+            "title": "Archived Records",
+            "type": "integer"
+          },
+          "archived_themes": {
+            "default": 0,
+            "title": "Archived Themes",
+            "type": "integer"
+          },
+          "sync": {
+            "$ref": "#/components/schemas/LogSyncResult"
+          }
+        },
+        "title": "MaintenanceResult",
+        "type": "object"
+      },
+      "MaintenanceStatus": {
+        "description": "候选数是读取时预览，后台仍需在短写事务内重新核对。",
+        "properties": {
+          "archive_after_days": {
+            "title": "Archive After Days",
+            "type": "integer"
+          },
+          "candidate_records": {
+            "title": "Candidate Records",
+            "type": "integer"
+          },
+          "candidate_themes": {
+            "title": "Candidate Themes",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "last_error_code": {
+            "title": "Last Error Code",
+            "type": "string"
+          },
+          "last_result": {
+            "$ref": "#/components/schemas/MaintenanceResult"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "source_configured": {
+            "title": "Source Configured",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "archive_after_days",
+          "version",
+          "source_configured",
+          "last_checked_at",
+          "last_success_at",
+          "last_error_code",
+          "last_result",
+          "candidate_records",
+          "candidate_themes"
+        ],
+        "title": "MaintenanceStatus",
+        "type": "object"
+      },
       "ModeUpdate": {
         "additionalProperties": false,
         "description": "账号模式显式启停；开启前须已有可用管理员。",
@@ -303,6 +3185,42 @@
           "users_enabled"
         ],
         "title": "ModeUpdate",
+        "type": "object"
+      },
+      "ModelCatalogInput": {
+        "additionalProperties": false,
+        "description": "临时查询模型目录；凭据只用于本次服务端请求，不落库。",
+        "properties": {
+          "api_key": {
+            "default": "",
+            "title": "Api Key",
+            "type": "string"
+          },
+          "base_url": {
+            "default": "",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "编辑时可引用已保存的密钥",
+            "title": "Profile Id"
+          },
+          "provider": {
+            "default": "dashscope",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "title": "ModelCatalogInput",
         "type": "object"
       },
       "ModelProfileCreate": {
@@ -632,6 +3550,11 @@
             ],
             "title": "Model Profile Id"
           },
+          "newline_filter_enabled": {
+            "default": false,
+            "title": "Newline Filter Enabled",
+            "type": "boolean"
+          },
           "timeout_seconds": {
             "anyOf": [
               {
@@ -683,6 +3606,568 @@
           "enabled"
         ],
         "title": "PublicationSetting",
+        "type": "object"
+      },
+      "RecoveryBudget": {
+        "description": "累计已批准而非实际账单；最低启动参考不是完成全批的保证或自动批准值。",
+        "properties": {
+          "authorization_version": {
+            "default": 0,
+            "title": "Authorization Version",
+            "type": "integer"
+          },
+          "committed_tokens": {
+            "title": "Committed Tokens",
+            "type": "integer"
+          },
+          "max_batches": {
+            "title": "Max Batches",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "minimum_start_tokens": {
+            "default": 0,
+            "title": "Minimum Start Tokens",
+            "type": "integer"
+          },
+          "previous_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "used_batches": {
+            "title": "Used Batches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_batches",
+          "max_total_tokens",
+          "used_batches",
+          "committed_tokens"
+        ],
+        "title": "RecoveryBudget",
+        "type": "object"
+      },
+      "RecoveryCandidate": {
+        "description": "未接入消费者的候选只公开覆盖摘要，不返回完整发现或来源映射。",
+        "properties": {
+          "coverage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Coverage",
+            "type": "object"
+          },
+          "finding_count": {
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "recovery_id": {
+            "title": "Recovery Id",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "terminal_state": {
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "Terminal State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_attempt",
+          "revision",
+          "recovery_id",
+          "terminal_state",
+          "coverage",
+          "finding_count"
+        ],
+        "title": "RecoveryCandidate",
+        "type": "object"
+      },
+      "RecoveryCandidateResponse": {
+        "description": "候选不是平台有效结论；消费者统一前始终明确标记未就绪。",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoveryCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consumer_integration_ready": {
+            "default": false,
+            "title": "Consumer Integration Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidate"
+        ],
+        "title": "RecoveryCandidateResponse",
+        "type": "object"
+      },
+      "RecoveryCreate": {
+        "additionalProperties": false,
+        "description": "源版本与预算须由管理员确认，重试同一 HTTP 命令复用 client_key。",
+        "properties": {
+          "client_key": {
+            "format": "uuid",
+            "title": "Client Key",
+            "type": "string"
+          },
+          "source_attempt": {
+            "minimum": 1.0,
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "source_revision": {
+            "minimum": 0.0,
+            "title": "Source Revision",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "token_budget": {
+            "maximum": 100000000.0,
+            "minimum": 1.0,
+            "title": "Token Budget",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "client_key",
+          "source_attempt",
+          "source_revision",
+          "token_budget",
+          "timeout_seconds"
+        ],
+        "title": "RecoveryCreate",
+        "type": "object"
+      },
+      "RecoveryDelivery": {
+        "description": "独立通知白名单，不包含冻结发现、凭据、工件或执行令牌。",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "recovery_id": {
+            "title": "Recovery Id",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sending",
+              "sent",
+              "failed",
+              "superseded"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_attempt",
+          "revision",
+          "recovery_id",
+          "status",
+          "attempts",
+          "error",
+          "created_at",
+          "sent_at"
+        ],
+        "title": "RecoveryDelivery",
+        "type": "object"
+      },
+      "RecoveryEligibility": {
+        "description": "仅由 SQLite 事实决定候选资格；正式执行仍须校验工件、Git 和当前快照。",
+        "properties": {
+          "active_recovery_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Recovery Id"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoveryBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "max_timeout_seconds": {
+            "default": 0,
+            "title": "Max Timeout Seconds",
+            "type": "integer"
+          },
+          "max_token_budget": {
+            "default": 0,
+            "title": "Max Token Budget",
+            "type": "integer"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "remaining_batches": {
+            "default": 0,
+            "title": "Remaining Batches",
+            "type": "integer"
+          },
+          "remaining_count": {
+            "default": 0,
+            "title": "Remaining Count",
+            "type": "integer"
+          },
+          "remaining_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remaining Paths",
+            "type": "array"
+          },
+          "route": {
+            "const": "independent_subset",
+            "default": "independent_subset",
+            "title": "Route",
+            "type": "string"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoverySnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Attempt"
+          },
+          "source_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Revision"
+          }
+        },
+        "required": [
+          "eligible",
+          "reason_code"
+        ],
+        "title": "RecoveryEligibility",
+        "type": "object"
+      },
+      "RecoveryRecord": {
+        "description": "安全批次投影不包含内部路径、完整配置、原始结果或执行令牌。",
+        "properties": {
+          "budget_gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetGate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnownCost"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "固定原因与可信覆盖计数，不包含原始响应；兼容读取旧失败批次",
+            "title": "Failure Summary"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "source_revision": {
+            "title": "Source Revision",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "partial",
+              "failed",
+              "cancelled",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "token_budget": {
+            "title": "Token Budget",
+            "type": "integer"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "source_attempt",
+          "source_revision",
+          "status",
+          "token_budget",
+          "timeout_seconds",
+          "cancel_requested",
+          "error_code",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "usage"
+        ],
+        "title": "RecoveryRecord",
+        "type": "object"
+      },
+      "RecoverySnapshot": {
+        "description": "确认框所需冻结事实白名单，不输出端点、私有配置或规则正文。",
+        "properties": {
+          "base_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Sha"
+          },
+          "head_sha": {
+            "title": "Head Sha",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "integer"
+          },
+          "ocr_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr Version"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rule_digest": {
+            "title": "Rule Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "head_sha",
+          "base_sha",
+          "provider",
+          "model",
+          "model_version",
+          "ocr_version",
+          "rule_digest"
+        ],
+        "title": "RecoverySnapshot",
         "type": "object"
       },
       "RepositoryCreate": {
@@ -986,6 +4471,106 @@
         "title": "RepositoryUpdate",
         "type": "object"
       },
+      "RequestEvidence": {
+        "description": "单个失败逻辑请求的有界事实；无法可靠关联分组时 group_id 为空。",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "duration_to_headers_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Duration To Headers Ms",
+            "type": "array"
+          },
+          "error_classes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Error Classes",
+            "type": "array"
+          },
+          "failure_phases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failure Phases",
+            "type": "array"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "http_statuses": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Http Statuses",
+            "type": "array"
+          },
+          "logical_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "仅保留 OCR 的 64 位十六进制逻辑请求摘要；未知格式不透传",
+            "title": "Logical Request Id"
+          },
+          "observed_backoff_ms": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Observed Backoff Ms",
+            "type": "array"
+          },
+          "request_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request No"
+          },
+          "task_type": {
+            "enum": [
+              "plan_task",
+              "main_task",
+              "unknown"
+            ],
+            "title": "Task Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "task_type",
+          "request_no",
+          "attempts",
+          "http_statuses",
+          "error_classes",
+          "failure_phases",
+          "duration_to_headers_ms",
+          "observed_backoff_ms"
+        ],
+        "title": "RequestEvidence",
+        "type": "object"
+      },
       "ReviewFeedbackInput": {
         "additionalProperties": false,
         "description": "人工标记单条发现，可在重评审前修改或撤销。",
@@ -1004,6 +4589,25 @@
           "verdict"
         ],
         "title": "ReviewFeedbackInput",
+        "type": "object"
+      },
+      "ReviewReason": {
+        "description": "稳定原因码与安全摘要；不承载上游原始响应。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ReviewReason",
         "type": "object"
       },
       "ReviewRuleDocument": {
@@ -1067,6 +4671,112 @@
         "title": "ReviewRuleEntry",
         "type": "object"
       },
+      "ReviewTiming": {
+        "description": "服务端同一 UTC 时刻计算的时间口径；空值表示无法从历史事实恢复。",
+        "properties": {
+          "calculated_at": {
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "cumulative_execution_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Execution Seconds"
+          },
+          "execution_complete": {
+            "title": "Execution Complete",
+            "type": "boolean"
+          },
+          "first_queue_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Queue Seconds"
+          },
+          "known_attempts": {
+            "title": "Known Attempts",
+            "type": "integer"
+          },
+          "latest_execution_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Execution Seconds"
+          },
+          "retry_backoff_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Backoff Seconds"
+          },
+          "retry_ready_wait_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Ready Wait Seconds"
+          },
+          "schedule_complete": {
+            "title": "Schedule Complete",
+            "type": "boolean"
+          },
+          "total_attempts": {
+            "title": "Total Attempts",
+            "type": "integer"
+          },
+          "total_elapsed_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Elapsed Seconds"
+          }
+        },
+        "required": [
+          "first_queue_seconds",
+          "latest_execution_seconds",
+          "cumulative_execution_seconds",
+          "execution_complete",
+          "known_attempts",
+          "total_attempts",
+          "total_elapsed_seconds",
+          "retry_backoff_seconds",
+          "retry_ready_wait_seconds",
+          "schedule_complete",
+          "calculated_at"
+        ],
+        "title": "ReviewTiming",
+        "type": "object"
+      },
       "RulePreviewInput": {
         "additionalProperties": false,
         "description": "规则预览只接受仓库内相对文件路径，不能选择外部工作目录。",
@@ -1082,6 +4792,186 @@
           "file_path"
         ],
         "title": "RulePreviewInput",
+        "type": "object"
+      },
+      "TaskExecutionResponse": {
+        "additionalProperties": true,
+        "description": "保留已有动态任务字段，新增可观测性字段提供明确 OpenAPI 契约。",
+        "properties": {
+          "active_recovery_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Recovery Id"
+          },
+          "conclusions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionOverview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "统一初审/当前候选摘要；有效版本另列，保留初审状态和原始反馈索引"
+          },
+          "cumulative_usage": {
+            "$ref": "#/components/schemas/CumulativeUsage"
+          },
+          "effective_conclusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Status"
+          },
+          "failure_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "详情的分层失败证据，列表省略"
+          },
+          "failure_analysis_imported_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "受控历史诊断导入时间；导入不修改初审结果或触发模型",
+            "title": "Failure Analysis Imported At"
+          },
+          "failure_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "已持久化安全摘要；旧结果缺失时不回填",
+            "title": "Failure Summary"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "initial_cumulative_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CumulativeUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ReviewReason"
+          },
+          "recovery_delivery_failed_count": {
+            "default": 0,
+            "title": "Recovery Delivery Failed Count",
+            "type": "integer"
+          },
+          "recovery_execution_count": {
+            "default": 0,
+            "title": "Recovery Execution Count",
+            "type": "integer"
+          },
+          "scope_analysis": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "仅含固定范围、计数及仓库相对路径；列表省略逐文件路径，不含代码正文",
+            "title": "Scope Analysis"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/ReviewTiming"
+          }
+        },
+        "required": [
+          "id",
+          "timing",
+          "reason",
+          "cumulative_usage"
+        ],
+        "title": "TaskExecutionResponse",
+        "type": "object"
+      },
+      "TaskSearchResponse": {
+        "description": "全量检索的稳定分页响应，条目保留既有兼容字段。",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskExecutionResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "TaskSearchResponse",
         "type": "object"
       },
       "UserCreate": {
@@ -1677,6 +5567,164 @@
         "summary": "Update User"
       }
     },
+    "/api/chat-capture": {
+      "get": {
+        "description": "返回绑定健康度与脱敏候选，不返回会话路径、原文或凭据。",
+        "operationId": "listing_api_chat_capture_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatInbox"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      }
+    },
+    "/api/chat-capture/bindings/{binding_id}": {
+      "put": {
+        "description": "只允许暂停/恢复既有绑定；新增绑定必须在本机显式执行 CLI。",
+        "operationId": "binding_update_api_chat_capture_bindings__binding_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "title": "Binding Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatBindingChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Binding Update Api Chat Capture Bindings  Binding Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Binding Update"
+      }
+    },
+    "/api/chat-capture/events/{event_id}/link": {
+      "post": {
+        "description": "人工关联、解除或提升候选，保留关联审计且不自动改变验证/部署状态。",
+        "operationId": "event_link_api_chat_capture_events__event_id__link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatEventLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Event Link"
+      }
+    },
     "/api/config-history/{kind}": {
       "get": {
         "description": "查看对象配置差异；共享口令只能标识共享管理会话。",
@@ -2181,6 +6229,922 @@
         "summary": "Health"
       }
     },
+    "/api/improvement-maintenance": {
+      "get": {
+        "description": "管理员只读运行状态和候选预览，不执行文件扫描或触发业务任务。",
+        "operationId": "maintenance_api_improvement_maintenance_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Maintenance"
+      },
+      "put": {
+        "description": "仅保存归档策略，来源仍由服务器配置；后台下一轮才执行。",
+        "operationId": "maintenance_update_api_improvement_maintenance_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenancePolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Maintenance Update"
+      }
+    },
+    "/api/improvement-summary": {
+      "get": {
+        "description": "当前累计与活动窗口分开返回；只读账号不能通过统计读取平台内部信息。",
+        "operationId": "summary_api_improvement_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "stability",
+                    "performance",
+                    "integration",
+                    "deployment",
+                    "experience",
+                    "security",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Summary"
+      }
+    },
+    "/api/improvement-themes": {
+      "get": {
+        "description": "按状态、类别和文字筛选，阶段与问题关联一并返回。",
+        "operationId": "listing_api_improvement_themes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "planned",
+                    "active",
+                    "paused",
+                    "completed",
+                    "deferred"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "stability",
+                    "performance",
+                    "integration",
+                    "deployment",
+                    "experience",
+                    "security",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "improvement_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Improvement Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archive",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Archive",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      },
+      "post": {
+        "description": "创建主题、阶段、关联和历史；同键同内容重试幂等。",
+        "operationId": "create_api_improvement_themes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImprovementThemeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemeRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/improvement-themes/{theme_id}": {
+      "get": {
+        "description": "返回有序阶段及当前显式关联的记录编号。",
+        "operationId": "detail_api_improvement_themes__theme_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme_id",
+            "required": true,
+            "schema": {
+              "title": "Theme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemeRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail"
+      },
+      "put": {
+        "description": "版本化替换摘要、阶段与关联，任何校验失败整体不写。",
+        "operationId": "update_api_improvement_themes__theme_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme_id",
+            "required": true,
+            "schema": {
+              "title": "Theme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImprovementThemeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemeRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update"
+      }
+    },
+    "/api/improvement-themes/{theme_id}/archive": {
+      "post": {
+        "description": "显式归档或恢复，管理员身份、版本及原因均由服务端约束。",
+        "operationId": "archive_change_api_improvement_themes__theme_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme_id",
+            "required": true,
+            "schema": {
+              "title": "Theme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemeRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Change"
+      }
+    },
+    "/api/improvement-themes/{theme_id}/history": {
+      "get": {
+        "description": "分页返回阶段快照及历史问题关联，保持旧方案可追溯。",
+        "operationId": "history_api_improvement_themes__theme_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "theme_id",
+            "required": true,
+            "schema": {
+              "title": "Theme Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementThemeHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      }
+    },
+    "/api/improvements": {
+      "get": {
+        "description": "分页搜索平台问题，不混入 OCR 发现的问题表。",
+        "operationId": "listing_api_improvements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "investigating",
+                    "planned",
+                    "verifying",
+                    "resolved",
+                    "deferred"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "problem",
+                    "improvement"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "stability",
+                    "performance",
+                    "integration",
+                    "deployment",
+                    "experience",
+                    "security",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archive",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Archive",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      },
+      "post": {
+        "description": "创建记录并保存初始历史；同键同内容重试不会重复创建。",
+        "operationId": "create_api_improvements_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImprovementCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/improvements/{record_id}": {
+      "get": {
+        "description": "返回服务端当前记录；不推断尚未确认的部署状态。",
+        "operationId": "detail_api_improvements__record_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail"
+      },
+      "put": {
+        "description": "保存版本化进展；冲突不写入摘要或历史。",
+        "operationId": "update_api_improvements__record_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImprovementUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update"
+      }
+    },
+    "/api/improvements/{record_id}/archive": {
+      "post": {
+        "description": "显式归档或恢复，管理员身份、版本及原因均由服务端约束。",
+        "operationId": "archive_change_api_improvements__record_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchiveChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Change"
+      }
+    },
+    "/api/improvements/{record_id}/history": {
+      "get": {
+        "description": "分页读取历史快照，保留操作者与每次处理说明。",
+        "operationId": "history_api_improvements__record_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImprovementHistory"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      }
+    },
     "/api/jobs": {
       "get": {
         "description": "展示近期评审任务。",
@@ -2269,9 +7233,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Job Api Jobs  Job Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TaskExecutionResponse"
                 }
               }
             },
@@ -2414,6 +7376,80 @@
         "summary": "Comparison"
       }
     },
+    "/api/jobs/{job_id}/conclusion": {
+      "get": {
+        "description": "显式版本只读复核，稳定来源 ID 不与旧反馈/发布索引混用，历史不会回填。",
+        "operationId": "conclusion_api_jobs__job_id__conclusion_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_attempt",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Attempt"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Revision"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConclusionDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conclusion"
+      }
+    },
     "/api/jobs/{job_id}/feedback/{comment_index}": {
       "delete": {
         "description": "撤销已有反馈及其拥有的问题处理；缺失记录明确返回 404。",
@@ -2526,6 +7562,204 @@
           }
         },
         "summary": "Put Review Feedback"
+      }
+    },
+    "/api/jobs/{job_id}/finding-feedback": {
+      "get": {
+        "description": "显式版本读取历史反馈；根发现和补审发现都以主身份过滤，无写入副作用。",
+        "operationId": "history_api_jobs__job_id__finding_feedback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_attempt",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Source Attempt",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FindingFeedbackRecord"
+                  },
+                  "title": "Response History Api Jobs  Job Id  Finding Feedback Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      }
+    },
+    "/api/jobs/{job_id}/finding-feedback/{finding_id}": {
+      "delete": {
+        "description": "撤销要求当前版本，不能用重审前的旧页面重开历史问题；不存在返回 404。",
+        "operationId": "clear_api_jobs__job_id__finding_feedback__finding_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_attempt",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Source Attempt",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Clear Api Jobs  Job Id  Finding Feedback  Finding Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear"
+      },
+      "put": {
+        "description": "提交主身份反馈，要求当前源尝试和最新候选版本，操作者由鉴权上下文注入。",
+        "operationId": "put_api_jobs__job_id__finding_feedback__finding_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingFeedbackWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Api Jobs  Job Id  Finding Feedback  Finding Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put"
       }
     },
     "/api/jobs/{job_id}/gitlab-publications/prepare": {
@@ -2815,9 +8049,344 @@
         "summary": "Retry Notification"
       }
     },
+    "/api/jobs/{job_id}/recoveries": {
+      "get": {
+        "description": "按稳定批次 ID 分页，历史只返回安全结果用量，不返回工件或完整快照。",
+        "operationId": "history_api_jobs__job_id__recoveries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecoveryRecord"
+                  },
+                  "title": "Response History Api Jobs  Job Id  Recoveries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      },
+      "post": {
+        "description": "成功仅表示独立批次入队；同键重放返回原批次，不能宣称审核完成。",
+        "operationId": "create_api_jobs__job_id__recoveries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/jobs/{job_id}/recovery-budget": {
+      "put": {
+        "description": "管理员显式追加任务预算；不重置历史、不自动排队。",
+        "operationId": "set_budget_api_jobs__job_id__recovery_budget_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetAuthorization"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "title": "Response Set Budget Api Jobs  Job Id  Recovery Budget Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Budget"
+      }
+    },
+    "/api/jobs/{job_id}/recovery-candidate": {
+      "get": {
+        "description": "同一读快照返回候选与就绪状态；仅已完整校验提升的版本参与消费者。",
+        "operationId": "candidate_api_jobs__job_id__recovery_candidate_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Candidate"
+      }
+    },
+    "/api/jobs/{job_id}/recovery-deliveries": {
+      "get": {
+        "description": "分页返回独立通知安全状态，绝不输出冻结发现正文或执行令牌。",
+        "operationId": "deliveries_api_jobs__job_id__recovery_deliveries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecoveryDelivery"
+                  },
+                  "title": "Response Deliveries Api Jobs  Job Id  Recovery Deliveries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deliveries"
+      }
+    },
+    "/api/jobs/{job_id}/recovery-eligibility": {
+      "get": {
+        "description": "查询数据库候选资格，不从工件或状态推测缺失的失败范围。",
+        "operationId": "get_eligibility_api_jobs__job_id__recovery_eligibility_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryEligibility"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Eligibility"
+      }
+    },
     "/api/jobs/{job_id}/report": {
       "get": {
-        "description": "下载白名单报告；额外移除当前已知凭据，绝不返回原始 thinking。",
+        "description": "下载白名单报告；补审需显式版本，原报告保留初审，额外移除当前已知凭据。",
         "operationId": "download_report_api_jobs__job_id__report_get",
         "parameters": [
           {
@@ -2844,6 +8413,23 @@
                 }
               ],
               "title": "Attempt"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recovery_revision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recovery Revision"
             }
           }
         ],
@@ -3036,6 +8622,52 @@
           }
         },
         "summary": "Maintenance Prune"
+      }
+    },
+    "/api/model-catalog": {
+      "post": {
+        "description": "通过已鉴权管理端查询模型目录；不保存 API Key 或返回上游响应正文。",
+        "operationId": "get_model_catalog_api_model_catalog_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelCatalogInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Get Model Catalog Api Model Catalog Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Model Catalog"
       }
     },
     "/api/model-profiles": {
@@ -3842,6 +9474,50 @@
         "summary": "Reconciliation Report"
       }
     },
+    "/api/recovery-deliveries/{delivery_id}/retry": {
+      "post": {
+        "description": "显式只重试失败补充通知，不创建补审批次；不创建补审或重跑模型。",
+        "operationId": "retry_supplement_api_recovery_deliveries__delivery_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Retry Supplement Api Recovery Deliveries  Delivery Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Supplement"
+      }
+    },
     "/api/repositories": {
       "get": {
         "description": "列出已接入仓库；密钥仅由单项查看接口按需返回。",
@@ -4222,6 +9898,9 @@
                         "type": "integer"
                       },
                       {
+                        "type": "boolean"
+                      },
+                      {
                         "type": "null"
                       }
                     ]
@@ -4279,6 +9958,9 @@
                     "anyOf": [
                       {
                         "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
                       },
                       {
                         "type": "null"
@@ -4916,7 +10598,7 @@
     },
     "/api/review-issues": {
       "get": {
-        "description": "按仓库、状态和级别分页；默认隐藏已合并的重复项。",
+        "description": "按仓库、状态和级别分页；提交人取最近出现记录的持久化任务作者。",
         "operationId": "list_issues_api_review_issues_get",
         "parameters": [
           {
@@ -5228,6 +10910,50 @@
           }
         },
         "summary": "Merge Issue"
+      }
+    },
+    "/api/review-recoveries/{recovery_id}/cancel": {
+      "post": {
+        "description": "只持久化取消，不直接发送进程信号；终态批次返回冲突。",
+        "operationId": "request_cancel_api_review_recoveries__recovery_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recovery_id",
+            "required": true,
+            "schema": {
+              "title": "Recovery Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Request Cancel Api Review Recoveries  Recovery Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Cancel"
       }
     },
     "/api/review-rules": {
@@ -5785,9 +11511,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Task Search Api Task Search Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TaskSearchResponse"
                 }
               }
             },

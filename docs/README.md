@@ -10,6 +10,7 @@
 4. [前端交互回归](frontend-interaction-checks.md)：复核近期页面与批量操作改动。
 5. [工程规范采用说明](governance/README.md)：开发前阅读前后端规范及根目录 [AGENTS.md](../AGENTS.md)。
 6. [项目完善实施路线](implementation-roadmap.md)：查看四轮优先级、当前进度与验收边界。
+7. [评审稳定性与耗时优化方案](review-performance-plan.md)：查看失败归因、范围治理、重试预算、耗时展示和分阶段实施规划。
 
 ## 当前维护文档
 
@@ -19,7 +20,20 @@
 | [操作指南](configuration-guide.md) | 页面怎么配置、如何处理误报 / 已修复问题、如何批量处理。 |
 | [部署说明](deployment.md) | API、Worker、monitor、launchd、私有配置、备份和恢复。 |
 | [前端交互回归](frontend-interaction-checks.md) | 测试范围、执行命令、隔离数据和截图产物。 |
+| [问题与改进台账](problem-improvement-log.md) | 持续记录问题、排查、解决办法和优化进展，分别标注代码修改、本地验证与部署生效状态。 |
+| [部分评审治理第一、二步](review-partial-phase12.md) | 分层诊断、历史只读复核、真实 CLI 合成恢复矩阵及独立失败子集路线；仅本地验证，未部署补审功能。 |
+| [部分评审补审后端核心](review-partial-phase3.md) | 默认关闭的独立失败子集队列、固定输入执行、候选聚合与迁移验证；消费者统一、按钮和补充通知尚未接入。 |
+| [部分评审结论读取与发现身份](review-partial-conclusions.md) | 初审/候选统一只读摘要、显式版本复核、稳定发现来源和版本费用；尚未提升有效结论。 |
+| [部分评审反馈与运行核查](review-partial-feedback.md) | 核查并更正业务库版本表述；稳定身份反馈、补审问题出现记录及 44 版隔离迁移验证，生产入口仍关闭。 |
+| [问题与改进第一阶段](improvements-phase1.md) | 平台台账、历史快照、管理员权限、版本冲突、证据校验与第 39 版迁移的交付边界。 |
+| [问题与改进第二阶段](improvements-phase2.md) | 优化主题、多阶段进展、问题关联、版本历史及第 40 版迁移的交付边界。 |
+| [问题与改进第三阶段](improvements-phase3.md) | 复盘累计、独立交付维度、北京时间活动趋势、当前跟进清单及统计口径。 |
+| [问题与改进第四阶段](improvements-phase4.md) | 问题与主题归档、恢复、版本历史、复盘口径与第 41 版迁移；不执行定时自动归档。 |
 | [项目完善实施路线](implementation-roadmap.md) | 第一至第四轮实施范围、原第十项归属与验收边界。 |
+| [评审稳定性与耗时优化方案](review-performance-plan.md) | 错误处理、输入保护、耗时诊断与调度优化的分阶段方案及当前状态。 |
+| [评审优化第一阶段实施记录](review-performance-phase1.md) | 结果兼容、分类重试、超时诊断的本地实施与检查结果，以及升级和回滚边界。 |
+| [评审优化第二、三阶段实施记录](review-performance-phase23.md) | 范围预检、预算保护、耗时原因与历史成本、近七天指标；自动过滤关闭及版本 36 升级边界。 |
+| [评审优化第四阶段实施记录](review-performance-phase4.md) | 单协调器有界解耦、执行槽心跳、进程组栅栏、仓库轮转及版本 38 的本机生效边界。 |
 | [OpenAPI 契约快照](openapi.json) | 管理 API 的提交版 schema；运行一致性命令检查是否漂移。 |
 | [后端代码规范](governance/backend-code-standards.md) | 后端分层、持久化、鉴权、重试与自动化验证。 |
 | [前端代码规范](governance/frontend-code-standards.md) | 组件、状态、异步反馈、草稿、布局、可访问性与验证。 |
@@ -42,3 +56,14 @@
 - 阶段测试数量保留历史语义，不改写成当前全部测试数量；新增验证结论必须来自实际执行。
 - 不记录密钥、Webhook 完整地址、私有配置内容或真实代码片段；示例使用占位值。
 - 根目录说明只保留项目入口和常用命令，细节放入 `docs/`，避免多个文件重复维护完整操作步骤。
+
+- [纯换行过滤验证与项目开关](review-newline-filter.md)：特殊路径、正式覆盖一致性、默认关闭及本机启用边界。
+
+- [台账同步与自动归档](improvements-phase5.md)：42 版持久化策略、持续 PI 同步、闭环归档与上线验证。
+
+- [部分评审完整恢复与上线准备](review-partial-rollout.md)：有效结论、页面、补充通知、迁移恢复演练及真实试点门槛。
+- [受控历史诊断导入与默认人工补审](review-historical-diagnostic-import.md)：当前默认无开关的补审行为、46 版独立诊断表、批量预览/导入及来源失效规则。
+- [HTTP 域名与浏览器兼容](http-browser-compatibility.md)：普通 HTTP 的 UUID/剪贴板兼容、请求取消超时、补审预算失败说明与隔离验证边界。
+- [问题台账交付核验](problem-log-delivery-check.md)：先受理建档、过程追加、收尾只读命令及自动同步无法识别未登记聊天问题的边界。
+- [聊天自动受理与结构化台账混合记录](chat-capture.md)：当前会话显式授权、脱敏候选、失败可见、可逆关联、近实时边界与本机运维步骤。
+- [聊天问题自动采集建议](chat-problem-capture-proposal.md)：实施前的边界与阶段设计；第一版实际交付范围以混合记录说明及 PI-20261107-003 追加记录为准。

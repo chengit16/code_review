@@ -48,8 +48,12 @@ test("保存评审参数不会丢弃其他页签草稿，重新编辑不显示�
   await page.getByLabel("仓库名称").fill("保留的基础草稿");
   await page.getByRole("tab", { name: "评审参数" }).click();
   await page.getByLabel("超时（秒）").fill("456");
+  await expect(page.getByRole("checkbox", { name: "自动过滤纯换行文件" })).not.toBeChecked();
+  await page.getByRole("checkbox", { name: "自动过滤纯换行文件" }).check();
   await page.getByRole("button", { name: "保存评审参数" }).click();
   await expect(page.getByText("评审参数已保存", { exact: true })).toBeVisible();
+  expect(limits).toMatchObject({ newline_filter_enabled: true });
+  await expect(page.getByRole("checkbox", { name: "自动过滤纯换行文件" })).toBeChecked();
   await page.getByLabel("超时（秒）").fill("457");
   await expect(page.getByText("评审参数已保存", { exact: true })).toHaveCount(0);
   await page.getByRole("tab", { name: "基础接入" }).click();

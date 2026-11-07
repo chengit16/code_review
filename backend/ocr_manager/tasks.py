@@ -6,6 +6,8 @@ import json
 from typing import Any
 
 from ocr_manager.model_pricing import estimate_cost
+from ocr_manager.review_effective import status_sql
+from ocr_manager.review_observability import enrich_jobs
 from ocr_manager.storage import Store
 
 
@@ -13,16 +15,19 @@ def task_view_clause(view: str | None) -> str | None:
     """快捷视图与首页共用口径；同一输入被后续完整评审覆盖后不再算未恢复异常。"""
 
     if view == "active":
-        return "j.status IN ('queued','running')"
+        return ("j.status IN ('queued','running') OR EXISTS (SELECT 1 FROM "
+                "review_recoveries b WHERE b.job_id=j.id AND b.status IN ('queued','running'))")
     if view == "notification_failed":
         return ("EXISTS (SELECT 1 FROM notification_deliveries d "
-                "WHERE d.job_id=j.id AND d.status='failed')")
+                "WHERE d.job_id=j.id AND d.status='failed') OR EXISTS (SELECT 1 FROM "
+                "review_recovery_deliveries s WHERE s.job_id=j.id AND s.source_attempt=j.attempts "
+                "AND j.status='partial' AND s.status='failed')")
     if view == "attention":
-        return """j.status IN ('failed','partial') AND NOT EXISTS (
+        return f"""{status_sql()} IN ('failed','partial') AND NOT EXISTS (
             SELECT 1 FROM review_jobs n WHERE n.repository_id=j.repository_id
             AND n.mr_iid=j.mr_iid AND n.commit_sha=j.commit_sha
             AND COALESCE(n.base_sha,'')=COALESCE(j.base_sha,'')
-            AND n.id>j.id AND n.status='complete')"""
+            AND n.id>j.id AND {status_sql('n')}='complete')"""
     return None
 
 
@@ -36,7 +41,7 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
         clauses.append(f"({view})")
     for field in ("repository_id", "status", "target_branch", "mr_iid"):
         if filters.get(field) is not None:
-            clauses.append(f"j.{field}=?")
+            clauses.append(f"{status_sql() if field == 'status' else f'j.{field}'}=?")
             values.append(filters[field])
     if filters.get("sha"):
         clauses.append("j.commit_sha LIKE ?")
@@ -62,11 +67,16 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
             j.ordinal, j.target_branch, j.status, j.error, j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
             j.usage_json, j.config_snapshot,
+            CASE WHEN json_valid(j.scope_json) THEN
+              json_remove(j.scope_json,'$.newline_only_paths') END AS scope_json,
+            j.reason_code, j.next_run_at,
+            CASE WHEN json_valid(j.result_json) THEN
+              json_extract(j.result_json,'$.failure_analysis.summary') END AS failure_summary,
             r.name AS repository_name,
             (SELECT COUNT(*) FROM review_issue_occurrences o WHERE o.job_id=j.id
-              AND o.attempt_number=j.attempts) AS finding_count,
+              AND o.attempt_number=j.attempts AND o.recovery_id IS NULL) AS finding_count,
             (SELECT o.severity FROM review_issue_occurrences o WHERE o.job_id=j.id
-              AND o.attempt_number=j.attempts ORDER BY CASE o.severity
+              AND o.attempt_number=j.attempts AND o.recovery_id IS NULL ORDER BY CASE o.severity
               WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2
               WHEN 'low' THEN 1 ELSE 0 END DESC LIMIT 1) AS highest_severity,
             (SELECT d.status FROM notification_deliveries d WHERE d.job_id=j.id)
@@ -85,6 +95,7 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
             item["usage"] = usage
             item["estimated_cost"] = estimate_cost(usage, snapshot)
             items.append(item)
+        enrich_jobs(db, items)
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
@@ -112,8 +123,19 @@ def set_job_stage(store: Store, job_id: int, stage: str) -> None:
     """阶段先持久化，进程中断后仍能定位最后执行步骤。"""
 
     with store.connection() as db:
-        db.execute("UPDATE review_jobs SET failure_stage=? WHERE id=? AND status='running'",
-                   (stage, job_id))
+        job = db.execute("SELECT attempts,status,failure_stage FROM review_jobs WHERE id=?",
+                         (job_id,)).fetchone()
+        if not job or job["status"] != "running":
+            return
+        current = db.execute("SELECT stage FROM review_stage_timings WHERE job_id=? "
+                             "AND finished_at IS NULL", (job_id,)).fetchone()
+        if current is None or current["stage"] != stage:
+            db.execute("UPDATE review_stage_timings SET finished_at=CURRENT_TIMESTAMP "
+                       "WHERE job_id=? AND finished_at IS NULL", (job_id,))
+            db.execute("INSERT INTO review_stage_timings(job_id,attempt_number,stage) "
+                       "VALUES(?,?,?)",
+                       (job_id, job["attempts"], stage))
+        db.execute("UPDATE review_jobs SET failure_stage=? WHERE id=?", (stage, job_id))
 
 
 def report_projection(job: dict[str, Any]) -> dict[str, Any]:
@@ -124,12 +146,26 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
     coverage = manifest.get("coverage") or {}
     preview = result.get("preview") or {}
     snapshot = public_snapshot(job.get("config_snapshot"))
-    return {
+    report: dict[str, Any] = {
         "job": {key: job.get(key) for key in (
             "id", "repository_id", "mr_iid", "commit_sha", "target_branch", "status",
             "failure_stage", "error", "attempts", "created_at", "finished_at",
         )},
         "comments": result.get("comments", []),
+        "effective_status": job.get("effective_status", job.get("status")),
+        "effective_conclusion": job.get("effective_document"),
+        "initial_cumulative_usage": job.get("initial_cumulative_usage"),
+        "conclusions": job.get("conclusions"),
+        "timing": job.get("timing"),
+        "reason": job.get("reason"),
+        "scope_analysis": job.get("scope_analysis"),
+        "cumulative_usage": job.get("cumulative_usage"),
+        "diagnostic": result.get("diagnostic"),
+        "retry_summary": result.get("retry_summary"),
+        "failure_analysis": result.get("failure_analysis"),
+        "stage_timings": [{key: stage.get(key) for key in (
+            "attempt_number", "stage", "started_at", "finished_at")}
+            for stage in job.get("stage_timings", [])],
         "usage": result.get("usage"),
         "estimated_cost": estimate_cost(result.get("usage"), snapshot),
         "coverage": {key: len(coverage.get(key) or []) for key in (
@@ -139,11 +175,27 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
                   for item in preview.get("files", []) if isinstance(item, dict)],
         "changed_files": json.loads(job["changed_files"]) if job.get("changed_files") else [],
         "attempts": [{key: item.get(key) for key in (
-            "attempt_number", "status", "error", "failure_stage", "finished_at",
+            "attempt_number", "status", "error", "failure_stage", "started_at", "finished_at",
+            "scheduled_at", "retry_ready_at", "reason_code",
         )} for item in job["attempt_history"]],
         "delivery": job.get("delivery"),
         "configuration": snapshot,
     }
+    effective = job.get("effective_document")
+    if effective:
+        report["initial_review"] = {"status": job["status"], **{key: report[key] for key in (
+            "comments", "coverage", "reason", "diagnostic", "retry_summary", "failure_analysis",
+            "usage", "estimated_cost")}}
+        report["reason"] = {"code": job["effective_status"], "message": (
+            "当前有效覆盖已完成；初审故障证据单独保留" if job["effective_status"] == "complete"
+            else "补审后仍有失败覆盖；初审故障证据单独保留")}
+        report["diagnostic"] = report["retry_summary"] = report["failure_analysis"] = None
+        report["usage_scope"] = "initial_attempt"
+        report["version_execution_usage"] = effective["execution_usage"]
+        report["comments"] = effective["findings"]
+        report["coverage"] = effective["version"]["coverage"]
+        report["job"]["status"] = job["effective_status"]
+    return report
 
 
 def public_snapshot(raw: str | dict[str, Any] | None) -> dict[str, Any] | None:

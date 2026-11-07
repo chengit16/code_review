@@ -15,20 +15,37 @@ from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.auth import AUTH_MIGRATION
+from ocr_manager.chat_capture_migration import CHAT_CAPTURE_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.feedback_issues import sync_feedback_issue
+from ocr_manager.improvement_archive_migration import IMPROVEMENT_ARCHIVE_MIGRATION
+from ocr_manager.improvement_maintenance_migration import IMPROVEMENT_MAINTENANCE_MIGRATION
+from ocr_manager.improvement_migration import IMPROVEMENT_MIGRATION
+from ocr_manager.improvement_theme_migration import IMPROVEMENT_THEME_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
+from ocr_manager.newline_filter_migration import NEWLINE_FILTER_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.premerge import PREMERGE_CONTEXT_MIGRATION, PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
+from ocr_manager.recovery_budget import MIGRATION as RECOVERY_BUDGET_MIGRATION
+from ocr_manager.review_diagnostic_import_migration import DIAGNOSTIC_IMPORT_MIGRATION
+from ocr_manager.review_effective_migration import EFFECTIVE_MIGRATION
 from ocr_manager.review_effectiveness import EFFECTIVENESS_MIGRATION
+from ocr_manager.review_failures import attempt_limit
+from ocr_manager.review_finding_migration import FINDING_MIGRATION
 from ocr_manager.review_issues import ISSUES_MIGRATION, backfill_existing_issues, capture_findings
+from ocr_manager.review_observability import enrich_jobs, reason_code
+from ocr_manager.review_observability_migration import OBSERVABILITY_MIGRATION
+from ocr_manager.review_policy_migration import REVIEW_POLICY_MIGRATION
+from ocr_manager.review_recovery_migration import RECOVERY_MIGRATION
+from ocr_manager.review_results import project_review_result
+from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 
-SCHEMA_VERSION = 34
+SCHEMA_VERSION = 48
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -333,6 +350,20 @@ class Store:
                 (32, SCHEMA_V32),
                 (33, SCHEMA_V33),
                 (34, SCHEMA_V34),
+                (35, REVIEW_POLICY_MIGRATION),
+                (36, OBSERVABILITY_MIGRATION),
+                (37, NEWLINE_FILTER_MIGRATION),
+                (38, SCHEDULER_MIGRATION),
+                (39, IMPROVEMENT_MIGRATION),
+                (40, IMPROVEMENT_THEME_MIGRATION),
+                (41, IMPROVEMENT_ARCHIVE_MIGRATION),
+                (42, IMPROVEMENT_MAINTENANCE_MIGRATION),
+                (43, RECOVERY_MIGRATION),
+                (44, FINDING_MIGRATION),
+                (45, EFFECTIVE_MIGRATION),
+                (46, DIAGNOSTIC_IMPORT_MIGRATION),
+                (47, CHAT_CAPTURE_MIGRATION),
+                (48, RECOVERY_BUDGET_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -367,12 +398,15 @@ class Store:
                 for row in db.execute("SELECT * FROM connection_checks ORDER BY id DESC LIMIT 100")
             ]
 
-    def next_connection_check(self) -> dict[str, Any] | None:
+    def next_connection_check(self, kinds: tuple[str, ...] | None = None) -> dict[str, Any] | None:
         """领取一个诊断任务；外部调用在事务结束后执行。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            allowed = kinds or ("git", "gitlab", "model", "feishu")
             row = db.execute(
-                "SELECT * FROM connection_checks WHERE status='queued' ORDER BY id LIMIT 1"
+                "SELECT * FROM connection_checks WHERE status='queued' AND kind IN ("
+                + ",".join("?" for _ in allowed) + ") ORDER BY id LIMIT 1", allowed,
             ).fetchone()
             if row:
                 db.execute("UPDATE connection_checks SET status='running' WHERE id=?", (row["id"],))
@@ -535,6 +569,7 @@ class Store:
         """单 Worker 领取最早的预览，外部操作在事务结束后执行。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 "SELECT * FROM rule_previews WHERE status='queued' ORDER BY id LIMIT 1"
             ).fetchone()
@@ -819,9 +854,11 @@ class Store:
     def feedback_summary(self) -> list[dict[str, Any]]:
         """按项目聚合人工反馈；误报率以已标记的发现为分母。"""
 
+        from ocr_manager.review_feedback_queries import CURRENT_FEEDBACK
+
         with self.connection() as db:
             return [dict(row) for row in db.execute(
-                """SELECT r.id AS repository_id, r.name AS repository_name,
+                f"""SELECT r.id AS repository_id, r.name AS repository_name,
                 COALESCE(p.minimum_severity, 'medium') AS minimum_severity,
                 COUNT(f.job_id) AS total,
                 SUM(CASE WHEN f.verdict='helpful' THEN 1 ELSE 0 END) AS helpful,
@@ -829,7 +866,7 @@ class Store:
                 SUM(CASE WHEN f.verdict='fixed' THEN 1 ELSE 0 END) AS fixed
                 FROM repositories r LEFT JOIN project_policies p ON p.repository_id=r.id
                 LEFT JOIN review_jobs j ON j.repository_id=r.id
-                LEFT JOIN review_feedback f ON f.job_id=j.id
+                LEFT JOIN ({CURRENT_FEEDBACK}) f ON f.job_id=j.id
                 GROUP BY r.id ORDER BY r.name, r.id"""
             )]
 
@@ -864,6 +901,9 @@ class Store:
                 (job_id, comment_index, verdict),
             )
             sync_feedback_issue(db, job_id, row["attempts"], comment_index, verdict, actor)
+            from ocr_manager.review_finding_feedback import mirror_initial_feedback
+
+            mirror_initial_feedback(db, job_id, row["attempts"], comment_index, verdict, actor)
 
     def clear_review_feedback(
         self, job_id: int, comment_index: int, actor: str = "系统",
@@ -879,6 +919,9 @@ class Store:
             row = db.execute("SELECT attempts FROM review_jobs WHERE id=?", (job_id,)).fetchone()
             if deleted and row is not None:
                 sync_feedback_issue(db, job_id, row["attempts"], comment_index, None, actor)
+                from ocr_manager.review_finding_feedback import mirror_initial_feedback
+
+                mirror_initial_feedback(db, job_id, row["attempts"], comment_index, None, actor)
             return deleted
 
     def record_webhook(self, repository_id: int) -> None:
@@ -988,15 +1031,22 @@ class Store:
                 for row in db.execute("SELECT * FROM merge_events ORDER BY id DESC LIMIT 100")
             ]
 
-    def next_event(self) -> dict[str, Any] | None:
+    def next_event(self, last_repository_id: int | None = None) -> dict[str, Any] | None:
         """领取最早的未展开事件；单 Worker 下状态更新仍需持久化。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """SELECT e.* FROM merge_events e
                 JOIN repositories r ON r.id=e.repository_id
                 WHERE e.status='queued' AND r.enabled=1
-                AND e.next_run_at<=CURRENT_TIMESTAMP ORDER BY e.id LIMIT 1"""
+                AND e.next_run_at<=CURRENT_TIMESTAMP
+                AND NOT EXISTS (SELECT 1 FROM merge_events earlier
+                    WHERE earlier.repository_id=e.repository_id AND earlier.id<e.id
+                    AND earlier.status IN ('queued','running'))
+                ORDER BY CASE WHEN e.repository_id>? THEN 0 ELSE 1 END,
+                e.repository_id,e.id LIMIT 1""",
+                (last_repository_id,),
             ).fetchone()
             if row:
                 db.execute(
@@ -1203,14 +1253,16 @@ class Store:
                   SELECT 1 FROM review_jobs previous
                   WHERE previous.event_id=j.event_id AND previous.ordinal<j.ordinal
                   AND previous.status IN ('queued','running')
-                ) ORDER BY CASE WHEN j.repository_id=? THEN 1 ELSE 0 END, j.id LIMIT 1""",
+                ) ORDER BY CASE WHEN j.repository_id>? THEN 0 ELSE 1 END,
+                j.repository_id,j.id LIMIT 1""",
                 (last_repository_id,),
             ).fetchone()
             if row:
                 db.execute(
                     """UPDATE review_jobs SET status='running', attempts=attempts+1,
                     started_at=CURRENT_TIMESTAMP, finished_at=NULL,
-                    failure_stage='configuration', error=NULL WHERE id=?""",
+                    failure_stage='configuration', error=NULL, reason_code=NULL,
+                    scope_json=NULL, attempt_ready_at=next_run_at WHERE id=?""",
                     (row["id"],),
                 )
             return dict(row) if row else None
@@ -1225,46 +1277,8 @@ class Store:
     ) -> None:
         """保存评审结论并原子创建独立飞书投递任务；已删除任务不再写回。"""
 
-        # 原始 OCR JSON 留在受控工件；索引库和其备份只保存页面与通知必需的字段。
-        projection = (
-            {
-                "comments": [
-                    {
-                        key: comment[key]
-                        for key in (
-                            "path",
-                            "content",
-                            "start_line",
-                            "end_line",
-                            "severity",
-                            "category",
-                        )
-                        if key in comment
-                    }
-                    for comment in result.get("comments", [])
-                    if isinstance(comment, dict)
-                ],
-                "manifest": {
-                    "terminal_state": result["manifest"].get("terminal_state"),
-                    "coverage": result["manifest"].get("coverage"),
-                }
-                if isinstance(result.get("manifest"), dict)
-                else None,
-                "summary": {"budget_exceeded": result["summary"].get("budget_exceeded") is True}
-                if isinstance(result.get("summary"), dict)
-                else None,
-                "usage": {
-                    key: value for key, value in result.get("summary", {}).items()
-                    if key in {"input_tokens", "output_tokens", "total_tokens"}
-                    and isinstance(value, int) and not isinstance(value, bool) and value >= 0
-                } if isinstance(result.get("summary"), dict) else None,
-                "preview": result.get("preview"),
-                "message": result.get("message"),
-                "source": result.get("source"),
-            }
-            if result is not None
-            else None
-        )
+        # 1. 原始 OCR JSON 留在受控工件；事务前只投影页面与通知必需的字段。
+        projection = project_review_result(result) if result is not None else None
         with self.connection() as db:
             job = db.execute(
                 "SELECT id, repository_id, mr_iid, commit_sha, attempts, retry_start_attempts, "
@@ -1275,8 +1289,11 @@ class Store:
             if job is None:
                 # 项目删除会级联移除任务，在途 OCR 完成后无需恢复已删除的业务记录。
                 return
+            # 2. 取消优先于迟到结果；终态和独立投递、发布任务在同一事务写入。
             if job["cancel_requested"]:
                 status, result_path, projection, error = "cancelled", None, None, "用户请求停止评审"
+            db.execute("UPDATE review_jobs SET reason_code=? WHERE id=?",
+                       (reason_code(status, projection, error), job_id))
             db.execute(
                 """UPDATE review_jobs SET status=?, result_path=?, result_json=?, error=?,
                 finished_at=CURRENT_TIMESTAMP,
@@ -1309,6 +1326,7 @@ class Store:
                         db.execute("""INSERT OR IGNORE INTO gitlab_publications
                             (job_id,attempt_number,comment_index) VALUES(?,?,?)""",
                             (job_id, job["attempts"], index))
+            # 3. 保存本次用量与尝试证据，不能用后续重试覆盖本次事实。
             usage = projection.get("usage") if projection else None
             db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
                        (json.dumps(usage) if usage else None, job_id))
@@ -1325,9 +1343,12 @@ class Store:
                  job_id),
             )
 
-    def defer_job(self, job_id: int, error: str) -> None:
-        """临时失败有限退避；项目已删除时不再重新建立任务。"""
+    def defer_job(self, job_id: int, error: str, *, delay_seconds: int | None = None,
+                  result_path: str | None = None, result: dict[str, Any] | None = None) -> None:
+        """按快照预算有限退避；保留可信失败结果，取消与项目删除不能触发重试。"""
 
+        # 1. 在事务内重读任务及周期次数，不能仅依赖 Worker 先前领取的状态。
+        projection = project_review_result(result) if result is not None else None
         with self.connection() as db:
             job = db.execute(
                 "SELECT attempts, retry_start_attempts, failure_stage, cancel_requested, "
@@ -1338,26 +1359,43 @@ class Store:
             if job is None:
                 return
             attempts = int(job["attempts"])
-            final = attempts - int(job["retry_start_attempts"]) >= 3
+            cycle_attempt = attempts - int(job["retry_start_attempts"])
+            final = cycle_attempt >= attempt_limit(job["config_snapshot"])
             cancelled = bool(job["cancel_requested"])
+            if cancelled:
+                result_path, projection = None, None
+            if projection and isinstance(projection.get("diagnostic"), dict):
+                projection["diagnostic"]["retry_scheduled"] = not final
+            projected_json = json.dumps(projection, ensure_ascii=False) if projection else None
+            delay = (min(300, cycle_attempt * cycle_attempt * 20)
+                     if delay_seconds is None else delay_seconds)
+            db.execute("UPDATE review_jobs SET reason_code=? WHERE id=?",
+                       (reason_code("cancelled" if cancelled else "failed", projection, error),
+                        job_id))
+            # 2. 排队决定、失败证据和实际用量同步写回，取消不保留迟到结果。
             db.execute(
                 """UPDATE review_jobs SET status=?, error=?,
-                next_run_at=datetime('now', printf('+%d seconds', min(300,
-                  (attempts - retry_start_attempts) *
-                  (attempts - retry_start_attempts) * 20))),
+                next_run_at=datetime('now', printf('+%d seconds', ?)),
+                result_path=?,result_json=?,
                 finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?""",
                 ("cancelled" if cancelled else "failed" if final else "queued",
-                 "用户请求停止评审" if cancelled else error[:500], final or cancelled, job_id),
+                 "用户请求停止评审" if cancelled else error[:500], delay,
+                 result_path, projected_json, final or cancelled, job_id),
             )
+            usage = projection.get("usage") if projection and not cancelled else None
+            db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
+                       (json.dumps(usage) if usage else None, job_id))
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, error, failure_stage,
-                 config_snapshot, changed_files, started_at, correlation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (job_id, attempts, "cancelled" if cancelled else "failed", error[:500],
+                 config_snapshot, changed_files, started_at, correlation_id,result_path,result_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (job_id, attempts, "cancelled" if cancelled else "failed",
+                 "用户请求停止评审" if cancelled else error[:500],
                  job["failure_stage"], job["config_snapshot"], job["changed_files"],
-                 job["started_at"], job["correlation_id"]),
+                 job["started_at"], job["correlation_id"], result_path, projected_json),
             )
+            # 3. 只在最终失败建立独立通知；退避中的尝试不产生重复投递。
             if final and not cancelled:
                 db.execute(
                     """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
@@ -1388,6 +1426,8 @@ class Store:
         """读取单任务和机器可读结果供管理页展示。"""
 
         with self.connection() as db:
+            # 任务、尝试与累计指标使用同一读快照，避免异步写回造成重复计时。
+            db.execute("BEGIN")
             row = db.execute("SELECT * FROM review_jobs WHERE id=?", (job_id,)).fetchone()
             if not row:
                 return None
@@ -1426,6 +1466,9 @@ class Store:
                     "preview": parsed.get("preview"),
                     "summary": parsed.get("summary"),
                     "usage": parsed.get("usage"),
+                    "diagnostic": parsed.get("diagnostic"),
+                    "retry_summary": parsed.get("retry_summary"),
+                    "failure_analysis": parsed.get("failure_analysis"),
                 }
             else:
                 result["result"] = None
@@ -1452,7 +1495,7 @@ class Store:
                 (job_id,))]
             issues = db.execute("""SELECT o.comment_index,o.issue_id,i.status
                 FROM review_issue_occurrences o JOIN review_issues i ON i.id=o.issue_id
-                WHERE o.job_id=? AND o.attempt_number=?""",
+                WHERE o.job_id=? AND o.attempt_number=? AND o.recovery_id IS NULL""",
                 (job_id, result["attempts"])).fetchall()
             result["issue_ids"] = {
                 int(row["comment_index"]): int(row["issue_id"])
@@ -1461,6 +1504,9 @@ class Store:
             result["issue_statuses"] = {
                 int(row["comment_index"]): str(row["status"]) for row in issues
             }
+            result["stage_timings"] = [dict(stage) for stage in db.execute(
+                "SELECT * FROM review_stage_timings WHERE job_id=? ORDER BY id", (job_id,))]
+            enrich_jobs(db, [result], include_scope_paths=True)
             return result
 
     def retry_job(self, job_id: int, config_hash: str | None = None) -> int | None:
@@ -1480,6 +1526,15 @@ class Store:
             if old is None or old["status"] not in (
                 "complete", "partial", "failed", "skipped", "cancelled"
             ):
+                return None
+            if db.execute("SELECT 1 FROM review_recoveries WHERE job_id=? AND "
+                          "status IN ('queued','running')", (job_id,)).fetchone():
+                return None
+            # 独立投递槽可能仍在发送旧结果；重评审不能删除或复用其投递身份。
+            if db.execute("""SELECT 1 FROM notification_deliveries
+                WHERE job_id=? AND status='sending' UNION ALL
+                SELECT 1 FROM gitlab_publications
+                WHERE job_id=? AND status='sending' LIMIT 1""", (job_id, job_id)).fetchone():
                 return None
             if config_hash and config_hash != old["config_hash"]:
                 allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
@@ -1512,8 +1567,8 @@ class Store:
                 """UPDATE review_jobs SET status='queued', error=NULL,
                 retry_start_attempts=attempts, cancel_requested=0,
                 result_json=NULL, result_path=NULL, changed_files=NULL, config_snapshot=NULL,
-                usage_json=NULL,
-                finished_at=NULL, failure_stage=NULL,
+                usage_json=NULL, started_at=NULL, attempt_ready_at=NULL,
+                scope_json=NULL, reason_code=NULL, finished_at=NULL, failure_stage=NULL,
                 next_run_at=CURRENT_TIMESTAMP WHERE id=?
                 AND status IN ('complete','partial','failed','skipped','cancelled')""",
                 (job_id,),
@@ -1528,9 +1583,10 @@ class Store:
         """领取待发送通知；评审结果与通知重试相互独立。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """SELECT d.*, j.repository_id, j.commit_sha, j.commit_author, j.mr_iid,
-                j.status AS review_status,
+                j.status AS review_status, j.attempts AS review_attempt_number,
                 j.result_json, j.error AS review_error, j.notification_min_severity,
                 r.name AS repository_name, r.path_with_namespace, r.target_branch,
                 r.gitlab_url, r.remote_url
@@ -1597,11 +1653,23 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
-            # 合并前结果仅在当前版本有效；重启不恢复旧版本，当前运行任务有限重试。
-            db.execute("""UPDATE premerge_reviews SET
-                status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END,
-                error='Worker 中断，合并前结果未确认',next_run_at=CURRENT_TIMESTAMP
+            # 发送中断可能已在外部成功；不盲目自动重发，保留人工核对与显式通知重试。
+            db.execute("""UPDATE review_recovery_deliveries SET status='failed',
+                error='发送中断，外部结果未知，请核对后重试' WHERE status='sending'""")
+            # 补审可能已产生外部费用；中断只落终态，绝不自动重复模型调用。
+            db.execute("""UPDATE review_recoveries SET
+                status=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'failed' END,
+                error_code='worker_interrupted',finished_at=CURRENT_TIMESTAMP
                 WHERE status='running'""")
+            # 合并前结果仅在当前版本有效；重启不恢复旧版本，当前运行任务有限重试。
+            premerge_running = db.execute("""SELECT id,attempts,execution_policy
+                FROM premerge_reviews WHERE status='running'""").fetchall()
+            for review in premerge_running:
+                final = review["attempts"] >= attempt_limit(review["execution_policy"])
+                db.execute("""UPDATE premerge_reviews SET status=?,
+                    finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    error='Worker 中断，合并前结果未确认',next_run_at=CURRENT_TIMESTAMP
+                    WHERE id=?""", ("failed" if final else "queued", final, review["id"]))
             db.execute("UPDATE gitlab_publications SET status='pending' WHERE status='sending'")
             db.execute("""UPDATE mr_backfills SET status='queued' WHERE status='running'""")
             db.execute(
@@ -1622,19 +1690,38 @@ class Store:
                 WHERE status='running'"""
             )
             running = db.execute(
-                """SELECT id, attempts, retry_start_attempts, correlation_id
+                """SELECT id, attempts, retry_start_attempts, correlation_id,config_snapshot,
+                failure_stage,changed_files,started_at
                 FROM review_jobs WHERE status='running' AND cancel_requested=0"""
             ).fetchall()
+            cancelled = db.execute("""SELECT * FROM review_jobs
+                WHERE status='running' AND cancel_requested=1""").fetchall()
+            for job in cancelled:
+                db.execute("UPDATE review_jobs SET reason_code='cancelled' WHERE id=?",
+                           (job["id"],))
+                db.execute("""INSERT OR IGNORE INTO review_attempts
+                    (job_id,attempt_number,status,error,started_at,config_snapshot,failure_stage,
+                     correlation_id,changed_files)
+                    VALUES(?,?,'cancelled','用户请求停止评审',?,?,?,?,?)""",
+                    (job["id"], job["attempts"], job["started_at"], job["config_snapshot"],
+                     job["failure_stage"], job["correlation_id"], job["changed_files"]))
+                db.execute("""UPDATE review_attempts SET reason_code='interrupted_cancelled'
+                    WHERE job_id=? AND attempt_number=?""", (job["id"], job["attempts"]))
             db.execute("""UPDATE review_jobs SET status='cancelled',
                        error='用户请求停止评审', finished_at=CURRENT_TIMESTAMP
                        WHERE status='running' AND cancel_requested=1""")
             for job in running:
-                final = job["attempts"] - job["retry_start_attempts"] >= 3
+                final = (job["attempts"] - job["retry_start_attempts"] >=
+                         attempt_limit(job["config_snapshot"]))
+                db.execute("UPDATE review_jobs SET reason_code='interrupted' WHERE id=?",
+                           (job["id"],))
                 db.execute(
                     """INSERT OR IGNORE INTO review_attempts
-                    (job_id, attempt_number, status, error, correlation_id)
-                    VALUES (?, ?, 'failed', 'Worker 中断，评审结果未确认', ?)""",
-                    (job["id"], job["attempts"], job["correlation_id"]),
+                    (job_id, attempt_number, status, error, correlation_id,
+                     config_snapshot,failure_stage,changed_files,started_at)
+                    VALUES (?, ?, 'failed', 'Worker 中断，评审结果未确认', ?,?,?,?,?)""",
+                    (job["id"], job["attempts"], job["correlation_id"], job["config_snapshot"],
+                     job["failure_stage"], job["changed_files"], job["started_at"]),
                 )
                 db.execute(
                     """UPDATE review_jobs SET status=?, error='Worker 中断，评审结果未确认',
@@ -1643,6 +1730,9 @@ class Store:
                     WHERE id=?""",
                     ("failed" if final else "queued", final, job["id"]),
                 )
+                if not final:
+                    db.execute("""UPDATE review_attempts SET retry_ready_at=CURRENT_TIMESTAMP
+                        WHERE job_id=? AND attempt_number=?""", (job["id"], job["attempts"]))
                 if final:
                     db.execute(
                         """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)

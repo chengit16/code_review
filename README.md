@@ -50,3 +50,5 @@ npm --prefix frontend run build
 ```
 
 完整浏览器检查及本机 Chrome 的使用方式见[前端交互回归](docs/frontend-interaction-checks.md)。以上是可执行入口，不表示每次文档更新都重新运行全部测试；验证范围应以对应变更记录为准。
+
+聊天混合记录：见 [聊天自动受理与结构化台账说明](docs/chat-capture.md)，仅采集已授权绑定的本项目会话；页面可查看待核实、采集失败并暂停，不保证即时或零遗漏。

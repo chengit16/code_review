@@ -1,0 +1,716 @@
+{
+  "schema_version": "platform.resume-probe/v1",
+  "modes": [
+    {
+      "mode": "commit",
+      "initial": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 400
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 400
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "partial",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "alpha/a.py"
+          ],
+          "reused": [],
+          "failed": [
+            "beta/comma,name[1].ts"
+          ],
+          "waived": []
+        },
+        "comments": 1,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "resumed": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [
+            "alpha/a.py"
+          ],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 2,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "repeated": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [
+            "alpha/a.py"
+          ],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 2,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "variants": [
+        {
+          "case": "changed_model",
+          "exit_code": 0,
+          "calls": [
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "plan",
+              "status": 200
+            },
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "main",
+              "status": 200
+            },
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "main",
+              "status": 200
+            }
+          ],
+          "diagnostic": "not_classified",
+          "manifest_valid": true,
+          "status": "complete",
+          "coverage": {
+            "selected": [
+              "alpha/a.py",
+              "beta/comma,name[1].ts"
+            ],
+            "completed": [
+              "beta/comma,name[1].ts"
+            ],
+            "reused": [
+              "alpha/a.py"
+            ],
+            "failed": [],
+            "waived": []
+          },
+          "comments": 2,
+          "tokens": 6,
+          "local_success_tokens": 6,
+          "rejected_without_calls": false
+        },
+        {
+          "case": "changed_rule",
+          "exit_code": 1,
+          "calls": [],
+          "diagnostic": "not_classified",
+          "manifest_valid": false,
+          "status": null,
+          "coverage": {},
+          "comments": 0,
+          "tokens": null,
+          "local_success_tokens": 0,
+          "rejected_without_calls": true
+        },
+        {
+          "case": "missing_session",
+          "exit_code": 1,
+          "calls": [],
+          "diagnostic": "not_classified",
+          "manifest_valid": false,
+          "status": null,
+          "coverage": {},
+          "comments": 0,
+          "tokens": null,
+          "local_success_tokens": 0,
+          "rejected_without_calls": true
+        }
+      ],
+      "cross_checkout": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "corrupt_session": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "verified": true,
+      "independent_subset": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 1,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "subset_preview_matches": true,
+      "independent_subset_verified": true,
+      "interrupted": {
+        "exit_code": -1,
+        "calls": [
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": null
+      },
+      "interrupted_resume": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "repeat_without_calls": false,
+      "usage_matches_incremental": true,
+      "usage_matches_cumulative": false
+    },
+    {
+      "mode": "range",
+      "initial": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 400
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 400
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "partial",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "alpha/a.py"
+          ],
+          "reused": [],
+          "failed": [
+            "beta/comma,name[1].ts"
+          ],
+          "waived": []
+        },
+        "comments": 1,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "resumed": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [
+            "alpha/a.py"
+          ],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 2,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "repeated": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "alpha/a.py",
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [
+            "alpha/a.py"
+          ],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 2,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "variants": [
+        {
+          "case": "changed_model",
+          "exit_code": 0,
+          "calls": [
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "plan",
+              "status": 200
+            },
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "main",
+              "status": 200
+            },
+            {
+              "paths": [
+                "beta/comma,name[1].ts"
+              ],
+              "stage": "main",
+              "status": 200
+            }
+          ],
+          "diagnostic": "not_classified",
+          "manifest_valid": true,
+          "status": "complete",
+          "coverage": {
+            "selected": [
+              "alpha/a.py",
+              "beta/comma,name[1].ts"
+            ],
+            "completed": [
+              "beta/comma,name[1].ts"
+            ],
+            "reused": [
+              "alpha/a.py"
+            ],
+            "failed": [],
+            "waived": []
+          },
+          "comments": 2,
+          "tokens": 6,
+          "local_success_tokens": 6,
+          "rejected_without_calls": false
+        },
+        {
+          "case": "changed_rule",
+          "exit_code": 1,
+          "calls": [],
+          "diagnostic": "not_classified",
+          "manifest_valid": false,
+          "status": null,
+          "coverage": {},
+          "comments": 0,
+          "tokens": null,
+          "local_success_tokens": 0,
+          "rejected_without_calls": true
+        },
+        {
+          "case": "missing_session",
+          "exit_code": 1,
+          "calls": [],
+          "diagnostic": "not_classified",
+          "manifest_valid": false,
+          "status": null,
+          "coverage": {},
+          "comments": 0,
+          "tokens": null,
+          "local_success_tokens": 0,
+          "rejected_without_calls": true
+        }
+      ],
+      "cross_checkout": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "corrupt_session": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "verified": true,
+      "independent_subset": {
+        "exit_code": 0,
+        "calls": [
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "main",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": true,
+        "status": "complete",
+        "coverage": {
+          "selected": [
+            "beta/comma,name[1].ts"
+          ],
+          "completed": [
+            "beta/comma,name[1].ts"
+          ],
+          "reused": [],
+          "failed": [],
+          "waived": []
+        },
+        "comments": 1,
+        "tokens": 6,
+        "local_success_tokens": 6
+      },
+      "subset_preview_matches": true,
+      "independent_subset_verified": true,
+      "interrupted": {
+        "exit_code": -1,
+        "calls": [
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "plan",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "alpha/a.py"
+            ],
+            "stage": "main",
+            "status": 200
+          },
+          {
+            "paths": [
+              "beta/comma,name[1].ts"
+            ],
+            "stage": "plan",
+            "status": 200
+          }
+        ],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": null
+      },
+      "interrupted_resume": {
+        "exit_code": 1,
+        "calls": [],
+        "diagnostic": "not_classified",
+        "manifest_valid": false,
+        "status": null,
+        "coverage": {},
+        "comments": 0,
+        "tokens": null,
+        "local_success_tokens": 0
+      },
+      "repeat_without_calls": false,
+      "usage_matches_incremental": true,
+      "usage_matches_cumulative": false
+    }
+  ],
+  "version": "open-code-review v1.12.9 (bccbc15) darwin/arm64",
+  "real_model_called": false,
+  "business_data_modified": false,
+  "native_coverage_reuse_verified": true,
+  "production_resume_approved": false
+}

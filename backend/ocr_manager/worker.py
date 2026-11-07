@@ -24,22 +24,32 @@ from ocr_manager.attempt_history import save_snapshot
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.checks import run_connection_check
 from ocr_manager.config import Settings, load_settings
+from ocr_manager.execution_guard import worker_fence
 from ocr_manager.feishu import FeishuDeliveryError, send_review
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.model_pricing import pricing_snapshot
-from ocr_manager.ocr import check_rule, run_review
+from ocr_manager.ocr import check_rule, read_preview, run_review
 from ocr_manager.premerge import (
     SHA,
+    defer_premerge,
     description_digest,
     enqueue_premerge,
     finish_premerge,
     next_premerge,
     premerge_is_current,
+    premerge_policy,
 )
 from ocr_manager.premerge_context import build_premerge_context
 from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.publications import next_publication, publish_one
+from ocr_manager.range_preflight import input_policy, inspect_range, save_preflight
+from ocr_manager.review_failures import (
+    REVIEW_POLICY,
+    classify_review_error,
+    result_failure,
+    retry_delay,
+)
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 from ocr_manager.task_control import cancellation_requested
@@ -65,7 +75,8 @@ def worker_lock(data_dir: Path) -> Iterator[None]:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RuntimeError("已有 Worker 正在处理此数据目录") from error
-        yield
+        with worker_fence(descriptor):
+            yield
     finally:
         os.close(descriptor)
 
@@ -120,7 +131,8 @@ def configuration_snapshot(
     """按模型、OCR 安装文件及该提交规则记录配置事实，始终排除密钥。"""
 
     model_settings, model_version = review_settings(store, settings, repository_id)
-    profile_id = get_limits(store, repository_id)["model_profile_id"]
+    project_limits = get_limits(store, repository_id)
+    profile_id = project_limits["model_profile_id"]
     profile = (next((item for item in store.list_model_profiles() if item["id"] == profile_id),
                     None) if profile_id else store.get_model_profile())
     command = shutil.which(settings.ocr_command)
@@ -150,6 +162,8 @@ def configuration_snapshot(
             "max_tokens_budget": model_settings.ocr_max_tokens_budget,
             "concurrency": model_settings.ocr_concurrency,
             "effort": model_settings.ocr_effort,
+            "review_policy": REVIEW_POLICY.copy(),
+            "input_policy": input_policy(bool(project_limits["newline_filter_enabled"])),
             "model_profile_id": profile_id,
             "pricing": pricing_snapshot(profile),
             "rule_digest": rule_digest,
@@ -266,6 +280,7 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
 def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
     """在隔离目录评审指定 SHA，保存失败诊断后继续处理其他任务。"""
 
+    # 1. 比对入队快照后才能使用当前配置，旧策略任务不得被静默升级执行。
     set_job_stage(store, job["id"], "configuration")
     repository = store.get_repository(job["repository_id"])
     if repository is None:
@@ -289,6 +304,7 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
     checkout = run_dir / "checkout"
     git: GitRepository | None = None
     try:
+        # 2. 准备固定提交范围的隔离目录，进入 OCR 前保存可追溯的范围事实。
         set_job_stage(store, job["id"], "git")
         if repository["gitlab_token_ciphertext"]:
             repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
@@ -315,26 +331,62 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
                 "UPDATE review_jobs SET changed_files=?, commit_author=? WHERE id=?",
                 (json.dumps(changed_files), commit_author, job["id"]),
             )
+        set_job_stage(store, job["id"], "preflight")
+        with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
+            scope = inspect_range(checkout, job["commit_sha"], base_sha,
+                                  filter_enabled=model_settings.ocr_newline_filter_enabled)
+        save_preflight(run_dir, scope)
+        with store.connection() as db:
+            db.execute("UPDATE review_jobs SET scope_json=? WHERE id=? AND status='running'",
+                       (json.dumps(scope, ensure_ascii=False), job["id"]))
+
+        def record_stage(stage: str) -> None:
+            set_job_stage(store, job["id"], stage)
+            if stage == "scope_validation":
+                preview = read_preview(run_dir / "preview.json")
+                scope["ocr_candidate_count"] = preview["reviewable_count"]
+                scope["ocr_excluded_count"] = (len(preview["files"])
+                                               - preview["reviewable_count"]
+                                               - scope["excluded_count"])
+                save_preflight(run_dir, scope)
+                with store.connection() as db:
+                    db.execute("UPDATE review_jobs SET scope_json=? WHERE id=?",
+                               (json.dumps(scope, ensure_ascii=False), job["id"]))
+
+        # 3. OCR 结论与异常共用评审专用分类，持久化方法最终裁决取消和重试预算。
         set_job_stage(store, job["id"], "ocr_configuration")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
             status, result = run_review(
                 model_settings, checkout, run_dir, job["commit_sha"],
                 store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
-                lambda stage: set_job_stage(store, job["id"], stage),
+                record_stage,
+                scope_analysis=scope,
                 **({"base_sha": base_sha} if base_sha is not None else {}),
             )
             check_cancellation()
-        store.finish_job(job["id"], status, str(run_dir / "result.json"), result, None)
+        failure = result_failure(status, result)
+        if failure and failure.retryable:
+            store.defer_job(job["id"], str(failure), result=result,
+                            result_path=str(run_dir / "result.json"),
+                            delay_seconds=retry_delay(
+                                job["attempts"] + 1 - job["retry_start_attempts"],
+                                failure.retry_after))
+        else:
+            store.finish_job(job["id"], status, str(run_dir / "result.json"), result,
+                             str(failure) if failure else None)
     except ReviewCancelled:
         store.finish_job(job["id"], "cancelled", None, None, "用户请求停止评审")
     except Exception as error:
-        # 临时失败记录每次尝试并有限退避；提交范围冲突立即终止，避免盲目重试。
-        LOGGER.warning("关联 %s 的评审任务 %s 失败：%s",
-                       job.get("correlation_id", ""), job["id"], error)
-        if is_temporary(error):
-            store.defer_job(job["id"], str(error))
+        # 事件与评审使用不同分类；外部异常正文可能含凭据，只记录可信类别。
+        failure = classify_review_error(error)
+        LOGGER.warning("关联 %s 的评审任务 %s 失败：%s（%s）",
+                       job.get("correlation_id", ""), job["id"], failure.category,
+                       type(error).__name__)
+        if failure.retryable:
+            store.defer_job(job["id"], str(failure), delay_seconds=retry_delay(
+                job["attempts"] + 1 - job["retry_start_attempts"], failure.retry_after))
         else:
-            store.finish_job(job["id"], "failed", None, None, str(error)[:500])
+            store.finish_job(job["id"], "failed", None, None, str(failure))
     finally:
         if git is not None:
             try:
@@ -346,9 +398,22 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
 def deliver_notification(store: Store, settings: Settings, delivery: dict[str, Any]) -> None:
     """从已保存结论生成飞书通知，发送失败只重试投递。"""
 
+    def finish(error: str | None, retryable: bool = True) -> None:
+        if delivery.get("delivery_kind") == "recovery":
+            from ocr_manager.review_recovery_notifications import finish_delivery
+
+            finish_delivery(store, delivery, error, retryable)
+        else:
+            store.finish_delivery(delivery["id"], error, retryable)
+
+    if delivery.get("delivery_kind") == "recovery":
+        from ocr_manager.review_recovery_notifications import delivery_current
+
+        if not delivery_current(store, delivery):
+            return
     repository = store.get_repository(delivery["repository_id"])
     if repository is None:
-        store.finish_delivery(delivery["id"], "仓库配置已删除")
+        finish("仓库配置已删除")
         return
     try:
         target = (
@@ -377,23 +442,23 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
             send_review(webhook, delivery, signing_secret)
         else:
             send_review(webhook, delivery)
-        store.finish_delivery(delivery["id"], None)
+        finish(None)
     except FeishuDeliveryError as error:
         LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
                        delivery.get("correlation_id", ""), delivery["id"], error)
-        store.finish_delivery(delivery["id"], str(error), retryable=error.retryable)
+        finish(str(error), retryable=error.retryable)
     except (InvalidToken, ValueError):
         # 密文不可解或已保存结果损坏时，重复发送不会修复输入。
         LOGGER.warning("关联 %s 的飞书投递 %s 本地配置或结果不可用",
                        delivery.get("correlation_id", ""), delivery["id"])
-        store.finish_delivery(delivery["id"], "飞书投递配置或结果不可用", retryable=False)
+        finish("飞书投递配置或结果不可用", retryable=False)
     except Exception as error:
         # 投递失败只改变通知状态，不重新消耗模型额度。
         # HTTP 客户端异常可能包含带令牌的 webhook URL，持久化时仅记录异常类别。
         LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
                        delivery.get("correlation_id", ""), delivery["id"],
                        type(error).__name__)
-        store.finish_delivery(delivery["id"], f"飞书投递失败：{type(error).__name__}")
+        finish(f"飞书投递失败：{type(error).__name__}")
 
 
 def preview_rule(store: Store, settings: Settings, preview: dict[str, Any]) -> None:
@@ -457,6 +522,12 @@ def run_once(
     if delivery:
         deliver_notification(store, settings, delivery)
         return True, last_repository_id
+    from ocr_manager.review_recovery_notifications import claim_delivery
+
+    supplement = claim_delivery(store)
+    if supplement:
+        deliver_notification(store, settings, supplement)
+        return True, last_repository_id
     publication = next_publication(store)
     if publication:
         publish_one(store, settings, publication)
@@ -469,8 +540,17 @@ def run_once(
     if preview:
         preview_rule(store, settings, preview)
         return True, last_repository_id
+    from ocr_manager.review_recovery_store import claim as claim_recovery
+    from ocr_manager.review_recovery_worker import execute_recovery
+
+    recovery = claim_recovery(store)
+    if recovery:
+        execute_recovery(store, settings, recovery)
+        return True, last_repository_id
     job = store.next_job(last_repository_id)
     if job:
+        with store.connection() as db:
+            db.execute("UPDATE review_recovery_fairness SET next_kind='recovery' WHERE id=1")
         with artifact_lock(settings.data_dir, job["id"], blocking=True):
             review_job(store, settings, job)
         return True, int(job["repository_id"])
@@ -484,7 +564,13 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
     if repository is None:
         finish_premerge(store, review["id"], "failed", None, None, None, None, "项目已删除")
         return
-    run_dir = settings.data_dir / "premerge-runs" / str(review["id"]) / str(review["attempts"] + 1)
+    with store.connection() as db:
+        current_policy = premerge_policy(db, review["repository_id"])
+    if review.get("execution_policy") != current_policy:
+        finish_premerge(store, review["id"], "failed", None, None, None, None,
+                        "合并前审查执行策略已变化，请重新审查当前版本")
+        return
+    run_dir = settings.data_dir / "premerge-runs" / str(review["id"]) / str(review["attempts"])
     checkout = run_dir / "checkout"
     git: GitRepository | None = None
     base_sha: str | None = None
@@ -547,10 +633,30 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         model_settings, _ = review_settings(store, settings, repository["id"])
         changed_files = git.range_changed_files(base_sha, review["head_sha"])
         with cancellation_scope(lambda: not premerge_is_current(store, review["id"])):
+            scope = inspect_range(checkout, review["head_sha"], base_sha,
+                                  filter_enabled=model_settings.ocr_newline_filter_enabled)
+        save_preflight(run_dir, scope)
+        with store.connection() as db:
+            db.execute("UPDATE premerge_reviews SET scope_json=? WHERE id=? AND status='running'",
+                       (json.dumps(scope, ensure_ascii=False), review["id"]))
+        with cancellation_scope(lambda: not premerge_is_current(store, review["id"])):
+            def record_premerge_stage(stage: str) -> None:
+                if stage == "scope_validation":
+                    preview = read_preview(run_dir / "preview.json")
+                    scope["ocr_candidate_count"] = preview["reviewable_count"]
+                    scope["ocr_excluded_count"] = (len(preview["files"])
+                                                   - preview["reviewable_count"]
+                                                   - scope["excluded_count"])
+                    save_preflight(run_dir, scope)
+                    with store.connection() as db:
+                        db.execute("UPDATE premerge_reviews SET scope_json=? WHERE id=?",
+                                   (json.dumps(scope, ensure_ascii=False), review["id"]))
+
             status, result = run_review(
                 model_settings, checkout, run_dir, review["head_sha"],
                 store.get_review_rule(None), store.get_review_rule(repository["id"]),
-                base_sha=base_sha, background=background,
+                base_sha=base_sha, background=background, scope_analysis=scope,
+                on_stage=record_premerge_stage,
             )
             check_cancellation()
         latest_mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
@@ -575,25 +681,28 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
                              review["head_sha"], latest_hint)
             return
         # 3. 条件更新避免迟到结果覆盖新提交，原始工件仅供受控本机诊断。
-        finish_premerge(store, review["id"], status, base_sha, result,
-                        str(run_dir / "result.json"), changed_files, None, context)
+        failure = result_failure(status, result)
+        if failure and failure.retryable and review["attempts"] < REVIEW_POLICY["max_attempts"]:
+            defer_premerge(store, review["id"], str(failure),
+                           retry_delay(review["attempts"], failure.retry_after),
+                           base_sha, result, str(run_dir / "result.json"), changed_files)
+        else:
+            finish_premerge(store, review["id"], status, base_sha, result,
+                            str(run_dir / "result.json"), changed_files,
+                            str(failure) if failure else None, context)
     except ReviewCancelled:
         finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
                         "已有新的 MR 提交版本")
     except Exception as error:
-        LOGGER.warning("合并前审查 %s 失败：%s", review["id"], type(error).__name__)
-        if is_temporary(error) and review["attempts"] < 3:
-            with store.connection() as db:
-                db.execute("""UPDATE premerge_reviews SET status='queued',
-                    error=?,next_run_at=datetime('now',printf('+%d seconds',attempts*20))
-                    WHERE id=? AND status='running'""",
-                    (f"合并前审查暂时失败：{type(error).__name__}", review["id"]))
+        failure = classify_review_error(error)
+        LOGGER.warning("合并前审查 %s 失败：%s（%s）", review["id"], failure.category,
+                       type(error).__name__)
+        if failure.retryable and review["attempts"] < REVIEW_POLICY["max_attempts"]:
+            defer_premerge(store, review["id"], str(failure),
+                           retry_delay(review["attempts"], failure.retry_after), base_sha)
         else:
-            detail = (f"合并前审查配置无效：{str(error)[:200]}"
-                      if isinstance(error, ValueError)
-                      else f"合并前审查失败：{type(error).__name__}")
             finish_premerge(store, review["id"], "failed", base_sha, None, None, None,
-                            detail)
+                            str(failure))
     finally:
         if git is not None:
             try:
@@ -605,15 +714,31 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
 def process_backfill(store: Store, settings: Settings) -> bool:
     """先查询 GitLab，再把已核验时间范围的 IID 入队；失败保留诊断供重建申请。"""
 
-    from datetime import datetime
+    request = claim_backfill(store)
+    if request is None:
+        return False
+    execute_backfill(store, settings, request)
+    return True
+
+
+def claim_backfill(store: Store) -> dict[str, Any] | None:
+    """协调器原子领取补审申请，只返回稳定记录，不在事务中调用 GitLab。"""
 
     with store.connection() as db:
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT * FROM mr_backfills WHERE status='queued' ORDER BY id LIMIT 1")
         request = row.fetchone()
         if request is None:
-            return False
+            return None
         db.execute("UPDATE mr_backfills SET status='running' WHERE id=?", (request["id"],))
-        backfill = dict(request)
+        return dict(request)
+
+
+def execute_backfill(store: Store, settings: Settings, backfill: dict[str, Any]) -> None:
+    """执行已领取申请，外部读取与最终落库保持原有幂等和失败语义。"""
+
+    from datetime import datetime
+
     try:
         repository = store.get_repository(backfill["repository_id"])
         if repository is None:
@@ -635,7 +760,6 @@ def process_backfill(store: Store, settings: Settings) -> bool:
             db.execute("""UPDATE mr_backfills SET status='failed', error=?,
                        finished_at=CURRENT_TIMESTAMP WHERE id=?""",
                        (f"补审失败：{type(error).__name__}", backfill["id"]))
-    return True
 
 
 def main() -> None:
@@ -651,11 +775,12 @@ def main() -> None:
         store = Store(settings.data_dir / "app.db")
         store.migrate()
         store.recover()
-        last_repository_id: int | None = None
-        while True:
-            handled, last_repository_id = run_once(store, settings, last_repository_id)
-            if not handled:
-                time.sleep(2)
+        from ocr_manager.worker_scheduler import WorkerScheduler
+
+        with WorkerScheduler(store, settings) as scheduler:
+            while True:
+                scheduler.tick()
+                time.sleep(0.25)
 
 
 if __name__ == "__main__":

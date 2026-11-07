@@ -174,6 +174,12 @@ def build_review_card(job: dict[str, Any]) -> dict[str, Any]:
     title, color, conclusion = _review_status(
         job["review_status"], len(findings), counts, is_complete
     )
+    filtering = result.get("input_filter") if isinstance(result, dict) else None
+    if isinstance(filtering, dict) and filtering.get("excluded_count", 0) > 0:
+        coverage_text += f"；纯换行策略排除 {filtering['excluded_count']} 个文件（未调用模型）"
+        conclusion += "；该结论不代表原始变更全范围均由模型评审"
+        if is_complete and not findings:
+            title, color = "选中范围未发现问题", "blue"
 
     severity_labels = ("critical", "high", "medium", "low")
     severity_names = {"critical": "严重", "high": "高危", "medium": "中危", "low": "低危"}
@@ -242,6 +248,20 @@ def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "")
     """发送结构化卡片并校验飞书业务响应，失败由独立投递队列重试。"""
 
     body = build_review_card(job)
+    if job.get("delivery_kind") == "recovery":
+        title = body["card"]["header"]["title"]
+        total = int(job["effective_finding_count"])
+        title["content"] = f"补审补充 · 当前累计 {total} 条发现"
+        if total:
+            body["card"]["header"]["template"] = (
+                "red" if job.get("effective_has_high") else "orange")
+        body["card"]["elements"][2] = _plain_section(
+            f"本消息只展示本批新增发现；当前版本累计 {total} 条发现。"
+            "本批没有新增不代表整体没有问题，请结合当前覆盖及完整结论核对。")
+        body["card"]["elements"].insert(0, _plain_section(
+            f"原任务 #{job['job_id']} · 第 {job['source_attempt']} 次初审 · "
+            f"结论版本 {job['revision']} · 补审 #{job['recovery_id']}。"
+            "仅列本批次新增发现，覆盖为该版本累计结果；不撤销或改写初审消息。"))
     if signing_secret:
         post_message(webhook_url, body, signing_secret)
     else:

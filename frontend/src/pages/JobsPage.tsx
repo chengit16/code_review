@@ -7,6 +7,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { searchTasks } from "../api/tasks";
 import type { Repository } from "../api/types";
+import { JobTimeFacts, JobCostFacts, resultText } from "./JobExecution";
 import { MrBatchEnqueue } from "./MrTriggerControls";
 import { TaskFilters } from "./TaskFilters";
 import { BatchTaskRetry } from "./TaskControls";
@@ -15,7 +16,7 @@ import { Pagination } from "../ui/Pagination";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
-import { formatCost, formatDuration, formatSeverity, formatTime, shortSha } from "../ui/format";
+import { formatTime, shortSha } from "../ui/format";
 
 /** 地址栏变化重建选择范围，浏览器前后退不会复活旧的勾选。 */
 export function JobsPage({ token, canEdit = true }: {
@@ -31,10 +32,10 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
   const [batchPending, setBatchPending] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const jobs = useQuery({ queryKey: ["jobs", "search", params.toString()], queryFn: ({ signal }) => searchTasks(token, params, signal),
-    refetchInterval: (query) => query.state.data?.items.some((item) => ["running", "queued"].includes(item.status)) ? 5000 : 30000 });
+    refetchInterval: (query) => query.state.data?.items.some((item) => ["running", "queued"].includes(item.status) || Boolean(item.active_recovery_id)) ? 5000 : 30000 });
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const items = jobs.data?.items ?? [];
-  const selectable = items.filter((item) => ["complete", "partial", "failed", "skipped", "cancelled"].includes(item.status)).map((item) => item.id);
+  const selectable = items.filter((item) => ["complete", "partial", "failed", "skipped", "cancelled"].includes(item.status) && !item.active_recovery_id).map((item) => item.id);
   const targets = selected.filter((id) => selectable.includes(id));
   const page = jobs.data?.page ?? Math.max(1, Number(params.get("page")) || 1);
   function changePage(next: number) { const query = new URLSearchParams(params); query.set("page", String(next)); setParams(query); }
@@ -57,15 +58,15 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
       {items.map((job) => <tr key={job.id}>
         {canEdit && <td data-label="选择"><input className="issue-checkbox" type="checkbox" aria-label={`选择任务 ${job.id}`} checked={targets.includes(job.id)} disabled={!selectable.includes(job.id) || jobs.isFetching || batchPending} onChange={(event) => setSelected(event.target.checked ? [...selected, job.id] : selected.filter((id) => id !== job.id))} /></td>}
         <td data-label="任务 / 来源"><div className="task-mobile-summary">
-          <div className="task-mobile-heading"><Link to={detailPath(job.id)}>任务 #{job.id}</Link><Status value={job.status} /></div>
+          <div className="task-mobile-heading"><Link to={detailPath(job.id)}>任务 #{job.id}</Link><Status value={job.effective_status ?? job.status} /></div>
           <strong>{job.repository_name}</strong><small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"} · {job.target_branch}</small>
           <span>提交人：{job.commit_author?.trim() || "未记录"}</span>
-          <span>{["queued", "running"].includes(job.status) ? "等待最终结果" : `${job.finding_count ?? 0} 条发现${job.highest_severity ? ` · 最高：${formatSeverity(job.highest_severity)}` : ""}`}</span>
-          <details><summary>更多信息</summary><dl><div><dt>提交</dt><dd className="mono">{shortSha(job.commit_sha)}</dd></div><div><dt>飞书通知</dt><dd>{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}</dd></div><div><dt>耗时 / 尝试</dt><dd>{formatDuration(job.started_at, job.finished_at)} · {job.attempts} 次</dd></div><div><dt>预估费用</dt><dd className="mono">{formatCost(job.estimated_cost)}</dd></div><div><dt>创建时间</dt><dd>{formatTime(job.created_at)}</dd></div></dl></details>
+          <span>{resultText(job)}</span><JobTimeFacts job={job} />
+          <details><summary>更多信息</summary><dl><div><dt>提交</dt><dd className="mono">{shortSha(job.commit_sha)}</dd></div><div><dt>飞书通知</dt><dd>{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}{Boolean(job.recovery_delivery_failed_count) && <small>补充通知失败 {job.recovery_delivery_failed_count} 条</small>}</dd></div><div><dt>耗时 / 尝试</dt><dd><JobTimeFacts job={job} /></dd></div><div><dt>预估费用</dt><dd className="mono"><JobCostFacts job={job} /></dd></div><div><dt>创建时间</dt><dd>{formatTime(job.created_at)}</dd></div></dl></details>
         </div><div className="task-desktop-summary"><strong>#{job.id}</strong><small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></div></td>
         <td data-label="仓库">{job.repository_name}<small className="table-sub">{job.target_branch}</small></td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="提交人">{job.commit_author?.trim() || "未记录"}</td>
-        <td data-label="评审结果"><Status value={job.status} /><small className="table-sub">{["queued", "running"].includes(job.status) ? "等待最终结果" : `${job.finding_count ?? 0} 条发现${job.highest_severity ? ` · 最高：${formatSeverity(job.highest_severity)}` : ""}`}</small></td>
-        <td data-label="飞书通知">{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}</td><td data-label="耗时 / 尝试">{formatDuration(job.started_at, job.finished_at)}<small className="table-sub">尝试 {job.attempts} 次</small></td><td data-label="预估费用" className="mono">{formatCost(job.estimated_cost)}</td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={detailPath(job.id)} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td>
+        <td data-label="评审结果"><Status value={job.effective_status ?? job.status} /><small className="table-sub">{resultText(job)}</small></td>
+        <td data-label="飞书通知">{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}{Boolean(job.recovery_delivery_failed_count) && <small>补充通知失败 {job.recovery_delivery_failed_count} 条</small>}</td><td data-label="耗时 / 尝试"><JobTimeFacts job={job} /></td><td data-label="预估费用" className="mono"><JobCostFacts job={job} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={detailPath(job.id)} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td>
       </tr>)}
       {!jobs.isLoading && !jobs.error && items.length === 0 && <tr><td colSpan={canEdit ? 11 : 10} className="empty-row">当前筛选下没有任务，可清空筛选或检查项目接入。</td></tr>}
     </tbody></table></div></section>
