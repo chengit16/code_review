@@ -1,6 +1,8 @@
 /** @description 管理 OCR 模型配置，只有一个配置可处于启用状态。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Card, Table } from "antd";
+import type { TableColumnsType } from "antd";
 import { Check, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -93,24 +95,26 @@ export function SettingsPage({ token, embedded = false }: {
     setOpen(true);
   }
   const active = profiles.data?.find((profile) => profile.enabled);
+  const columns: TableColumnsType<ModelConfiguration> = [
+    { title: "配置名称", dataIndex: "name", key: "name", render: (name: string) => <strong>{name}</strong> },
+    { title: "Provider", dataIndex: "provider", key: "provider", width: 150, render: (value: string) => value === "dashscope" ? "百练 / DashScope" : value },
+    { title: "模型标识", dataIndex: "model", key: "model", width: 180, render: (value: string) => <span className="mono">{value}</span> },
+    { title: "Base URL", dataIndex: "base_url", key: "base_url", width: 220, render: (value: string) => <span className="mono">{value || "内置端点"}</span> },
+    { title: "单价 / 百万 Token", key: "price", width: 210, render: (_: unknown, profile) => profile.input_price_per_million != null || profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million ?? "未配置"} 输入 / ${profile.output_price_per_million ?? "未配置"} 输出` : "未配置" },
+    { title: "状态", dataIndex: "enabled", key: "enabled", width: 100, render: (enabled: number) => enabled ? "已启用" : "未启用" },
+    { title: "操作", key: "actions", width: 132, render: (_: unknown, profile) => <div className="row-actions">{!profile.enabled && <Button type="text" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}><Check size={16} /></Button>}<Button type="text" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}><Settings2 size={16} /></Button><Button danger type="text" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}><Trash2 size={16} /></Button></div> },
+  ];
   return <div className={embedded ? "settings-content" : "page"}>
     <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
-    {!profiles.isLoading && !profiles.error && <section className="section">
-      <div className="table-scroll responsive-table"><table><thead><tr><th>配置名称</th><th>Provider</th><th>模型标识</th><th>Base URL</th><th>单价 / 百万 Token</th><th>状态</th><th aria-label="操作" /></tr></thead><tbody>
-        {profiles.data?.map((profile) => <tr key={profile.id}><td data-label="配置名称"><strong>{profile.name}</strong></td><td data-label="Provider">{profile.provider === "dashscope" ? "百练 / DashScope" : profile.provider}</td><td data-label="模型标识" className="mono">{profile.model}</td><td data-label="Base URL" className="mono">{profile.base_url || "内置端点"}</td><td data-label="单价 / 百万 Token">{profile.input_price_per_million != null || profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million ?? "未配置"} 输入 / ${profile.output_price_per_million ?? "未配置"} 输出` : "未配置"}</td><td data-label="状态">{profile.enabled ? "已启用" : "未启用"}</td><td data-label="操作"><div className="row-actions">
-          {!profile.enabled && <button className="icon-button" type="button" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}><Check size={16} /></button>}
-          <button className="icon-button" type="button" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}><Settings2 size={16} /></button>
-          <button className="icon-button icon-button-danger" type="button" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}><Trash2 size={16} /></button>
-        </div></td></tr>)}
-        {profiles.data?.length === 0 && <tr><td colSpan={7} className="empty-row">尚无模型配置</td></tr>}
-      </tbody></table></div>
+    {!profiles.isLoading && !profiles.error && <Card className="model-profile-card" size="small" title={<h2 className="model-profile-heading">模型配置</h2>}>
+      <Table rowKey="id" size="middle" columns={columns} dataSource={profiles.data ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1000 }} pagination={{ pageSize: 25, pageSizeOptions: [25, 50, 100], showSizeChanger: true, locale: { items_per_page: "条/页", prev_page: "上一页", next_page: "下一页", page: "页", jump_to: "跳至", page_size: "每页条数" }, showTotal: (total) => `${total} 个配置` }} />
       <p className="form-note">连接测试只测试当前已启用的模型{active ? `“${active.name}”` : ""}，保存配置不会发起模型请求。切换模型后请重新测试，最近结果可能来自之前启用的配置。</p>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
-    </section>}
+    </Card>}
     {open && <Modal titleId="model-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
       <form className="settings-form hook-form" noValidate onSubmit={submit}><fieldset className="form-fields" disabled={create.isPending || update.isPending}>

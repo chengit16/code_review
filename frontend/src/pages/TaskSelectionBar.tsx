@@ -45,7 +45,7 @@ export function TaskSelectionBar({ token, ids, disabled, onClear, onAccepted, on
     {retry.error && <Alert type="error" showIcon title={`${retry.error.message}；所选任务已保留，请先核对是否已入队。`} />}
     {retry.data && <div aria-live="polite"><p>已入队 {retry.data.filter((item) => item.status === "queued").length} 条，未接受 {retry.data.filter((item) => item.status !== "queued").length} 条；未接受项保留勾选，核对后可重新提交。</p><ul>{retry.data.map((item) => <li key={item.id}>#{item.id}：{item.status === "queued" ? <Link to={`/jobs/${item.job_id}`}>已入队 #{item.job_id}</Link> : item.error ?? "当前状态不允许重审，请刷新核对"}</li>)}</ul></div>}
   </div><Modal title="确认重新评审" open={frozen !== null} onOk={submit} onCancel={() => { if (!submitting.current) setFrozen(null); }}
-    okText="确认重审" cancelText="取消" confirmLoading={retry.isPending} cancelButtonProps={{ disabled: retry.isPending }}
+    okText="确认重审" cancelText="取消" confirmLoading={retry.isPending} okButtonProps={{ disabled: retry.isPending, "aria-label": "确认重审" }} cancelButtonProps={{ disabled: retry.isPending }}
     closable={!retry.isPending} keyboard={!retry.isPending} mask={{ closable: !retry.isPending }}>
     <p>仅重新评审当前页已冻结的 {frozen?.length ?? 0} 个任务：</p><p className="jobs-frozen-ids">{frozen?.map((id) => `#${id}`).join("、")}</p>
     <Alert type="warning" showIcon title="可能再次产生模型费用" description="将按当前配置重新排队，不会自动修改代码。取消不会提交；确认后逐项检查，结果可能部分接受。" />

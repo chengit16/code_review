@@ -22,7 +22,7 @@ export function JobsTable({ items, canEdit, selectable, targets, disabled, onSel
 }) {
   const screens = Grid.useBreakpoint();
   const compact = !screens.md;
-  const cell = (label: string) => ({ "data-label": label });
+  const cell = (label: string) => ({ className: "jobs-fact-cell", "data-label": label });
   const desktop: TableColumnsType<ReviewJob> = [
     { title: "任务 / 来源", key: "source", width: 225, onCell: () => cell("任务 / 来源"), render: (_, job) => <div className="jobs-source"><Link to={detailPath(job.id)}>任务 #{job.id}</Link><strong>{job.repository_name}</strong><small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"} · {job.target_branch}</small><span className="mono">{shortSha(job.commit_sha)}</span></div> },
     { title: "提交人", dataIndex: "commit_author", width: 120, onCell: () => cell("提交人"), render: (value: string | null) => value?.trim() || "未记录" },
@@ -45,7 +45,7 @@ export function JobsTable({ items, canEdit, selectable, targets, disabled, onSel
   }] : [];
   return <section aria-label="评审任务列表" className="jobs-table"><Table<ReviewJob> rowKey="id" columns={[...selection, ...(compact ? mobile : desktop)]}
     dataSource={items} loading={loading} pagination={false} size="small" tableLayout="fixed" scroll={compact ? undefined : { x: 1440 }}
-    locale={{ emptyText: failed ? "任务读取失败，请重新读取，不能据此判断没有任务。" : "当前筛选下没有任务，可清空筛选或检查项目接入。" }} /></section>;
+    locale={{ emptyText: loading ? "正在读取任务…" : failed ? "任务读取失败，请重新读取，不能据此判断没有任务。" : "当前筛选下没有任务，可清空筛选或检查项目接入。" }} /></section>;
 }
 function Notification({ job }: { job: ReviewJob }) {
   return <>{job.delivery_status ? <Status value={job.delivery_status} /> : "未创建"}{Boolean(job.recovery_delivery_failed_count) && <small className="table-sub">补充通知失败 {job.recovery_delivery_failed_count} 条</small>}</>;

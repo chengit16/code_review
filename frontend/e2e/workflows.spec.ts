@@ -185,7 +185,8 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
   const commandBarTops = await page.locator(".task-command-grid > .task-command-bar").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().top));
   expect(commandBarTops).toHaveLength(2);
   expect(Math.max(...commandBarTops) - Math.min(...commandBarTops)).toBeLessThan(2);
-  const filterControlBoxes = await page.locator(".task-filters .select-trigger, .task-filters input, .task-filters button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  const filterControlBoxes = await page.locator(".jobs-filter-main .ant-select, .jobs-filter-main input:not(.ant-select-input), .jobs-filter-main button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+  expect(filterControlBoxes.length).toBeGreaterThanOrEqual(5);
   for (const [index, first] of filterControlBoxes.entries()) {
     for (const second of filterControlBoxes.slice(index + 1)) {
       expect(first.right <= second.left || second.right <= first.left || first.bottom <= second.top || second.bottom <= first.top).toBe(true);
@@ -205,6 +206,7 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
   await page.goto("/events");
   await expect(page.getByRole("heading", { name: "合并事件" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "事件收件箱" })).toBeVisible();
+  await page.getByText("历史 MR 补扫与申请记录", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "按合并时间补审 MR" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -244,7 +246,7 @@ test("详情连续导航跨页保留筛选、刷新与首尾边界", async ({ pa
   await expect(page.getByRole("heading", { name: "任务 #4", exact: true })).toBeVisible();
   await page.getByRole("link", { name: "返回任务列表" }).click();
   await expect(page).toHaveURL(`/jobs${search}`);
-  await expect(page.getByRole("link", { name: "任务 #2", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看任务 2", exact: true })).toBeVisible();
 });
 
 test("账号模式登录与只读界面", async ({ page }) => {

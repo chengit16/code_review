@@ -11,6 +11,7 @@ import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
+import { ReadFeedback } from "../ui/ReadFeedback";
 import { QueryState } from "../ui/QueryState";
 
 interface TargetForm {
@@ -90,7 +91,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
     remove.mutate(target.id);
   }
 
-  const checkRepository = editing
+  const checkRepository = repositories.isSuccess && editing
     ? repositories.data?.find((repository) => repository.feishu_target_id === editing.id)
     : undefined;
 
@@ -99,13 +100,14 @@ export function FeishuHooksPage({ token, embedded = false }: {
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
-    <QueryState loading={targets.isLoading} error={targets.error} />
+    <QueryState loading={targets.isLoading} error={targets.error} onRetry={() => void targets.refetch()} />
+    <ReadFeedback name="关联仓库" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} />
     {!targets.isLoading && !targets.error && <section className="section">
       <div className="hook-list">
         {targets.data?.map((target) => {
           const linked = repositories.data?.filter((repository) => repository.feishu_target_id === target.id) ?? [];
           return <article className="hook-row" key={target.id}>
-            <div className="hook-project"><strong>{target.name}</strong><span>{linked.length ? linked.map((repository) => repository.name).join("、") : "尚未关联仓库"}</span></div>
+            <div className="hook-project"><strong>{target.name}</strong><span>{!repositories.isSuccess ? "关联仓库待确认" : linked.length ? linked.map((repository) => repository.name).join("、") : "尚未关联仓库"}</span></div>
             <span>{target.repository_count} 个仓库</span>
             <span className="hook-last">{target.has_signing_secret ? "签名校验已配置" : "未配置签名校验"}</span>
             <div className="row-actions">

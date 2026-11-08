@@ -58,8 +58,8 @@ test("显式状态不会叠加冲突快捷视图", async ({ page }) => {
 
 test("问题摘要搜索与侧栏保留筛选，窄屏无横向溢出", async ({ page }) => {
   await page.goto("/issues?status=all");
-  await expect(page.getByRole("combobox", { name: "项目", exact: true })).toContainText("全部项目");
-  await expect(page.getByRole("combobox", { name: "级别", exact: true })).toContainText("全部级别");
+  await expect(page.locator(".issue-filter-grid > label").filter({ hasText: "项目" })).toContainText("全部项目");
+  await expect(page.locator(".issue-filter-grid > label").filter({ hasText: "级别" })).toContainText("全部级别");
   await page.getByLabel("搜索问题", { exact: true }).fill("app.py");
   await page.getByRole("button", { name: "搜索", exact: true }).click();
   await expect(page).toHaveURL(/q=app.py/);
@@ -102,11 +102,11 @@ test("任务勾选重审必须确认且只提交当前页显式编号", async ({
   });
   await page.goto("/jobs?status=partial");
   await page.getByRole("checkbox", { name: "全选本页可重审任务" }).check();
-  page.once("dialog", (dialog) => dialog.dismiss());
   await page.getByRole("button", { name: "重审所选任务" }).click();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   expect(submitted).toHaveLength(0);
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重审所选任务" }).click();
+  await page.getByRole("button", { name: "确认重审", exact: true }).click();
   await expect(page.getByText("#1：合成冲突：任务已在执行")).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "选择任务 1", exact: true })).toBeChecked();
   expect(submitted).toEqual([[1]]);

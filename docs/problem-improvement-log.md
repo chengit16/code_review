@@ -1446,3 +1446,229 @@
 - 关联文件或证据：用户“再继续其他页面的迁移吧”；docs/whole-site-ux-redesign-plan.md。
 - 遗留与下一步：实施后追加实际变更与验证范围，按本编号累计条数只读核验正常同步，不强制抓取或扩大聊天范围。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：第二批迁移因工作期间出现外部提交暂停，尚未通过验证
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：部分编码，暂停等待用户确认当前基线；不宣称阶段完成。
+- 关联记录：PI-20261107-011 本轮第二批受理；PI-20261107-007/010 首批改造。
+- 现象或目标：接入引导与任务列表开始迁移 Ant Design，并修正配置辅助查询的未知表达。
+- 原因或分析：工作期间 HEAD 出现非本处理者执行的提交 065f522（fix：重构运行监控页面），包含本轮新写但尚未完成验证的 OnboardingPage、TaskFilters、TaskSelectionBar、JobsTable、JobsPagination 和 ReadFeedback 等文件；初始多项工作区变更也已进入该提交。根据保护用户修改规则立即停止后续业务修改，不回退、不 amend，等待确认是否以当前提交继续。
+- 处理与改进：已编写接入证据清单、任务筛选/表格/分页及冻结编号费用确认初稿；任务页编排、配置辅助状态修正和局部样式仍有未提交改动。保留现有草稿守卫及 API 契约，未执行外部测试或真实重审。本批仍需修复类型、更新回归用例、检查布局和完整验证，不能直接构建发布。
+- 代码修改：部分已编码、未完成；存在上述外部提交和本处理者未提交修改，未操作 Git 历史或用户原有变更。本段仅追加暂停事实。
+- 本地验证：实际读取前端规范、实施流程、相关源码与测试、后端只读连接测试与 repository-readiness 契约；实际 cd frontend && npx tsc -b && npm run lint 在 tsc 阶段失败，JobsTable 的 onCell 仅返回 data-label 与 Ant Design 单元格属性弱类型不兼容，共七处 TS2322；后续 lint 未执行。实际 git status --short、git log、git reflog 和 git show HEAD:frontend/src/pages/OnboardingPage.tsx 核对提交变化；没有运行本批单元测试、隔离构建或浏览器验收，不沿用上批通过结论。
+- 部署生效：未部署；没有覆盖 frontend/dist、重启业务 API/Worker/monitor、迁移数据库或发起真实评审/通知，现有本机页面是否由用户另行更新未知。
+- 关联文件或证据：提交 065f522 与本轮 git/tsc 输出；frontend/src/pages/jobs；frontend/src/styles/task-migration.css。
+- 遗留与下一步：用户确认以当前工作区继续后，先修复类型与控件回归，再完成本批测试及文档；最后按本编号累计四条只读核验正常 monitor 同步。暂停不等于验收或发布完成。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"failed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：用户确认当前基线，恢复第二批页面迁移
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户已确认继续，实施中。
+- 关联记录：PI-20261107-011 上次暂停；以提交 065f522 和现有未提交修改为基线。
+- 现象或目标：完成接入引导、任务列表与配置辅助状态修正的本地验收，不将半成品发布。
+- 原因或分析：用户在明确询问基线后回复“继续”，允许保留现有全部内容继续处理；当前工作区与暂停时一致。
+- 处理与改进：先修复表格类型，再补状态失败、冻结确认、筛选分页、草稿与窄屏验证；不回退用户提交。
+- 代码修改：本段仅登记恢复，尚未增加本轮业务改动；保留既有修改。
+- 本地验证：实际 git status --short、git log -2 --oneline、读取暂停记录及现有页面；本轮测试尚未执行。
+- 部署生效：未部署，不更新 frontend/dist、不重启业务服务、不发起真实评审或通知。
+- 关联文件或证据：用户“继续”；提交 065f522；本轮只读输出。
+- 遗留与下一步：完成本批修复、隔离验证与文档后追加结果，并核验同编号累计条数同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：第二批编码与组件验证完成，整批浏览器回归中
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本地验证中，未发布。
+- 关联记录：PI-20261107-011 恢复实施；用户确认的提交 065f522。
+- 现象或目标：完成接入引导、任务列表迁移和配置辅助状态修正，保护已有业务语义。
+- 原因或分析：Select 不进入原生 FormData；加载按钮图标可能改变可访问名称；静态引入任务表格会增大入口。连接测试旧通过和回调 URL 均不能作为当前配置验证结论。
+- 处理与改进：补显式条件合并、折叠保值、冻结编号和禁重放、独立恢复、路由按钮内存导航、任务懒加载、统一 Select 高亮；保留高级业务控件与同步草稿守卫。新增状态和批量专项测试，不改后端。
+- 代码修改：本批页面、私有表格/分页、样式、路由按钮和测试已修改；未进行其余主链路及完整配置编辑器迁移。
+- 本地验证：实际 npx tsc -b、npm run lint 通过；npm test -- --reporter=dot 最终 30 文件 143 项通过；隔离 Vite 构建通过，500 kB 提示仍在。初轮浏览器发现七处失败：新增用例未等待 URL 导航、表单几何统计误包含 Select 内部输入、旧移动链接定位、加载按钮可访问名称和选择器主题预期；修正后重点复验 21/22，余一项定位由 loading 图标改变可访问名导致，增加明确 aria-label 后专项 1/1 通过。新增组件弹窗测试因 JSDOM 动画隐藏失败，在该测试独立关闭动效后两项通过，未删冻结与网络失败断言。最终 65 项整批浏览器回归正在执行，未将阶段结果当作最终通过；补审专项尚待重跑。实际 git diff --check 通过；已查看 1440/320 任务及 320 引导截图。
+- 部署生效：未部署，不覆盖 frontend/dist、不重启 API/Worker/monitor、不调用真实 OCR/GitLab/飞书、不迁移业务库。
+- 关联文件或证据：frontend/e2e/taskMigration.spec.ts；frontend/src/test/configurationFacts.test.tsx；frontend/src/test/taskMigration.test.tsx；/tmp 隔离构建和日志。
+- 遗留与下一步：等待整批与补审回归结果，更新实际报告、包体积和剩余页面清单，再只读核验同编号累计条数同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：第二批接入引导与任务列表迁移验收完成，未发布
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本批代码与本地验收完成；全站迁移仍有后续页面。
+- 关联记录：PI-20261107-011 本轮恢复与验证进展；用户确认基线 065f522；PI-20261107-007/010 的主题与监控兼容范围。
+- 现象或目标：完成接入证据清单、任务列表 Ant Design 迁移及配置辅助查询未知表达，避免错误状态或范围引导写操作。
+- 原因或分析：回调 URL 和旧通过不证明当前配置；Select 不进入原生 FormData；React 路由过渡快速返回可能取消重挂载，只靠 key 无法保证旧选择清空；loading 图标会改变确认按钮可访问名；任务静态引入把表格依赖加入首屏。
+- 处理与改进：引导按配置、接收、连接证据分层，未知与当前版本待核实明确；任务使用统一控件、桌面表/窄屏摘要、URL 条件和25/50/100分页、UTC时间、折叠保值；范围改变主动清空选择并保留 key 隔离；批量冻结编号/费用确认、取消无写入、请求锁定、防重放和逐项接受；项目、飞书、账号辅助查询独立恢复、不显示假未配置或默认关闭。引导路由按钮保留内存导航，任务懒加载。高级存量业务组件和同步草稿守卫保留，未机械重写。
+- 代码修改：本批页面、任务私有表格/分页、筛选/批量、设计上下文高亮、局部样式与只读反馈/路由按钮、测试和三份说明已更新；保留当前用户提交与其他修改，没有提交、回退或 amend。没有修改后端、数据库或调度契约。项目/飞书/账号页本批仅状态修正，不能称整页迁移。
+- 本地验证：最终实际 cd frontend && npx tsc -b、npm run lint、npm test -- --reporter=dot 通过（30 文件、143 项）；npx vite build --outDir /tmp/ocr-site-ux-dist --emptyOutDir 通过。实际以 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-site-ux-dist npx playwright test taskMigration.spec.ts operations.spec.ts workerConcurrency.spec.ts reviewExecution.spec.ts theme.spec.ts alignment.spec.ts workflows.spec.ts optimization.spec.ts ux.spec.ts navigation.spec.ts taskAuthor.spec.ts --output /tmp/ocr-migration-final 完整重跑65项通过；同环境额外 OCR_BROWSER_REVIEW_RECOVERY=1 npx playwright test reviewRecovery.spec.ts --output /tmp/ocr-migration-recovery，12项通过，无跳过。合计77项选定隔离浏览器，不等于全部专项或真实外部验收。实际 git diff --check、三份主文档本地链接检查通过；实际查看1440/320任务及引导截图，页面无横向溢出，桌面表内允许局部滚动。
+- 排查与无效尝试：前次类型错误已修；新测试与旧控件迁移定位、JSDOM动画及主题预期失败均已修正，未把失败称通过。前一轮完整浏览器64/65，仍出现快速条件切换返回旧选择；修改为提交条件前显式清空选择后，同专项 --repeat-each=3 三次通过，再最终完整65+12通过；未删业务断言、强制点击或加大超时掩盖。初次静态任务入口约1258.7kB，路由拆分后最终入口749788字节、同Python gzip 248462字节、全部JS1559711字节，共用Table约305.3kB；500kB提示仍在，非实测首屏性能。
+- 部署生效：未部署；隔离临时SQLite/8791与/tmp产物，不覆盖frontend/dist、不重启业务API/Worker/monitor、不迁移业务库或发起真实评审/通知，也未将用户可能自行操作推断为新版已生效。
+- 关联文件或证据：docs/ant-design-adoption.md 第二批记录；docs/whole-site-ux-redesign-plan.md；docs/frontend-interaction-checks.md；frontend/e2e/taskMigration.spec.ts；frontend/src/test/configurationFacts.test.tsx、taskMigration.test.tsx；/tmp最终测试输出。
+- 遗留与下一步：后续继续任务详情、问题与侧栏、合并前审查和事件页，再完整配置/平台管理与首页；存量高级业务控件后续单独迁移。构建成本与真实发布验收仍保留边界。本编号累计七条，收尾实际只读核验正常monitor同步，不强制导入或扩大采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：受理剩余全站页面迁移与设计实施
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户明确要求继续完成剩余全部改造，实施中；不扩展为后端或部署任务。
+- 关联记录：PI-20261107-011 第二批验收；PI-20261107-007/010 组件规范与监控首批。
+- 现象或目标：按已确认全站规划，完成剩余评审链路、配置/平台管理和首页的设计及 Ant Design 渐进迁移，保留业务事实、权限、草稿与 URL 行为。
+- 原因或分析：当前已迁移运行监控、接入引导和任务列表；任务详情、待跟进问题、合并前审查、事件、完整配置、账号/历史/改进及首页仍为存量布局，需要分域检查，不能机械替换全局控件。
+- 处理与改进：先盘点剩余页面和测试基线，按评审链路、配置/平台管理、首页推进；每批保留同步离开守卫、危险操作、部分覆盖和读取错误边界，隔离验证。
+- 代码修改：本段仅登记受理，尚未修改本轮剩余页面；保留用户当前所有提交与工作区变更。
+- 本地验证：实际读取 PI-20261107-011 既有规划与收尾；此前测试结果只作为历史背景，不替代本轮验证。剩余页面检查尚未开始。
+- 部署生效：未部署；不覆盖 frontend/dist、不重启 API/Worker/monitor、不调用真实 OCR/GitLab/飞书、不迁移数据库。
+- 关联文件或证据：用户“继续完成剩下的全部改造和设计吧”；docs/whole-site-ux-redesign-plan.md。
+- 遗留与下一步：盘点页面组件依赖及业务回归后分批实施；每轮及时追加实际进展并累计核验本编号同步状态，不扩大聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：评审主链路四页完成一轮迁移与定向回归
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：任务详情、问题列表、合并前审查、合并事件已完成本轮子批；全站剩余改造仍在实施，未宣称全部完成。
+- 关联记录：PI-20261107-011 本轮受理及第二批验收；PI-20261107-007 Ant Design 采用规范。
+- 现象或目标：将评审主链路优先信息与危险/历史操作分层，同时保留既有状态语义、权限和 URL 行为。
+- 原因或分析：任务详情长页面缺少定位入口，问题列表筛选/列密度高，预审详情将列表推离视口，事件历史补扫位于日常收件箱之前。
+- 处理与改进：任务详情增加结论、失败/补审、覆盖/费用、文件历史、通知尝试导航；问题列表改 Ant Design Select/Input/Table/Pagination，详情保留原侧栏；合并前审查改 Ant Design Table 与 URL 驱动 Drawer；事件收件箱改 Ant Design Table，历史 MR 补扫和记录移入折叠次级区域。显式保留提交人≠责任人、人工修复≠自动验证、失败/部分/旧版≠通过、扫描完成≠审查完成及 31 天/费用/危险操作确认。
+- 代码修改：修改 frontend/src/pages/JobDetailPage.tsx、ReviewIssuesPage.tsx、PremergePage.tsx、EventCenterPage.tsx 和 task-migration.css；修订事件及问题交互的隔离 E2E 断言。未改后端、数据库、外部 API 或服务调度；其余页面仍有工作。
+- 本地验证：实际 `cd frontend && npx tsc -b && npm run lint && npm test -- --reporter=dot` 全部通过，30 个测试文件、143 项通过；实际 `npx vite build --outDir /tmp/ocr-site-ux-dist --emptyOutDir` 通过，保留 Vite 500kB 警告。实际 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-site-ux-dist npx playwright test e2e/ux.spec.ts e2e/workflows.spec.ts --grep '问题|合并前|事件中心'` 4 项通过；定向用例先发现 Select 文本断言方式及事件标题/折叠状态不匹配，修正后复跑通过。默认 Playwright 浏览器缺失造成的首次无法启动不计通过。`git diff --check` 通过。
+- 部署生效：未部署。产物仅在 `/tmp/ocr-site-ux-dist`，未覆盖 frontend/dist、重启 API/Worker/monitor、修改本机配置或调用真实 OCR/GitLab/飞书。
+- 关联文件或证据：docs/whole-site-ux-redesign-plan.md；docs/ant-design-adoption.md；docs/frontend-interaction-checks.md；Playwright 定向结果与隔离构建日志。
+- 遗留与下一步：继续完整项目/系统设置、账号/配置历史、问题与改进视图、首页及剩余存量控件改造；之后执行更完整的页面/角色/视口回归并由用户确认本机静态资源切换。新增此记录后 PI-20261107-011 共九条；待本轮边界说明再执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：评审主链路子批收尾，后续页面继续排期
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本次工作轮次收尾；仅完成全站规划中的评审主链路四页子批，其余配置/平台管理和首页尚未实施，PI-20261107-011 保持进行中。
+- 关联记录：PI-20261107-011 本轮受理及四页子批进展。
+- 现象或目标：汇报本轮修改、验证及本机生效边界，不把分阶段迁移误报为“全站已改完”。
+- 原因或分析：规划涉及十余个业务页面和多角色/响应式回归；本轮仅完成优先链路，配置编辑、历史/账号、改进、首页及全链路检查仍需独立实施。
+- 处理与改进：实施边界和定向检查已更新到全站规划、Ant Design 接入说明及交互检查文档；后续按配置与平台管理、首页/复盘、全站回归的顺序继续。
+- 代码修改：已修改本轮四个评审页面和相应隔离测试；保留用户既有提交和其他工作区更改。不创建提交，不回退或重启任何服务。
+- 本地验证：以本轮最终实际命令为准：TypeScript、lint、143 项 Vitest、隔离构建、4 项相关 Playwright 及 `git diff --check` 全部通过。另一次未指定已安装 Chrome 的完整两文件浏览器测试无法启动，原因是 Playwright Chromium 缓存缺失，不计为通过；已使用 Chrome 完成上述定向测试。
+- 部署生效：未部署；`frontend/dist` 和本机服务状态未更改，本机是否生效尚未验证。
+- 关联文件或证据：PI-20261107-011 当前台账；docs/whole-site-ux-redesign-plan.md；docs/ant-design-adoption.md；docs/frontend-interaction-checks.md。
+- 遗留与下一步：后续同编号继续追加配置页面、平台管理、首页及全站验收；本轮台账核验使用 `--minimum-entries 10`，遵循项目规定等待 monitor 正常同步，不强制抓取聊天或改写网页记录。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：配置历史、账号、问题与改进及首页继续迁移
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：继续实施 P2 页面子批；全站剩余清单仍未闭环。
+- 关联记录：PI-20261107-011 本轮任务链路与前一子批收尾；全站改造规划。
+- 现象或目标：将低频维护工具降为次级入口，统一账号/历史页展示，同时优先突出最近评审。
+- 原因或分析：改进主视图之前固定展示两个低频工具；配置历史/账号表格仍是存量表格；首页效果分析早于常用最近评审列表。
+- 处理与改进：问题与改进维护/聊天工具置于折叠区，保留三个 URL 视图；配置历史和账号列表改用 Ant Design Table/卡片，保留恢复密钥警示、角色权限、账号会话失效及未知认证状态；首页最近评审移至趋势分析前。
+- 代码修改：修改 ImprovementsPage、ConfigHistoryPage、UsersPage、OverviewPage 及本轮样式。同步扩充全站计划、接入说明和交互验证命令；项目配置与系统设置完整编辑器、优化主题详情信息架构、全面 E2E 仍未完成。
+- 本地验证：实际 `cd frontend && npx tsc -b && npm run lint` 通过；实际 `npm --prefix frontend test -- --reporter=dot` 为 30 文件 143 项通过；隔离 Vite 构建通过，仍提示 500kB 告警。实际 Playwright 命令 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-site-ux-dist npx playwright test e2e/workflows.spec.ts e2e/improvements.spec.ts e2e/improvementSummary.spec.ts e2e/improvementArchives.spec.ts e2e/improvementMaintenance.spec.ts --grep '账号模式|项目新增|问题与改进|复盘|归档|维护|采集'` 共 6 项通过。另此前本轮评审主链路指定 4 项通过。实际 `git diff --check` 仍须最终重跑。
+- 部署生效：未部署；只构建在 `/tmp/ocr-site-ux-dist`，未改 `frontend/dist`、重启服务或操作真实配置/账号。
+- 关联文件或证据：docs/whole-site-ux-redesign-plan.md；docs/ant-design-adoption.md；docs/frontend-interaction-checks.md；隔离 Playwright 输出。
+- 遗留与下一步：完善项目与系统设置表单和主题详情；专项测试配置历史恢复、密钥不回显、草稿冲突、角色和全视口；再做全站浏览器回归和本机发布准备。本编号新增记录后累计十三条，结束时只读核验台账同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：本轮剩余页面阶段性收尾（全站仍待继续）
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：当前工作轮次完成，PI-20261107-011 继续进行；不能将本轮视作全部页面完成。
+- 关联记录：PI-20261107-011 当前页面实施与本地验证进展。
+- 现象或目标：整理已实施的页面组、可核对的本地验证和接下来尚未完成的页面。
+- 原因或分析：全站规划不只包含本轮几个组件表格；项目配置、系统设置完整表单和全部浏览器覆盖仍有大量专属业务语义。
+- 处理与改进：将两组页面子批结果与已知 Vite 包警告记录在计划、组件采用说明和可执行检查文档；保留剩余明确清单。
+- 代码修改：本轮共涉及评审任务详情、待跟进问题、合并前审查、事件中心、问题与改进、配置历史、访问权限、首页，以及相关 E2E 断言和迁移样式；没有改后端服务、数据库、调度或外部接口。
+- 本地验证：实际通过 `cd frontend && npx tsc -b && npm run lint`、30 文件 143 项 Vitest、临时构建；定向隔离浏览器（评审主链路 4 项；账号/项目/问题归档/复盘 6 项）合计 10 个本轮用例通过；构建保留 500kB 提示。配置历史专门恢复用例、全站完整浏览器回归尚未运行。最终 `git diff --check` 和台账命令实际结果以本轮最终执行记录为准。
+- 部署生效：未部署，`frontend/dist` 未覆盖，本机 API/Worker/monitor 未重启。新版本机页面未确认。
+- 关联文件或证据：PI-20261107-011；docs/whole-site-ux-redesign-plan.md；docs/ant-design-adoption.md；docs/frontend-interaction-checks.md。
+- 遗留与下一步：下轮继续项目配置、系统设置、主题详情与其余页；再补专项与全视口全链路回归。本编号新增此记录后累计十四条；等待正常 monitor 后运行规定只读核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：更正本轮记录累计数并核实台账同步
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本轮台账核验的数量更正与闭环补充；PI-20261107-011 继续进行中。
+- 关联记录：PI-20261107-011 本轮主链路、配置/账号子批收尾记录。
+- 现象或目标：按页面实际条目与只读核验结果准确记载来源条数，避免依估算填写最小数量。
+- 原因或分析：前一段误把当前编号累计记录写作十四条；首轮按十四条运行核验返回页面 12 条，后续以实际来源/页面核对后确认本轮收尾记录为十二条。
+- 处理与改进：不改写此前已同步段落；追加本更正记录，说明规定的来源累计条数应以页面核验当前版本为准。
+- 代码修改：无新增业务代码；只追加本核对记录。
+- 本地验证：实际先运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261107-011 --minimum-entries 14`，返回 entries=12、page_id=21、page_version=12 并失败（阈值高于实际累计）；随后以已同步实际条数运行同命令的 `--minimum-entries 12`，返回 passed=true、entries=12、page_version=12。现追加此条后应等待 monitor 同步，再以 `--minimum-entries 13` 核验。
+- 部署生效：不适用；未部署任何代码或服务。
+- 关联文件或证据：本轮 improvement_log_check 两次 JSON 输出；.local-data/local/app.db 页面 21/version 12。
+- 遗留与下一步：本追加段需正常同步，结束前依实际源条数运行 13 条核验；不强制抓取聊天或覆盖网页记录。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：完成账号/历史展示层与首页信息顺序调整
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：继续实施，配置历史/账号展示、问题与改进导航、首页顺序已完成当前设计子批。
+- 关联记录：PI-20261107-011 前述评审主链路与剩余页阶段记录。
+- 现象或目标：改善首页常用信息优先级，并降低账号/历史信息的视觉密度，保留敏感数据和认证状态边界。
+- 原因或分析：成效趋势曾早于最近任务；账号与配置历史为存量表格；问题与改进低频管理工具占据主视图上方。
+- 处理与改进：首页先最近评审再效果趋势；账号与配置历史增加 Ant Design 卡片和表格；问题与改进维护/聊天收件箱改次级折叠入口，主视图 URL 不变。
+- 代码修改：已调整 OverviewPage、UsersPage、ConfigHistoryPage、ImprovementsPage 及 task-migration.css。完整项目配置、模型和系统规则设置、主题详情信息架构及所有页面专项还未覆盖。
+- 本地验证：实际 TypeScript 与 ESLint 通过、30 文件 143 项 Vitest 通过；临时构建通过但保留 500kB 告警；本轮实际定向 Playwright 两组共10项通过（评审链路4，账号/项目/归档/复盘6）；配置历史恢复本轮未单独覆盖。git diff --check 最终复核通过。
+- 部署生效：未部署，静态产物仅在 `/tmp/ocr-site-ux-dist`，未更新 `frontend/dist` 或重启本机服务。
+- 关联文件或证据：`docs/whole-site-ux-redesign-plan.md`、`docs/ant-design-adoption.md`、`docs/frontend-interaction-checks.md`、本轮前端测试输出。
+- 遗留与下一步：继续项目配置与系统设置完整表单、主题详情、配置历史恢复专项及全站角色/视口回归；本记录后预期来源 14 条，以页面实际核验为准。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：当前续改轮次收尾，剩余配置表单仍待继续
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：本轮当前工作结束，PI-20261107-011 并未全站闭环；下一轮应继续而非按全部完成处理。
+- 关联记录：PI-20261107-011 同轮各页面及台账数量更正记录。
+- 现象或目标：如实区分已改造页面、已验证范围、尚未完成的页面与本机生效状态。
+- 原因或分析：虽完成评审主链路和若干平台展示页面，但完整项目/系统配置表单和主题详情仍使用存量交互，且全站逐页/多视口测试未完成。
+- 处理与改进：相关文档列明已实施和未覆盖范围；下一次从项目配置编辑器、模型/飞书/规则设置和主题详情继续，不跳过草稿保护与敏感信息专项。
+- 代码修改：本轮保留此前确认的提交及所有用户工作区变更；新增涉及任务详情、问题、预审、事件、账号、配置历史、改进、首页。未修改服务端、数据库、真实外部系统或本机部署。
+- 本地验证：最终实际命令为 `cd frontend && npx tsc -b && npm run lint`、`npm --prefix frontend test -- --reporter=dot`（30文件/143项）、隔离 Vite 构建、10 项选定 Playwright、`git diff --check`；均通过。全 E2E、配置历史恢复、完整页面/全视口/全部角色验收尚未运行。台账同步以本段后的 `--minimum-entries 15` 核验结果为准。
+- 部署生效：未部署。`frontend/dist`、本机 API/Worker/monitor 未修改/重启，本机新版是否生效未确认。
+- 关联文件或证据：PI-20261107-011 及三份全站/Ant Design/交互文档。
+- 遗留与下一步：继续完成剩余配置表单、主题详情和全站回归；等 monitor 正常同步后只读核验本编号实际累计 15 条，不扩大采集或改写既有记录。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：继续完成剩余配置页、主题详情与全站验收
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户明确要求继续处理全部剩余改造；恢复实施，不再询问是否继续。
+- 关联记录：PI-20261107-011 当前页面批次及未完成范围。
+- 现象或目标：完成项目配置、系统设置和主题详情剩余设计迁移，并扩大全站本地回归，区分代码完成与本机发布。
+- 原因或分析：上轮已完成评审链路和若干展示页，但高风险配置表单、各分区草稿/密钥/自动保存边界、主题阶段详情与全站视口回归仍未覆盖。
+- 处理与改进：先核对项目配置及模型/飞书/规则编辑器和主题详情的状态、草稿守卫和测试夹具，再分批迁移；保留权限、URL、草稿冲突、独立保存、凭据不回显、危险确认和外部调用边界。
+- 代码修改：本段仅登记继续实施，尚未修改本阶段业务源码。
+- 本地验证：实际读取上一轮遗留和当前工作区状态；本阶段专项检查尚未执行。
+- 部署生效：未部署；不覆盖 `frontend/dist`，不重启服务或调用真实模型/GitLab/飞书。
+- 关联文件或证据：用户“继续下一步呀，全部处理完，不需要再问我”；PI-20261107-011 上轮记录。
+- 遗留与下一步：实施后立即记录代码、验证和部署三个维度，收尾按来源与页面实际条数核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：全站当前页面改造与隔离回归完成，未部署本机
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户要求无需再询问并继续全部处理；本轮已完成剩余页面子批及全套浏览器回归，代码实施达到当前规划范围，本机发布未执行。
+- 关联记录：PI-20261107-011 本轮受理、评审主链路/配置账号子批及首批 Ant Design 规则。
+- 现象或目标：收完项目与系统展示、主题详情和全站当前可执行回归，同时如实标明未覆盖专项与部署状态。
+- 原因或分析：原剩余清单包含项目仓库、模型规则、主题阶段导航和全站浏览器检查；旧测试定位依赖原生折叠、表格和分页 DOM，在改造后需要更新为实际组件语义。
+- 处理与改进：完成仓库 Table/状态 Tag/Switch、模型 Table/Card、审核规则预览/反馈/历史次级折叠、主题阶段导航及三类验证/部署摘要，保留完整阶段证据、配置草稿守卫、密钥不回显、URL/权限和领域表单状态。调整维护折叠、问题作者和多种分页的 E2E 定位/行为验证。更新全站规划、Ant Design 采用说明与交互验证文档，明确未执行的专项、体积警告及不部署边界。
+- 代码修改：本轮延续工作区页面改造，新增/调整 `frontend/src/pages/RepositoriesPage.tsx`、`SettingsPage.tsx`、`ReviewRulesPage.tsx`、`ImprovementThemeDetailPage.tsx`、`frontend/src/styles/task-migration.css` 以及相应组件/浏览器测试和三份设计/验证文档。未改后端业务 API、数据模型、调度、凭据或真实外部配置。
+- 本地验证：实际 `cd frontend && npx tsc -b && npm run lint && npm test -- --reporter=dot` 通过；30 文件、143 项通过。实际隔离 Vite 构建 `npx vite build --outDir /tmp/ocr-site-ux-dist --emptyOutDir` 通过，保留入口 750.15 kB、超过 500 kB 的告警。实际已安装 Chrome 的完整 `npx playwright test` 最终 81 passed、18 skipped、0 failed；18 项是需显式环境/专项开启的聊天采集、补审恢复及 HTTP 兼容测试，不计通过。初次全套发现 4 项旧 DOM/定位断言不适配，修正后专项 15 项通过并全套复跑通过。`git diff --check` 通过。实际台账核验在追加本段前回读 16 条、page version 16；追加后仍待 monitor 同步并重查实际累计条数。
+- 部署生效：未部署。构建仅输出到 `/tmp/ocr-site-ux-dist`；未覆盖 `frontend/dist`，未停止/启动/重启本机 API、Worker 或 monitor，未调用真实 OCR/模型/GitLab/飞书；本机是否加载新版本未确认。
+- 关联文件或证据：`docs/whole-site-ux-redesign-plan.md`、`docs/ant-design-adoption.md`、`docs/frontend-interaction-checks.md`、隔离构建与 Playwright 最终输出。
+- 遗留与下一步：18 项跳过测试及真实外部集成/完整角色状态组合仍需在各自明确专项环境验证；Vite 大块告警待另作性能拆包评估；本机发布仍需单独操作和入口确认。本条后以 SQLite 中该编号实际累计条数运行规定只读核验，不扩大采集或改写已同步段落。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261107-011｜追加：监控同步及来源页面条数核对通过
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：全站体验改造当前轮收尾的台账来源/页面同步状态已由只读工具核实。
+- 关联记录：PI-20261107-011 本轮实施、验证与未部署记录。
+- 现象或目标：确认 monitor 有正常同步本轮事实，来源累计数达到页面记录数，避免只根据本地 markdown 宣称已同步。
+- 原因或分析：本轮收尾记录追加后，按项目要求等待 monitor 正常同步，再检查 SQLite 页面版本与来源条目累计。
+- 处理与改进：不修改历史段落、不强制抓取聊天；只在 monitor 周期后执行指定只读核验命令。
+- 代码修改：无；本条只记录台账同步核验结果。
+- 本地验证：实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261107-011 --minimum-entries 17`，返回 `passed=true`、`entries=17`、`page_id=21`、`page_version=17`、`errors=[]`。
+- 部署生效：不适用；该命令只读台账同步状态，不部署网页或服务。
+- 关联文件或证据：规定 `improvement_log_check` 实际 JSON 输出；本地数据库页面 21/version 17。
+- 遗留与下一步：本核验追加段需在正常 monitor 周期后再以实际累计 18 条复查；不宣称未执行的外部链路专项或本机发布。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}

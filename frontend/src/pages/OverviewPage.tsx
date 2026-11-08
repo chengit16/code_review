@@ -51,12 +51,12 @@ export function OverviewPage({ token }: { /** 内存中的管理口令。 */ tok
         {summary.attention + summary.notification_failed + overview.data.todo.events_attention + overview.data.todo.premerge_failed + overview.data.todo.premerge_partial === 0 && <p className="todo-empty">当前没有待处理异常，后台任务会继续由 Worker 自动执行。</p>}
       </div>
     </section>}
-    <ReviewEffectivenessSection token={token} />
     {overview.data && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
       <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库 / 来源</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
         {overview.data.recent.map((job) => <tr key={job.id}><td data-label="任务">#{job.id}</td><td data-label="仓库 / 来源">{job.repository_name}<small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="状态"><Status value={job.effective_status ?? job.status} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td></tr>)}
         {overview.data.recent.length === 0 && <tr><td colSpan={6} className="empty-row">暂无任务，先在项目配置中完成接入。</td></tr>}
       </tbody></table></div>
     </section>}
+    <ReviewEffectivenessSection token={token} />
   </div>;
 }

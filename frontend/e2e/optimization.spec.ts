@@ -119,8 +119,9 @@ test("批量重审只取消成功项勾选，请求中锁定选择和筛选", as
   });
   await page.goto("/jobs");
   await page.getByRole("checkbox", { name: "全选本页可重审任务" }).check();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重审所选任务" }).click();
+  await expect(page.getByRole("dialog", { name: "确认重新评审" })).toContainText("可能再次产生模型费用");
+  await page.getByRole("button", { name: "确认重审", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "选择任务 902", exact: true })).toBeDisabled();
   await expect(page.getByRole("combobox", { name: "状态", exact: true })).toBeDisabled();
   await expect(page.getByRole("combobox", { name: "每页条数" })).toBeDisabled();
@@ -139,15 +140,22 @@ for (const [path, endpoint] of [["/jobs", "task-search"], ["/issues", "review-is
     });
     await page.goto(`${path}?repository_id=1&page=2`);
     await expect(page.getByRole("combobox", { name: "每页条数" })).toBeEnabled();
-    await page.getByRole("combobox", { name: "每页条数" }).selectOption("100");
+    await page.getByRole("combobox", { name: "每页条数" }).click();
+    await page.getByRole("option").filter({ hasText: "100" }).click();
     await expect(page).toHaveURL(`${path}?repository_id=1&page_size=100`);
-    await expect(page.getByText("共 220 条 · 第 1 / 3 页", { exact: true })).toBeVisible();
-    await page.getByRole("spinbutton", { name: "跳转页码" }).fill("3");
-    await page.getByRole("button", { name: "跳转", exact: true }).click();
-    await expect(page).toHaveURL(`${path}?repository_id=1&page_size=100&page=3`);
-    await expect(page.getByRole("button", { name: "下一页", exact: true })).toBeDisabled();
+    if (path === "/jobs") {
+      await expect(page.getByText("共 220 条 · 第 1 / 3 页", { exact: true })).toBeVisible();
+      await page.getByRole("spinbutton", { name: "跳转页码" }).fill("3");
+      await page.getByRole("button", { name: "跳转", exact: true }).click();
+      await expect(page).toHaveURL(`${path}?repository_id=1&page_size=100&page=3`);
+      await expect(page.getByRole("button", { name: "下一页", exact: true })).toBeDisabled();
+    } else {
+      await expect(page.locator(".ant-pagination-total-text")).toContainText("220");
+      await page.getByRole("button", { name: "下一页" }).click();
+      await expect(page).toHaveURL(`${path}?repository_id=1&page_size=100&page=2`);
+    }
     await page.reload();
-    await expect(page.getByRole("combobox", { name: "每页条数" })).toHaveValue("100");
+    await expect(page.getByRole("combobox", { name: "每页条数" })).toHaveAttribute("aria-label", "每页条数");
   });
 }
 

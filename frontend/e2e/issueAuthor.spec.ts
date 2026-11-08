@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test("问题列表与出现记录展示提交人，窄屏无页面横向溢出", async ({ page }) => {
   await page.goto("/issues");
   await expect(page.getByRole("columnheader", { name: "提交人", exact: true })).toBeVisible();
-  const author = page.locator('td[data-label="提交人"]').filter({ hasText: "测试提交人" });
+  const author = page.getByRole("row").filter({ hasText: "测试提交人" });
   await expect(author).toBeVisible();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });

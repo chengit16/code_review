@@ -1,5 +1,6 @@
 /** @description 平台自身的问题台账；筛选和分页保留在 URL，不与 OCR 发现混用。 */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Collapse } from "antd";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -21,9 +22,9 @@ import { categoryLabels, kindLabels, progressLabels } from "./improvementFields"
 export function ImprovementsPage({ token }: { /** 内存管理员会话。 */ token: string }) {
   const [params, setParams] = useSearchParams();
   const view = params.get("view") === "themes" ? "themes" : params.get("view") === "summary" ? "summary" : "records";
-  return <div className="page"><h1>问题与改进</h1><ImprovementMaintenancePanel token={token} /><ChatCapturePanel token={token} /><nav className="settings-tabs" aria-label="问题与改进视图">
+  return <div className="page"><h1>问题与改进</h1><nav className="settings-tabs" aria-label="问题与改进视图">
     {[{ value: "records", label: "问题记录" }, { value: "themes", label: "优化历程" }, { value: "summary", label: "复盘汇总" }].map((item) => <button type="button" key={item.value} className={`repository-editor-tab${view === item.value ? " is-active" : ""}`} aria-pressed={view === item.value} onClick={() => { const next = new URLSearchParams(params); if (item.value !== "records") next.set("view", item.value); else next.delete("view"); setParams(next); }}>{item.label}</button>)}
-  </nav>{view === "themes" ? <ImprovementThemesPanel token={token} /> : view === "summary" ? <ImprovementSummaryPanel token={token} /> : <ImprovementRecords token={token} />}</div>;
+  </nav><Collapse className="improvement-tools-collapse" items={[{ key: "maintenance", label: "维护与聊天收件箱（低频工具）", children: <div className="improvement-tools-content"><ImprovementMaintenancePanel token={token} /><ChatCapturePanel token={token} /></div> }]} />{view === "themes" ? <ImprovementThemesPanel token={token} /> : view === "summary" ? <ImprovementSummaryPanel token={token} /> : <ImprovementRecords token={token} />}</div>;
 }
 
 function ImprovementRecords({ token }: { token: string }) {

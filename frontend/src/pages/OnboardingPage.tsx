@@ -1,12 +1,12 @@
 /** @description 根据已保存配置与接收事实展示接入清单；不自动测试外部连接、不推断当前配置已验证。 */
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Card, Progress, Tag } from "antd";
-import { Link } from "react-router-dom";
+import { Alert, Card, Progress, Tag } from "antd";
 
 import { apiRequest } from "../api/client";
 import type { ConnectionCheck, ModelConfiguration, NotificationTarget, Repository } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { ReadFeedback } from "../ui/ReadFeedback";
+import { RouteButton } from "../ui/RouteButton";
 
 /** 首次接入可随时离开，未知状态不计作未配置或已完成；密钥仍由各管理页维护。 */
 export function OnboardingPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
@@ -37,7 +37,7 @@ export function OnboardingPage({ token }: { /** 内存中的管理口令。 */ t
     { title: "验证连接", description: recentPassed ? "各目标最近测试记录通过；模型和飞书测试未绑定当前配置版本，仍需核实并完成一次端到端验证。" : "按目标查看最新测试。历史通过不能覆盖后续失败、排队或运行记录。", to: "/repositories", label: "查看连接测试", query: checks, done: false },
   ];
   return <div className="page setup-migration">
-    <PageHeader title="首次接入引导" subtitle="先完成配置，再核对连接与实际评审；未知不等于未配置。" actions={<Link to="/" className="ant-btn ant-btn-default">稍后再做</Link>} />
+    <PageHeader title="首次接入引导" subtitle="先完成配置，再核对连接与实际评审；未知不等于未配置。" actions={<RouteButton to="/">稍后再做</RouteButton>} />
     <Card size="small" className="setup-progress" aria-label="接入进度">
       {known ? <><strong>{complete} / 5</strong><span> 项已有配置或接收证据，最终连接仍需核实</span><Progress percent={complete * 20} showInfo={false} aria-label="接入完成进度" /></>
         : <p role="status">接入进度待确认：部分状态仍在读取或读取失败。</p>}
@@ -46,7 +46,7 @@ export function OnboardingPage({ token }: { /** 内存中的管理口令。 */ t
     <ol className="setup-steps">{steps.map((step, index) => <li key={step.title}><Card size="small">
       <div className="setup-step-heading"><h2><span>{String(index + 1).padStart(2, "0")}</span>{step.title}</h2>
         <Tag color={step.query.isSuccess && step.done ? "success" : "default"}>{!step.query.isSuccess ? "状态待确认" : step.done ? index === 3 ? "有接收记录" : "已配置" : index === 4 ? "待核实" : "待完成"}</Tag></div>
-      <p>{step.description}</p><Button href={step.to}>{step.label}</Button>
+      <p>{step.description}</p><RouteButton to={step.to}>{step.label}</RouteButton>
     </Card></li>)}</ol>
     <Alert type="info" showIcon title="配置、连接测试与真实评审是三类证据" description="这里不会自动调用模型、GitLab 或飞书；测试记录不证明所有当前配置已验证，也不代替端到端验收。" />
   </div>;

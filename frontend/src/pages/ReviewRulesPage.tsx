@@ -1,6 +1,7 @@
 /** @description 管理 OCR 全局兜底规则与项目显式覆盖规则。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Collapse } from "antd";
 import { ArrowDown, ArrowUp, History, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -127,9 +128,9 @@ export function ReviewRulesPage({ token, embedded = false }: {
           <div className="form-actions"><button className="button button-secondary" type="button" disabled={!current || remove.isPending} onClick={() => { if (window.confirm("确定删除当前范围的审核规则配置？")) remove.mutate(); }}><Trash2 size={16} />删除配置</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存规则</button></div>
         </fieldset></form>
       </section>
-      <ReviewFeedbackPanel token={token} repositoryId={repositoryId} />
-      <RulePreviewPanel token={token} scopeRepositoryId={repositoryId} repositories={repositories.data ?? []} dirty={dirty} />
-      <section className="section rule-workspace rule-history">
+      <Collapse className="review-rule-secondary" items={[
+        { key: "preview", label: "规则预览与反馈", children: <div className="review-rule-secondary-content"><ReviewFeedbackPanel token={token} repositoryId={repositoryId} /><RulePreviewPanel token={token} scopeRepositoryId={repositoryId} repositories={repositories.data ?? []} dirty={dirty} /></div> },
+        { key: "history", label: "版本历史 · 最近 50 次变更", children: <section className="section rule-workspace rule-history">
         <div className="section-head"><h2><History size={18} />版本历史</h2><span>最近 50 次变更</span></div>
         <QueryState loading={revisions.isLoading} error={revisions.error} />
         {restore.error && <p className="form-error" role="alert">{restore.error.message}</p>}
@@ -139,7 +140,8 @@ export function ReviewRulesPage({ token, embedded = false }: {
           <div className="row-actions"><button className="button button-secondary" type="button" disabled={restore.isPending} onClick={() => { if (dirty && !window.confirm("当前编辑内容尚未保存，恢复历史版本会覆盖当前配置。确定继续？")) return; if (window.confirm(`确定恢复版本 #${revision.id}？`)) restore.mutate(revision.id); }}><RotateCcw size={15} />恢复</button></div>
           <details><summary>查看版本内容</summary><pre>{revision.content ? JSON.stringify(revision.content, null, 2) : "该版本未配置审核规则"}</pre></details>
         </div>)}</div>
-      </section>
+      </section> },
+      ]} />
     </>}
   </div>;
 }

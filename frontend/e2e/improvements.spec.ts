@@ -95,7 +95,8 @@ test("主题阶段、问题关联和历史快照在隔离服务持久化", async
   await page.getByRole("button", { name: "保存主题" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("link", { name: /隔离验收主题/ }).click();
-  await expect(page.getByRole("heading", { name: /第一阶段/ })).toBeVisible();
+  await page.getByRole("button", { name: /阶段 1/ }).click();
+  await expect(page.getByText("验证关联闭环", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /查看问题记录 #/ })).toBeVisible();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });

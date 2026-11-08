@@ -83,14 +83,21 @@ function JobDetail({ token, canEdit }: {
         </div>
         {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
       </div>
+      <nav className="job-detail-jump" aria-label="任务详情分区">
+        <a href="#job-result">结论与发现</a><a href="#job-execution">失败与补审</a><a href="#job-cost">覆盖与费用</a><a href="#job-history">文件与历史</a><a href="#job-notifications">通知与尝试</a>
+      </nav>
       {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
       {job.error && <div className="detail-error" role="alert">{job.error}<p>{["configuration", "ocr_configuration"].includes(job.failure_stage ?? "") ? <Link to="/settings?tab=model">检查模型配置 →</Link> : <Link to="/repositories">打开项目配置，查看接入诊断 →</Link>}</p></div>}
-      <JobExecution job={job} />
-      {["partial", "failed"].includes(job.status) && <section aria-label="保留的初审故障诊断">{job.effective_document && <p className="coverage-note">以下为初审故障证据，不代表当前有效覆盖仍有这些失败；补审结论见后续独立版本。</p>}<ReviewFailureAnalysis analysis={job.failure_analysis} importedAt={job.failure_analysis_imported_at} /></section>}
-      <CoverageReasons job={job} />
-      <ReviewRecoveryPanel token={token} job={job} canEdit={canEdit} />
-      {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} /> : <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} issueStatuses={job.issue_statuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />}
-      <div className="job-insight-grid">
+      <section id="job-result" className="job-detail-region" aria-label="评审结论与发现">
+        {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} /> : <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} issueStatuses={job.issue_statuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />}
+      </section>
+      <section id="job-execution" className="job-detail-region" aria-label="失败与补审">
+        <JobExecution job={job} />
+        {["partial", "failed"].includes(job.status) && <section aria-label="保留的初审故障诊断">{job.effective_document && <p className="coverage-note">以下为初审故障证据，不代表当前有效覆盖仍有这些失败；补审结论见后续独立版本。</p>}<ReviewFailureAnalysis analysis={job.failure_analysis} importedAt={job.failure_analysis_imported_at} /></section>}
+        <CoverageReasons job={job} />
+        <ReviewRecoveryPanel token={token} job={job} canEdit={canEdit} />
+      </section>
+      <div id="job-cost" className="job-insight-grid job-detail-region">
         <div>{job.effective_document && <p className="coverage-note">下方为初审单次用量，补审和全部历史用量见累计费用及独立批次。</p>}<ModelUsage result={job.result} /></div>
         <section className="section detail-insight-card coverage-section">
           <div className="section-head"><h2>{job.effective_document ? "初审覆盖情况（保留原记录）" : "覆盖情况"}</h2></div>
@@ -100,10 +107,10 @@ function JobDetail({ token, canEdit }: {
       </div>
       {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
       {canEdit && !job.effective_document && <GitLabPublications token={token} job={job} />}
-      <details className="advanced-panel"><summary>变更文件与排除范围</summary><JobFiles job={job} />      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><div className="table-scroll"><table><thead><tr><th>文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono file-path">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div></section>}
+      <details id="job-history" className="advanced-panel"><summary>变更文件与排除范围</summary><JobFiles job={job} />      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><div className="table-scroll"><table><thead><tr><th>文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono file-path">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div></section>}
 </details>
       <details className="advanced-panel"><summary>历史报告与对比</summary><AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} /></details>
-      <div className="job-footer-grid">
+      <div id="job-notifications" className="job-footer-grid job-detail-region">
         <section className="section delivery-card"><div className="section-head"><h2>飞书通知</h2></div><div className="delivery-summary"><Status value={job.delivery?.status ?? "未创建"} /><span>尝试 {job.delivery?.attempts ?? 0} 次</span>{job.delivery?.sent_at && <span>{formatTime(job.delivery.sent_at)}</span>}</div>{job.delivery?.error && <p className="form-error">{job.delivery.error}</p>}</section>
         <AttemptTimeline job={job} />
       </div>

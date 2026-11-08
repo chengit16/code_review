@@ -1,0 +1,123 @@
+/* 迁移批次只负责自身布局，不覆盖 Ant Design 内部状态和存量页面。 */
+.jobs-migration, .setup-migration { display: flex; flex-direction: column; gap: 16px; }
+.jobs-migration > .page-header, .setup-migration > .page-header { margin-bottom: 0; }
+.jobs-search-card { background: linear-gradient(110deg, #fff, #f7faff); }
+.jobs-quick-filters, .jobs-active-filters, .jobs-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.jobs-filter-form { margin-top: 18px; }
+.jobs-filter-main { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) auto; align-items: end; gap: 14px; }
+.jobs-filter-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: 13px; }
+.jobs-filter-field .ant-select { width: 100%; }
+.jobs-filter-advanced { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.jobs-active-filters { overflow-wrap: anywhere; }
+.jobs-active-filters .ant-btn { max-width: 100%; height: auto; min-height: 28px; white-space: normal; }
+.jobs-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid #b6d7ff; border-radius: 8px; background: #f0f7ff; }
+.jobs-selection > div { flex-basis: 100%; min-width: 0; }
+.jobs-selection p, .jobs-selection ul { margin: 0; overflow-wrap: anywhere; }
+.jobs-selection small { color: var(--color-muted); }
+.jobs-table { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.jobs-source { display: grid; gap: 5px; }
+.jobs-table .table-sub, .jobs-table .execution-facts { line-height: 1.6; }
+.jobs-table .ant-table-cell { overflow-wrap: anywhere; }
+.jobs-source small, .jobs-source .mono { color: var(--color-muted); font-size: 12px; }
+.jobs-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 13px; }
+.jobs-pagination-controls, .jobs-pagination-jump, .jobs-pagination-jump label { display: flex; align-items: center; gap: 8px; }
+.jobs-pagination-controls .ant-select { min-width: 95px; }
+.jobs-pagination-jump .ant-input { width: 70px; }
+.jobs-mobile-summary { display: grid; padding: 8px 0; gap: 7px; min-width: 0; }
+.jobs-mobile-heading { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.jobs-mobile-facts { margin: 0; }
+.jobs-mobile-facts > div { display: flex; justify-content: space-between; gap: 10px; padding-block: 6px; }
+.jobs-mobile-facts dt { color: var(--color-muted); flex-shrink: 0; }
+.jobs-mobile-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.jobs-frozen-ids { overflow-wrap: anywhere; }
+.setup-progress strong { color: var(--color-accent); font-size: 22px; }
+.setup-progress span, .setup-steps p { color: var(--color-muted); }
+.setup-feedback { display: grid; gap: 10px; }
+.setup-feedback:empty { display: none; }
+.setup-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; list-style: none; margin: 0; padding: 0; }
+.setup-steps > li:last-child { grid-column: 1 / -1; }
+.setup-step-heading { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.setup-step-heading h2 { margin: 0; font-size: 16px; }
+.setup-step-heading h2 span { font-size: 12px; margin-right: 10px; color: var(--color-subtle); }
+.setup-steps p { line-height: 1.7; }
+.issue-filter-card .ant-card-body, .issue-table-card .ant-card-body { min-width: 0; }
+.issue-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)) minmax(240px, 1.5fr); align-items: end; gap: 12px; }
+.issue-filter-grid > label, .issue-search label { display: grid; gap: 6px; min-width: 0; color: var(--color-muted); font-size: 13px; }
+.issue-filter-grid .ant-select, .issue-search .ant-input { width: 100%; }
+.issue-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; margin: 0; }
+.issue-table-note { margin: 0 0 12px; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.issue-table-card .ant-table-cell { overflow-wrap: anywhere; }
+.issue-table-card .issue-summary-button { display: grid; justify-items: start; gap: 6px; max-width: 520px; border: 0; padding: 4px 0; background: transparent; color: var(--color-ink); text-align: left; cursor: pointer; }
+.issue-table-card .issue-summary-button strong { line-height: 1.55; }
+.issue-table-card .ant-pagination { display: flex; flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+.event-inbox-card .ant-card-body { min-width: 0; }
+.event-inbox-heading { margin: 0; font-size: 16px; }
+.event-inbox-card .ant-table-cell { overflow-wrap: anywhere; }
+.event-pagination { margin-top: 14px; }
+.event-backfill-collapse { margin-top: 14px; background: var(--color-surface); }
+.event-backfill-content { display: grid; gap: 14px; }
+.event-backfill-content > .section { margin: 0; }
+.job-detail-jump { position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; padding: 8px; border: 1px solid var(--color-border); border-radius: 10px; background: color-mix(in srgb, var(--color-surface) 94%, transparent); box-shadow: 0 5px 18px rgb(25 46 73 / 7%); backdrop-filter: blur(12px); }
+.job-detail-jump a { display: inline-flex; min-height: 34px; align-items: center; padding: 6px 11px; border-radius: 7px; color: var(--color-muted); font-size: 13px; text-decoration: none; }
+.job-detail-jump a:hover, .job-detail-jump a:focus-visible { background: var(--color-accent-soft); color: var(--color-accent); outline-color: var(--color-accent); }
+.job-detail-region { scroll-margin-top: 76px; }
+.premerge-drawer .ant-drawer-body { padding: 18px; }
+.history-filter-card .ant-card-body, .users-table-card .ant-card-body, .history-table-card .ant-card-body { min-width: 0; }
+.history-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 12px; max-width: 760px; }
+.history-filter-grid label { display: grid; gap: 6px; color: var(--color-muted); font-size: 13px; }
+.history-filter-grid .ant-select { width: 100%; }
+.history-table-heading, .users-table-heading { margin: 0; font-size: 16px; }
+.history-table-card .ant-table-cell, .users-table-card .ant-table-cell { overflow-wrap: anywhere; }
+.improvement-tools-collapse { margin-block: 12px 18px; background: var(--color-surface); }
+.improvement-tools-content { display: grid; gap: 14px; }
+.repository-table-card .ant-card-body, .model-profile-card .ant-card-body { min-width: 0; }
+.repository-table-heading, .model-profile-heading { margin: 0; font-size: 16px; }
+.repository-table-card .ant-table-cell, .model-profile-card .ant-table-cell { overflow-wrap: anywhere; }
+.repository-name-cell { display: grid; min-width: 0; gap: 4px; }
+.repository-name-cell .table-sub { overflow-wrap: anywhere; }
+.review-rule-secondary { display: grid; gap: 12px; background: transparent; border: 0; }
+.review-rule-secondary > .ant-collapse-item { border: 1px solid var(--color-border) !important; border-radius: 9px !important; background: var(--color-surface); }
+.review-rule-secondary .ant-collapse-content-box { padding: 14px !important; }
+.review-rule-secondary-content { display: grid; gap: 14px; }
+.theme-facts-meta { color: var(--color-muted); }
+.theme-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.theme-overview-grid .ant-card-body { overflow-wrap: anywhere; }
+.theme-phase-section { margin-block: 20px; }
+.theme-phase-collapse-label { display: grid; gap: 4px; }
+.theme-phase-collapse-label span { color: var(--color-muted); font-size: 12px; font-weight: 400; line-height: 1.6; }
+.theme-phase-fact h4 { margin: 14px 0 6px; }
+.theme-phase-fact p { margin-block: 6px 12px; }
+.theme-detail-jump { position: sticky; top: 8px; z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; padding: 7px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface); }
+.theme-detail-jump a { padding: 7px 10px; border-radius: 6px; color: var(--color-muted); text-decoration: none; }
+.theme-detail-jump a:hover, .theme-detail-jump a:focus-visible { background: var(--color-accent-soft); color: var(--color-accent); }
+#theme-current, #theme-issues, #theme-history { scroll-margin-top: 70px; }
+.premerge-table-section .ant-table-cell { overflow-wrap: anywhere; }
+.premerge-drawer .ant-drawer-body { padding: 18px; }
+@media (max-width: 1000px) {
+  .jobs-filter-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .issue-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .jobs-table .ant-table-cell { padding: 10px 8px; }
+  .jobs-mobile-summary > small, .jobs-mobile-summary > span { font-size: 12px; line-height: 1.6; }
+  .setup-steps { grid-template-columns: minmax(0, 1fr); }
+  .issue-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .issue-search { grid-template-columns: minmax(0, 1fr) auto; }
+  .issue-table-card .ant-pagination { justify-content: flex-start; }
+  .event-pagination { overflow-x: auto; }
+  .job-detail-jump { top: 0; gap: 2px; padding: 5px; overflow-x: auto; flex-wrap: nowrap; }
+  .job-detail-jump a { flex: 0 0 auto; padding-inline: 8px; font-size: 12px; }
+  .premerge-drawer .ant-drawer-content-wrapper { width: 100vw !important; }
+  .premerge-drawer .ant-drawer-body { padding: 12px; }
+  .history-filter-grid { grid-template-columns: minmax(0, 1fr); }
+  .theme-overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .theme-detail-jump { top: 0; overflow-x: auto; flex-wrap: nowrap; }
+  .theme-detail-jump a { flex: 0 0 auto; }
+}
+@media (max-width: 520px) {
+  .jobs-filter-main, .jobs-filter-advanced { grid-template-columns: minmax(0, 1fr); }
+  .jobs-filter-actions .ant-btn-primary { flex: 1; }
+  .jobs-pagination-controls { flex-wrap: wrap; }
+  .jobs-pagination-controls .ant-btn { padding-inline: 10px; }
+  .jobs-selection { padding: 12px; }
+}

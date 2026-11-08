@@ -6,7 +6,6 @@ import { createContext, lazy, Suspense, useContext, useEffect, useLayoutEffect, 
 import { createBrowserRouter, Navigate, NavLink, Route, RouterProvider, Routes, useLocation } from "react-router-dom";
 
 import { AccessScreen } from "./AccessScreen";
-import { JobsPage } from "../pages/JobsPage";
 import { OverviewPage } from "../pages/OverviewPage";
 import { apiRequest } from "../api/client";
 import type { Health } from "../api/types";
@@ -16,6 +15,7 @@ import { PageErrorBoundary } from "../ui/PageErrorBoundary";
 const ConfigHistoryPage = lazy(() => import("../pages/ConfigHistoryPage").then((module) => ({ default: module.ConfigHistoryPage })));
 const EventCenterPage = lazy(() => import("../pages/EventCenterPage").then((module) => ({ default: module.EventCenterPage })));
 const JobDetailPage = lazy(() => import("../pages/JobDetailPage").then((module) => ({ default: module.JobDetailPage })));
+const JobsPage = lazy(() => import("../pages/JobsPage").then((module) => ({ default: module.JobsPage })));
 const ImprovementsPage = lazy(() => import("../pages/ImprovementsPage").then((module) => ({ default: module.ImprovementsPage })));
 const ImprovementDetailPage = lazy(() => import("../pages/ImprovementDetailPage").then((module) => ({ default: module.ImprovementDetailPage })));
 const ImprovementThemeDetailPage = lazy(() => import("../pages/ImprovementThemeDetailPage").then((module) => ({ default: module.ImprovementThemeDetailPage })));

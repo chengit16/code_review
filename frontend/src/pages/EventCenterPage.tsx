@@ -1,6 +1,8 @@
 /** @description GitLab 事件检索、异常恢复与 MR 时间范围补审的管理入口。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Card, Collapse, Table } from "antd";
+import type { TableColumnsType } from "antd";
 import { RefreshCw, RotateCcw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -10,6 +12,7 @@ import { enqueueMrBackfill, listMrBackfills, retryEvent, searchEvents } from "..
 import type { MrBackfill } from "../api/events";
 import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
+import type { MergeEvent } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { Pagination } from "../ui/Pagination";
 import { QueryState } from "../ui/QueryState";
@@ -135,6 +138,15 @@ export function EventCenterPage({ token, canEdit }: {
     void client.invalidateQueries({ queryKey: ["overview"] });
   } });
   const items = events.data?.items ?? [];
+  const columns: TableColumnsType<MergeEvent> = [
+    { title: "项目 / MR", key: "source", width: 190, render: (_: unknown, item) => <>{item.repository_name ?? `项目 #${item.repository_id}`}<small className="table-sub">{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · 事件 #{item.id}</small></> },
+    { title: "提交范围", key: "sha", width: 170, render: (_: unknown, item) => <span className="mono">{item.mr_iid < 0 ? `${item.squash_sha?.slice(0, 8) ?? "?"}…${item.merge_sha?.slice(0, 8) ?? "?"}` : item.merge_sha?.slice(0, 12) ?? "待 Worker 核验"}</span> },
+    { title: "状态", key: "status", width: 140, render: (_: unknown, item) => <><Status value={item.status} /><small className="table-sub">尝试 {item.attempts} 次</small></> },
+    { title: "关联任务", key: "job", width: 180, render: (_: unknown, item) => item.latest_job_id ? <Link to={`/jobs/${item.latest_job_id}`}>查看最新任务 #{item.latest_job_id}</Link> : `${item.job_count ?? 0} 个任务` },
+    { title: "接收时间", dataIndex: "created_at", key: "created_at", width: 170, render: (value: string) => formatTime(value) },
+    { title: "诊断", dataIndex: "error", key: "error", render: (value: string | null) => value ?? "—" },
+    { title: "操作", key: "action", width: 64, render: (_: unknown, item) => canEdit && item.status === "needs_attention" ? <Button type="text" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { if (window.confirm(`重新处理事件 #${item.id}？Worker 会重新向 GitLab 核对 MR 和提交范围。`)) retry.mutate(item.id); }}><RotateCcw size={16} /></Button> : null },
+  ];
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,26 +192,16 @@ export function EventCenterPage({ token, canEdit }: {
       <div className="filter-actions"><button className="button button-primary"><Search size={16} />查询</button><Link className="button button-secondary" to="/events">清空</Link></div>
     </form>
     {filterError && <p className="form-error" role="alert">{filterError}</p>}
-    {canEdit && repositories.data && repositories.data.length > 0 && <BackfillForm key={repositories.data.map((item) => item.id).join(",")} token={token} repositories={repositories.data} />}
-    {canEdit && <BackfillHistory token={token} />}
     {message && <p className="form-success" role="status">{message}</p>}
     {(retry.error || repositories.error) && <p className="form-error" role="alert">{retry.error?.message || repositories.error?.message}</p>}
-    <section className="section"><div className="section-head"><h2>事件收件箱</h2><span>{events.data?.total ?? 0} 条</span></div>
+    <Card className="event-inbox-card" size="small" title={<h2 className="event-inbox-heading">事件收件箱</h2>} extra={`${events.data?.total ?? "—"} 条`}>
       <QueryState loading={events.isLoading} error={events.error} onRetry={() => void events.refetch()} />
-      {events.data && <div className="table-scroll responsive-table"><table><thead><tr><th>项目 / MR</th><th>提交范围</th><th>状态</th><th>关联任务</th><th>接收时间</th><th>诊断</th><th aria-label="操作" /></tr></thead><tbody>
-        {items.map((item) => <tr key={item.id}><td data-label="项目 / MR">{item.repository_name}<small className="table-sub">{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · 事件 #{item.id}</small></td>
-          <td data-label="提交范围" className="mono">{item.mr_iid < 0 ? `${item.squash_sha?.slice(0, 8) ?? "?"}…${item.merge_sha?.slice(0, 8) ?? "?"}` : item.merge_sha?.slice(0, 12) ?? "待 Worker 核验"}</td>
-          <td data-label="状态"><Status value={item.status} /><small className="table-sub">尝试 {item.attempts} 次</small></td>
-          <td data-label="关联任务">{item.latest_job_id ? <Link to={`/jobs/${item.latest_job_id}`}>查看最新任务 #{item.latest_job_id}</Link> : `${item.job_count ?? 0} 个任务`}</td>
-          <td data-label="接收时间">{formatTime(item.created_at)}</td><td data-label="诊断">{item.error ?? "—"}</td>
-          <td data-label="操作">{canEdit && item.status === "needs_attention" && <button className="icon-button" type="button" title="重新处理事件" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { if (window.confirm(`重新处理事件 #${item.id}？Worker 会重新向 GitLab 核对 MR 和提交范围。`)) retry.mutate(item.id); }}><RotateCcw size={16} /></button>}</td>
-        </tr>)}
-        {items.length === 0 && <tr><td colSpan={7} className="empty-row">当前条件下没有事件；可尝试清除筛选或创建历史 MR 补审申请。</td></tr>}
-      </tbody></table></div>}
-    </section>
-    <Pagination label="事件分页" total={events.data?.total ?? 0} page={events.data?.page ?? Number(params.get("page") || 1)}
-      pageSize={events.data?.page_size ?? Number(params.get("page_size") || 25)} disabled={events.isFetching || Boolean(events.error)}
-      onPage={changePage} onPageSize={(size) => { const next = new URLSearchParams(params); next.set("page_size", String(size)); next.delete("page"); setParams(next); }} />
+      {events.data && <Table rowKey="id" size="middle" columns={columns} dataSource={items} loading={events.isFetching} locale={{ emptyText: events.error ? "无法读取事件" : "当前条件下没有事件；可清除筛选，或展开历史 MR 补扫。" }} scroll={{ x: 1050 }} pagination={false} />}
+      <div className="event-pagination"><Pagination label="事件分页" total={events.data?.total ?? 0} page={events.data?.page ?? Number(params.get("page") || 1)}
+        pageSize={events.data?.page_size ?? Number(params.get("page_size") || 25)} disabled={events.isFetching || Boolean(events.error)}
+        onPage={changePage} onPageSize={(size) => { const next = new URLSearchParams(params); next.set("page_size", String(size)); next.delete("page"); setParams(next); }} /></div>
+    </Card>
+    {canEdit && <Collapse className="event-backfill-collapse" items={[{ key: "backfill", label: "历史 MR 补扫与申请记录", children: <div className="event-backfill-content">{repositories.data && repositories.data.length > 0 && <BackfillForm key={repositories.data.map((item) => item.id).join(",")} token={token} repositories={repositories.data} />}<BackfillHistory token={token} /><p className="coverage-note">扫描完成只表示 MR 已核对并建立事件，不代表对应评审任务已完成。</p></div> }]} />}
   </div>;
 }
 

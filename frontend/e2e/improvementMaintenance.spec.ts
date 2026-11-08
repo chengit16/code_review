@@ -4,12 +4,14 @@ import { expect, test } from "@playwright/test";
 test("管理员保存策略可刷新读取，外部变更不覆盖草稿", async ({ page }) => {
   const original = await (await page.request.get("/api/improvement-maintenance")).json();
   await page.goto("/improvements");
+  await page.getByText("维护与聊天收件箱（低频工具）").click();
   await page.locator("summary").filter({ hasText: "自动归档与台账同步" }).click();
   await page.getByLabel("启用自动归档").check();
   await page.getByLabel("连续无更新天数").fill("45");
   await page.getByRole("button", { name: "保存归档策略" }).click();
   await expect(page.getByText(/策略已保存，后台下轮执行/)).toBeVisible();
   await page.reload();
+  await page.getByText("维护与聊天收件箱（低频工具）").click();
   await page.locator("summary").filter({ hasText: "自动归档与台账同步" }).click();
   await expect(page.getByLabel("连续无更新天数")).toHaveValue("45");
   await expect(page.getByLabel("启用自动归档")).toBeChecked();

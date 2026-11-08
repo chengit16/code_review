@@ -1,11 +1,12 @@
 /** @description 合并前 MR 版本检索与分页；默认每个 MR 只显示最新接收版本，失效结果保留历史。 */
 import { useQuery } from "@tanstack/react-query";
+import { Drawer, Table } from "antd";
+import type { TableColumnsType } from "antd";
 import { Link, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { parsePremergeResult, premergeLabels } from "../api/premerge";
 import type { PremergeReview } from "../api/premerge";
 import type { Repository } from "../api/types";
-import { Pagination } from "../ui/Pagination";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
@@ -27,6 +28,14 @@ export function PremergePage({ token }: { /** 内存凭据。 */ token: string }
   }
   function select(id: number | null) { const next = new URLSearchParams(params); if (id) next.set("review", String(id)); else next.delete("review"); setParams(next); }
   function paginate(nextPage: number) { const next = new URLSearchParams(params); next.delete("review"); next.set("page", String(nextPage)); setParams(next); }
+  const columns: TableColumnsType<PremergeReview> = [
+    { title: "项目 / MR", key: "source", width: 190, render: (_: unknown, item) => <>{item.repository_name}<small className="table-sub">MR !{item.mr_iid}</small></> },
+    { title: "提交版本", dataIndex: "head_sha", key: "head_sha", width: 145, render: (value: string) => <span className="mono" title={value}>{value.slice(0, 12)}</span> },
+    { title: "状态", dataIndex: "status", key: "status", width: 110, render: (value: PremergeReview["status"]) => premergeLabels[value] },
+    { title: "发现", key: "findings", width: 150, render: (_: unknown, item) => { const result = parsePremergeResult(item.result_json); return item.status === "superseded" ? "旧版本" : result.valid ? `${result.comments.length} 条（以覆盖结论为准）` : "尚无有效结果"; } },
+    { title: "接收时间", dataIndex: "created_at", key: "created_at", width: 170, render: (value: string) => formatTime(value) },
+    { title: "操作", key: "action", width: 110, render: (_: unknown, item) => <button className="button button-secondary" onClick={() => select(item.id)}>详情 #{item.id}</button> },
+  ];
   return <div className="page"><PageHeader title="合并前审查" subtitle="默认查看每个 MR 的最新版本，旧版本按需展开" />
     <form className="premerge-filters" key={query.toString()} onSubmit={(event) => { event.preventDefault(); filter("mr_iid", String(new FormData(event.currentTarget).get("mr_iid") ?? "").trim()); }}>
       <SelectField label="项目" value={params.get("repository_id") ?? "all"} onValueChange={(value) => filter("repository_id", value === "all" ? "" : value)} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
@@ -35,11 +44,7 @@ export function PremergePage({ token }: { /** 内存凭据。 */ token: string }
     </form>
     <label className="checkbox-label version-toggle"><input type="checkbox" checked={params.get("latest_only") === "false"} onChange={(event) => filter("latest_only", event.target.checked ? "false" : "")} />包含历史版本（旧版本不代表当前结论）</label>
     <QueryState loading={reviews.isLoading} error={reviews.error || repositories.error} onRetry={() => { void reviews.refetch(); void repositories.refetch(); }} />
-    {selected && <PremergeDetail key={selected} token={token} id={selected} onClose={() => select(null)} onOpenReview={select} />}
-    <section className="section"><div className="table-scroll responsive-table"><table><thead><tr><th>项目 / MR</th><th>提交版本</th><th>状态</th><th>发现</th><th>接收时间</th><th aria-label="操作" /></tr></thead><tbody>
-      {reviews.data?.items.map((review) => { const result = parsePremergeResult(review.result_json); return <tr key={review.id}><td data-label="项目 / MR">{review.repository_name}<small className="table-sub">MR !{review.mr_iid}</small></td><td data-label="提交版本" className="mono" title={review.head_sha}>{review.head_sha.slice(0, 12)}</td><td data-label="状态">{premergeLabels[review.status]}</td><td data-label="发现">{review.status === "superseded" ? "旧版本" : result.valid ? `${result.comments.length} 条（以覆盖结论为准）` : "尚无有效结果"}</td><td data-label="接收时间">{formatTime(review.created_at)}</td><td data-label="操作"><button className="button button-secondary" onClick={() => select(review.id)}>详情 #{review.id}</button></td></tr>; })}
-      {!reviews.isLoading && !reviews.error && reviews.data?.items.length === 0 && <tr><td colSpan={6} className="empty-row">当前条件下没有审查记录。需要接入时请在<Link to="/repositories">项目配置</Link>开启合并前审查。</td></tr>}
-    </tbody></table></div></section>
-    <Pagination label="合并前审查分页" total={reviews.data?.total ?? 0} page={page} pageSize={reviews.data?.page_size ?? 25} disabled={reviews.isFetching || Boolean(reviews.error)} onPage={paginate} onPageSize={(size) => filter("page_size", String(size))} />
+    {selected && <Drawer className="premerge-drawer" open placement="right" width={760} title={null} onClose={() => select(null)} destroyOnHidden><PremergeDetail key={selected} token={token} id={selected} onClose={() => select(null)} onOpenReview={select} /></Drawer>}
+    <section className="section premerge-table-section"><Table rowKey="id" size="middle" columns={columns} dataSource={reviews.data?.items ?? []} loading={reviews.isFetching} locale={{ emptyText: reviews.error ? "无法读取审查记录" : <span>当前条件下没有审查记录。需要接入时请在<Link to="/repositories">项目配置</Link>开启合并前审查。</span> }} scroll={{ x: 850 }} pagination={{ current: page, pageSize: reviews.data?.page_size ?? 25, total: reviews.data?.total ?? 0, showSizeChanger: true, pageSizeOptions: [25, 50, 100], locale: { items_per_page: "条/页", prev_page: "上一页", next_page: "下一页", page: "页", jump_to: "跳至", page_size: "每页条数" }, showTotal: (total, range) => `${range[0]}-${range[1]} / ${total} 条`, disabled: reviews.isFetching || Boolean(reviews.error), onChange: (nextPage, size) => { if (size !== (reviews.data?.page_size ?? 25)) filter("page_size", String(size)); else paginate(nextPage); } }} /></section>
   </div>;
 }

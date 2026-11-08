@@ -15,7 +15,7 @@ export function JobsPagination({ total, page, pageSize, disabled, onPage, onPage
   const pages = Math.max(1, Math.ceil((total ?? 0) / pageSize));
   return <nav className="jobs-pagination" aria-label="任务分页">
     <span aria-live="polite">{total === undefined ? "总量待确认" : `共 ${total} 条 · 第 ${page} / ${pages} 页`}</span>
-    <div className="jobs-pagination-controls"><label htmlFor={id}>每页</label><Select id={id} aria-label="每页条数" value={pageSize} disabled={disabled} onChange={onPageSize} options={[25, 50, 100].map((size) => ({ value: size, label: `${size} 条` }))} />
+    <div className="jobs-pagination-controls"><label htmlFor={id}>每页</label><Select virtual={false} id={id} aria-label="每页条数" value={pageSize} disabled={disabled} onChange={onPageSize} options={[25, 50, 100].map((size) => ({ value: size, label: `${size} 条` }))} />
       <Button aria-label="上一页" disabled={disabled || page <= 1} onClick={() => onPage(page - 1)}>上一页</Button>
       <Button aria-label="下一页" disabled={disabled || page >= pages} onClick={() => onPage(page + 1)}>下一页</Button></div>
     <PageJump key={`${page}-${pages}`} page={page} pages={pages} disabled={disabled} onPage={onPage} />

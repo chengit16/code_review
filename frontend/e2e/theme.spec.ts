@@ -38,7 +38,7 @@ for (const width of [1440, 390, 320]) {
     await expect(activeLink).toHaveCSS("color", colors.accent);
     const add = page.getByRole("button", { name: "添加仓库", exact: true });
     await expect(add).toHaveCSS("background-color", colors.accent);
-    await expect(page.locator(width < 621 ? ".responsive-table tbody tr" : ".table-scroll").first()).toHaveCSS("background-color", colors.surface);
+    await expect(page.locator(".repository-table-card").first()).toHaveCSS("background-color", colors.surface);
 
     if (width < 900) {
       await page.getByRole("button", { name: "打开导航" }).click();
@@ -71,11 +71,11 @@ for (const width of [1440, 390, 320]) {
     const complete = page.getByRole("option", { name: "已完成", exact: true });
     await complete.hover();
     await expect(complete).toHaveCSS("background-color", colors.accentSoft);
-    await expect(complete).toHaveCSS("color", colors.accentText);
+    await expect(complete).toHaveCSS("color", colors.ink);
     await complete.click();
     await page.getByRole("button", { name: "查询", exact: true }).click();
     await expect(page).toHaveURL("/jobs?status=complete");
-    await expect(status).toContainText("已完成");
+    await expect(page.locator(".jobs-filter-field .ant-select").filter({ has: status })).toContainText("已完成");
     await expectNoOverflow(page);
     await page.screenshot({ path: `test-results/theme-jobs-${width}.png`, fullPage: true });
 
