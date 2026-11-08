@@ -1,69 +1,73 @@
-/** @description 全量运行聚合与最近任务；未恢复异常和历史失败分开，不把截断列表当成队列总量。 */
-
+/** @description 概览只读编排；健康与运行数据独立容错，不执行恢复或问题处置。 */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpRight, RefreshCw } from "lucide-react";
+import { Button } from "antd";
+import { RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
-import type { Health, ReviewJob } from "../api/types";
-import { ListTime } from "../ui/ListControls";
-import { ListTable } from "../ui/ListTable";
+import { getOverview } from "../api/overview";
+import type { Health } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
-import { shortSha } from "../ui/format";
 
 import { ReviewEffectivenessSection } from "./ReviewEffectivenessSection";
-import { IssueSummary } from "./jobs/TaskIssueSummary";
+import { CurrentWork } from "./overview/CurrentWork";
+import { ReadStatus } from "./overview/ReadStatus";
+import { RecentReviews } from "./overview/RecentReviews";
 
-interface Overview {
-  summary: { repositories: number; queued: number; running: number; complete: number;
-    attention: number; historical_failed: number; notification_failed: number; total: number };
-  todo: { events_attention: number; premerge_failed: number; premerge_partial: number };
-  recent: ReviewJob[];
-}
-
-/** 首页只读展示；点击指标直接进入相同口径的筛选列表。 */
-export function OverviewPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
+/** 手动刷新聚合实际结果；后台轮询不反复播报或移动焦点。 */
+export function OverviewPage({ token, canEdit = false }: {
+  /** 内存会话。 */ token: string;
+  /** 只控制管理导航，服务端仍负责授权。 */ canEdit?: boolean;
+}) {
   const client = useQueryClient();
-  const health = useQuery({ queryKey: ["health"], queryFn: () => apiRequest<Health>(token, "/api/health"), refetchInterval: 10000 });
-  const overview = useQuery({ queryKey: ["overview"], queryFn: () => apiRequest<Overview>(token, "/api/overview"),
-    refetchInterval: (query) => query.state.data?.summary.running || query.state.data?.summary.queued ? 5000 : 30000 });
-  const summary = overview.data?.summary;
-  function refresh() {
-    void health.refetch();
-    void overview.refetch();
-    void client.invalidateQueries({ queryKey: ["review-effectiveness"] });
+  const [refreshing, setRefreshing] = useState(false);
+  const [message, setMessage] = useState("");
+  const refreshLock = useRef(false);
+  const health = useQuery({ queryKey: ["health"], queryFn: ({ signal }) => apiRequest<Health>(token, "/api/health", { signal }), refetchInterval: 10000 });
+  const overview = useQuery({ queryKey: ["overview"], queryFn: ({ signal }) => getOverview(token, signal),
+    refetchInterval: (query) => (query.state.data?.activity?.total ?? (query.state.data?.summary.running ?? 0) + (query.state.data?.summary.queued ?? 0)) > 0 ? 5000 : 30000 });
+  async function handleRefresh() {
+    if (refreshLock.current) return;
+    refreshLock.current = true;
+    setRefreshing(true);
+    setMessage("");
+    // 每份结果分别判断，失败保留缓存；不能用最新成功资源掩盖其他失败。
+    try {
+      const results = await Promise.allSettled([
+        health.refetch({ cancelRefetch: false, throwOnError: true }),
+        overview.refetch({ cancelRefetch: false, throwOnError: true }),
+        client.refetchQueries({ queryKey: ["review-effectiveness"], type: "active" }, { cancelRefetch: false, throwOnError: true }),
+      ]);
+      setMessage(results.some((result) => result.status === "rejected") ? "部分读取失败，请查看各区提示；已成功的数据仍保留。" : "概览读取完成");
+    } finally {
+      refreshLock.current = false;
+      setRefreshing(false);
+    }
   }
-  return <div className="page"><PageHeader title="运行概览" subtitle="先看当前待办，再查看评审结果" actions={
-    <><div className="worker-health" role="status">Worker <Status value={health.isError ? "unknown" : health.data?.worker ?? "unknown"} /></div><button className="icon-button" aria-label="刷新概览" onClick={refresh}><RefreshCw size={18} /></button></>
-  } /><QueryState loading={overview.isLoading} error={overview.error} onRetry={() => void overview.refetch()} />
-    {health.data?.worker === "stopped" && <p className="attention-note" role="alert">Worker 未运行，已接收任务会等待处理。请先启动 Worker，不要反复重新评审。</p>}
-    {summary && <><section className="metrics" aria-label="运行指标">
-      <Link to="/repositories" className="metric metric-link"><span>已接入仓库</span><strong>{summary.repositories}</strong><small>查看项目接入状态 →</small></Link>
-      <Link to="/jobs?view=active" className="metric metric-link"><span>排队与运行</span><strong>{summary.queued + summary.running}</strong><small>排队 {summary.queued} · 运行 {summary.running}</small></Link>
-      <Link to="/jobs?view=attention" className="metric metric-link"><span>待关注评审</span><strong>{summary.attention}</strong><small>失败或部分完成，未被后续完整结果覆盖</small></Link>
-      <Link to="/jobs?status=complete" className="metric metric-link"><span>已完成评审</span><strong>{summary.complete}</strong><small>全部 {summary.total} 个历史任务</small></Link>
-    </section><div className="overview-links"><span>失败任务 {summary.historical_failed} 条（含历史记录），不等于当前待办</span><Link to="/jobs?view=notification_failed">飞书发送失败 {summary.notification_failed} 条 · 查看并重发 →</Link></div></>}
-    {summary && overview.data && <section className="todo-center" aria-labelledby="todo-center-title"><div className="section-head"><div><h2 id="todo-center-title">待办中心</h2><p>优先处理会阻塞恢复或需要人工判断的异常</p></div><span>{summary.attention + summary.notification_failed + overview.data.todo.events_attention + overview.data.todo.premerge_failed + overview.data.todo.premerge_partial} 项</span></div>
-      <div className="todo-cards">
-        {overview.data.todo.events_attention > 0 && <Link className="todo-card todo-card--urgent" to="/events?status=needs_attention"><span>事件需要恢复</span><strong>{overview.data.todo.events_attention}</strong><small>重新核对 GitLab 并恢复入队 →</small></Link>}
-        {summary.attention > 0 && <Link className="todo-card todo-card--urgent" to="/jobs?view=attention"><span>评审结果待处理</span><strong>{summary.attention}</strong><small>失败或部分覆盖且未被完整结果覆盖 →</small></Link>}
-        {summary.notification_failed > 0 && <Link className="todo-card" to="/jobs?view=notification_failed"><span>飞书通知发送失败</span><strong>{summary.notification_failed}</strong><small>单独重发通知，不重跑评审 →</small></Link>}
-        {overview.data.todo.premerge_failed > 0 && <Link className="todo-card" to="/premerge?status=failed"><span>合并前审查失败</span><strong>{overview.data.todo.premerge_failed}</strong><small>查看最新 MR 版本与错误 →</small></Link>}
-        {overview.data.todo.premerge_partial > 0 && <Link className="todo-card" to="/premerge?status=partial"><span>合并前审查部分完成</span><strong>{overview.data.todo.premerge_partial}</strong><small>检查未覆盖文件 →</small></Link>}
-        {summary.attention + summary.notification_failed + overview.data.todo.events_attention + overview.data.todo.premerge_failed + overview.data.todo.premerge_partial === 0 && <p className="todo-empty">当前没有待处理异常，后台任务会继续由 Worker 自动执行。</p>}
-      </div>
-    </section>}
-    {overview.data && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
-      <ListTable rowKey="id" dataSource={overview.data.recent} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: "暂无任务，先在项目配置中完成接入" }} columns={[
-        { title: "任务 / 来源", key: "source", width: 250, render: (_, job) => <><Link className="list-primary" to={`/jobs/${job.id}`}>#{job.id} · {job.repository_name}</Link><span className="list-secondary">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"} · {shortSha(job.commit_sha)}</span></> },
-        { title: "评审状态", key: "status", width: 120, render: (_, job) => <Status value={job.list_status ?? job.effective_status ?? job.status} /> },
-        { title: "问题处理", key: "issues", render: (_, job) => <IssueSummary job={job} detailPath={(id) => `/jobs/${id}`} /> },
-        { title: "创建时间", key: "time", width: 140, render: (_, job) => <ListTime value={job.created_at} /> },
-        { title: "操作", key: "action", width: 75, render: (_, job) => <Link to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}>详情</Link> },
-      ]} /><p className="form-note">仅展示最近 8 个任务，不代表全部任务或当前队列总数。</p>
-    </section>}
+  const confirmedWorker = !health.isError && health.data?.worker;
+  const data = overview.data;
+  return <div className="page overview-page"><PageHeader title="运行概览" subtitle="先看运行异常与代码问题，再查看最近评审" actions={
+    <div className="overview-header-actions"><span>Worker {health.isLoading ? "正在检测" : <Status value={confirmedWorker || "unknown"} />}</span>
+      <ReadStatus label="健康" updatedAt={health.dataUpdatedAt} fetching={health.isFetching} />
+      <Button icon={<RefreshCw size={16} />} loading={refreshing} disabled={refreshing} onClick={() => void handleRefresh()}>刷新概览</Button>
+    </div>
+  } />
+    <p className="overview-manual-result" role="status">{message}</p>
+    {health.isError ? <div className="overview-notice" role="alert">暂时无法确认 Worker 当前状态；{health.data ? <>上次检测：{health.data.worker === "running" ? "运行中" : "未运行"}。<ReadStatus label="健康" updatedAt={health.dataUpdatedAt} fetching={health.isFetching} /></> : "尚无成功检测记录。"}<Button onClick={() => void health.refetch()}>重新检测</Button></div> : confirmedWorker === "stopped" && <div className="overview-notice">Worker 未运行，队列可能等待处理。{canEdit ? <Link to="/operations?tab=runtime">查看运行监控</Link> : "请联系管理员核对启动指引。"}不要反复重新评审。</div>}
+    <ReadStatus label="运行数据" updatedAt={overview.dataUpdatedAt} fetching={overview.isFetching} />
+    {overview.isError && data && <p role="alert">运行数据刷新失败，当前显示上次成功读取的数据。<Button onClick={() => void overview.refetch()}>重新读取</Button></p>}
+    <QueryState loading={overview.isLoading} error={!data ? overview.error : null} onRetry={() => void overview.refetch()} />
+    {data && <><CurrentWork data={data} /><RecentReviews jobs={data.recent} />
+      <section className="overview-facts" aria-label="运行概况">
+        {canEdit ? <Link to="/repositories">已配置项目 {data.summary.repositories}</Link> : <span>已配置项目 {data.summary.repositories}</span>}
+        <Link to="/jobs?view=active">{data.activity ? <>活动任务 {data.activity.total}（排队 {data.activity.queued} · 运行 {data.activity.running}）</> : "活动任务汇总暂不可用"}</Link>
+        <Link to="/jobs?status=complete">已完成 {data.summary.complete} / 全部历史 {data.summary.total} 个任务</Link>
+        <span>历史失败 {data.summary.historical_failed} 个任务（含已恢复记录），不等于当前运行异常</span>
+      </section>
+    </>}
     <ReviewEffectivenessSection token={token} />
   </div>;
 }

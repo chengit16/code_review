@@ -124,7 +124,7 @@ function Workspace({ token, role, username, onLogout }: {
         </aside>
         <main id="main-content" className="main-area" tabIndex={-1}>
           <PageErrorBoundary key={location.pathname}><Suspense fallback={<div className="page" role="status">正在加载页面…</div>}><Routes>
-            <Route path="/" element={<OverviewPage token={token} />} />
+            <Route path="/" element={<OverviewPage token={token} canEdit={role === "admin"} />} />
             <Route path="/repositories" element={role === "admin" ? <RepositoriesPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/onboarding" element={role === "admin" ? <OnboardingPage token={token} /> : <Navigate to="/" replace />} />
             <Route path="/webhooks" element={<Navigate to="/repositories" replace />} />

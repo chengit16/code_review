@@ -81,13 +81,13 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         mr_iid: int | None = Query(None, gt=0),
         status: Literal["queued", "running", "complete", "partial", "failed",
                         "skipped", "cancelled", "superseded"] | None = None,
-        latest_only: bool = True, summary_only: bool = False,
+        latest_only: bool = True, summary_only: bool = False, actionable_only: bool = False,
         page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
     ) -> dict[str, Any]:
         """按项目和 MR 查询版本；最新指最新接收版本，不把旧结果当成当前结论。"""
 
         return search_premerge(store, repository_id, mr_iid, status, latest_only,
-                               page, page_size, summary_only)
+                               page, page_size, summary_only, actionable_only)
 
     @app.get("/api/service-addresses", dependencies=[admin])
     def service_addresses() -> dict[str, str]:

@@ -10,6 +10,7 @@ import "./styles.css";
 import "./styles/operations.css";
 import "./styles/task-migration.css";
 import "./styles/lists.css";
+import "./styles/overview.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },

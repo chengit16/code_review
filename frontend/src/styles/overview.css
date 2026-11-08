@@ -1,0 +1,46 @@
+/* 概览作用域内压缩重复摘要，保留移动端全部任务事实。 */
+.overview-page { min-width: 0; }
+.overview-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px 16px; }
+.overview-read { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--color-muted, #666); font-size: 12px; }
+.overview-page .ant-btn { min-height: 44px; }
+.overview-page a { text-underline-offset: 3px; }
+.overview-manual-result { margin: 0; }
+.overview-manual-result:empty { display: none; }
+.overview-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 10px 16px; background: var(--color-warning-soft); border: 1px solid var(--color-warning-border); border-radius: 8px; color: #694d17; line-height: 1.7; }
+.overview-notice a { display: inline-flex; align-items: center; min-height: 44px; }
+.overview-work { margin-top: 12px; }
+.overview-work-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+.overview-work-grid > section { min-width: 0; }
+.overview-work-grid h3 { margin: 0 0 12px; font-size: 15px; }
+.overview-work-grid > section + section { border-left: 1px solid var(--color-border, #f0f0f0); padding-left: 24px; }
+.overview-exceptions { margin: 0; padding: 0; list-style: none; }
+.overview-exceptions li { display: grid; grid-template-columns: minmax(0, 1fr) auto 44px; align-items: center; gap: 12px; border-bottom: 1px solid var(--color-border, #f0f0f0); padding: 4px 0; }
+.overview-exceptions li:last-child { border-bottom: 0; }
+.overview-exceptions small { display: block; color: var(--color-muted, #666); font-size: 12px; line-height: 1.6; }
+.overview-exceptions strong { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.overview-exceptions a, .overview-work-link, .overview-severities a { display: inline-flex; min-height: 44px; align-items: center; }
+.overview-issue-count { margin: 0 0 4px; }
+.overview-issue-count strong { font-size: 26px; font-variant-numeric: tabular-nums; }
+.overview-severities { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; list-style: none; margin: 0; padding: 0; }
+.overview-empty { color: var(--color-muted, #666); line-height: 1.8; }
+.overview-facts { display: flex; flex-wrap: wrap; gap: 4px 24px; align-items: center; margin: 0 0 24px; font-size: 13px; color: var(--color-muted, #666); }
+.overview-facts a { display: inline-flex; min-height: 44px; align-items: center; }
+.overview-trend { margin-top: 24px; }
+.overview-trend .trend-chart { margin-bottom: 12px; }
+.overview-trend-table { overflow-x: auto; margin-top: 12px; }
+.overview-trend-table table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.overview-trend-table th, .overview-trend-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--color-border, #f0f0f0); }
+.overview-trend-table th { background: var(--color-surface-subtle, #fafafa); }
+@media (max-width: 768px) {
+  .overview-header-actions { justify-content: flex-start; }
+  .overview-work-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .overview-work-grid > section + section { border-left: 0; border-top: 1px solid var(--color-border, #f0f0f0); padding: 20px 0 0; }
+  .overview-page .section-head { flex-wrap: wrap; gap: 8px; }
+  .overview-trend .trend-column:not(.trend-labelled) small { visibility: hidden; }
+}
+@media (max-width: 390px) {
+  .overview-exceptions li { grid-template-columns: minmax(0, 1fr) 44px; gap: 0 8px; padding: 8px 0; }
+  .overview-exceptions li > div { grid-column: 1 / -1; }
+  .overview-exceptions strong { white-space: normal; }
+  .overview-trend-table th, .overview-trend-table td { padding: 8px 4px; font-size: 12px; }
+}

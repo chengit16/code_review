@@ -29,6 +29,7 @@ function renderIssues(canEdit = true, conflict = false) {
 
 describe("问题批量处理", () => {
   it("全选仅提交本页显式编号、状态快照和统一说明，成功清空选择", async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     const request = renderIssues();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const user = userEvent.setup();
@@ -38,6 +39,7 @@ describe("问题批量处理", () => {
     await user.click(screen.getByRole("button", { name: "批量标记已忽略" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("所选 2 条问题"));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("更新 2 条"));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["overview"] });
     const post = request.mock.calls.find(([, options]) => options?.method === "POST");
     expect(post?.[0]).toBe("/api/review-issues/batch-update");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({

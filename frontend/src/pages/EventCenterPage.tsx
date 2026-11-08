@@ -157,6 +157,8 @@ export function EventCenterPage({ token, canEdit }: {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const next = new URLSearchParams();
+    const actionable = params.get("actionable_only");
+    if (actionable) next.set("actionable_only", actionable);
     const pageSize = params.get("page_size");
     if (pageSize) next.set("page_size", pageSize);
     for (const key of ["repository_id", "status", "mr_iid", "since", "until"]) {
@@ -199,7 +201,7 @@ export function EventCenterPage({ token, canEdit }: {
     {filterError && <p className="form-error" role="alert">{filterError}</p>}
     {message && <p className="form-success" role="status">{message}</p>}
     {(retry.error || repositories.error) && <p className="form-error" role="alert">{retry.error?.message || repositories.error?.message}</p>}
-    <ListConditions items={[{ key: "repository_id", label: "项目", value: params.get("repository_id") ?? "" }, { key: "mr_iid", label: "MR", value: params.get("mr_iid") ?? "" }, { key: "since", label: "起始时间", value: params.get("since") ?? "" }, { key: "until", label: "结束时间", value: params.get("until") ?? "" }]} onClear={(key) => { const next = new URLSearchParams(params); next.delete(key); next.delete("page"); setParams(next); }} />
+    <ListConditions items={[{ key: "actionable_only", label: "范围", value: params.get("actionable_only") === "true" ? "当前启用范围" : "" }, { key: "repository_id", label: "项目", value: params.get("repository_id") ?? "" }, { key: "mr_iid", label: "MR", value: params.get("mr_iid") ?? "" }, { key: "since", label: "起始时间", value: params.get("since") ?? "" }, { key: "until", label: "结束时间", value: params.get("until") ?? "" }]} onClear={(key) => { const next = new URLSearchParams(params); next.delete(key); next.delete("page"); setParams(next); }} />
       <QueryState loading={events.isLoading} error={events.error} onRetry={() => void events.refetch()} />
       {events.data && <ListTable rowKey="id" size="middle" columns={columns} dataSource={items} loading={events.isFetching} locale={{ emptyText: events.error ? "无法读取事件" : "当前条件下没有事件；可清除筛选，或展开历史 MR 补扫。" }} scroll={{ x: 1050 }} pagination={false} />}
       <div className="event-pagination"><Pagination label="事件分页" total={events.error ? undefined : events.data?.total} page={events.data?.page ?? Number(params.get("page") || 1)}

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 
+from ocr_manager.overview_scopes import EVENT_ACTIONABLE_SCOPE
+
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
@@ -50,7 +52,8 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
                repository_id: int | None = Query(None, gt=0),
                status: Literal["queued", "running", "done", "needs_attention"] | None = None,
                mr_iid: int | None = Query(None, gt=0),
-               since: datetime | None = None, until: datetime | None = None) -> dict[str, Any]:
+               since: datetime | None = None, until: datetime | None = None,
+               actionable_only: bool = False) -> dict[str, Any]:
         """返回全量事件的稳定分页，任务数量和最新任务 ID 同事务读取。"""
 
         # 先拒绝无时区输入，再比较区间，避免混合时间类型触发服务端异常。
@@ -59,6 +62,8 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
         if since and until and since > until:
             raise HTTPException(422, "起始时间不能晚于结束时间")
         conditions: list[str] = []
+        if actionable_only:
+            conditions.append(EVENT_ACTIONABLE_SCOPE)
         args: list[Any] = []
         for name, filter_value in (("repository_id", repository_id), ("mr_iid", mr_iid)):
             if filter_value is not None:

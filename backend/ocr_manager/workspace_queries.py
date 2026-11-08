@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from ocr_manager.overview_scopes import (
+    EVENT_ACTIONABLE_SCOPE,
+    LATEST_PREMERGE_SCOPE,
+    OPEN_ISSUE_SCOPE,
+    PREMERGE_ACTIONABLE_SCOPE,
+)
 from ocr_manager.premerge_summary import premerge_summary
 from ocr_manager.review_conclusions import candidate_counts
 from ocr_manager.review_effective import status_sql
@@ -24,35 +30,42 @@ def overview_snapshot(store: Store) -> dict[str, Any]:
         summary["repositories"] = db.execute("SELECT COUNT(*) FROM repositories").fetchone()[0]
         conclusions = candidate_counts(db)
         todo = {"events_attention": db.execute(
-            """SELECT COUNT(*) FROM merge_events e JOIN repositories r ON r.id=e.repository_id
-            WHERE e.status='needs_attention' AND r.enabled=1"""
-        ).fetchone()[0], "premerge_failed": db.execute(
-            """SELECT COUNT(*) FROM premerge_reviews p
-            JOIN repositories r ON r.id=p.repository_id
-            JOIN premerge_settings s ON s.repository_id=p.repository_id
-            WHERE p.status='failed' AND r.enabled=1 AND s.enabled=1
-            AND NOT EXISTS (SELECT 1 FROM premerge_reviews n
-                WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)"""
-        ).fetchone()[0], "premerge_partial": db.execute(
-            """SELECT COUNT(*) FROM premerge_reviews p
-            JOIN repositories r ON r.id=p.repository_id
-            JOIN premerge_settings s ON s.repository_id=p.repository_id
-            WHERE p.status='partial' AND r.enabled=1 AND s.enabled=1
-            AND NOT EXISTS (SELECT 1 FROM premerge_reviews n
-                WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)"""
+            f"""SELECT COUNT(*) FROM merge_events e
+            WHERE e.status='needs_attention' AND {EVENT_ACTIONABLE_SCOPE}"""
         ).fetchone()[0]}
+        for state in ("failed", "partial"):
+            todo[f"premerge_{state}"] = db.execute(
+                f"""SELECT COUNT(*) FROM premerge_reviews p WHERE p.status=?
+                AND {PREMERGE_ACTIONABLE_SCOPE} AND {LATEST_PREMERGE_SCOPE}""", (state,)
+            ).fetchone()[0]
+        severity_counts = dict.fromkeys(("critical", "high", "medium", "low", "unclassified"), 0)
+        for row in db.execute(f"""SELECT CASE WHEN i.severity IN
+                ('critical','high','medium','low') THEN i.severity ELSE 'unclassified' END AS level,
+                COUNT(*) AS count FROM review_issues i WHERE {OPEN_ISSUE_SCOPE} GROUP BY level"""):
+            severity_counts[row["level"]] = row["count"]
+        issue_todo = {"open_count": sum(severity_counts.values()),
+                      "severity_counts": severity_counts}
+        # 与活动视图共用集合；多条活动补审仍只计一个任务，运行优先。
+        activity = dict(db.execute(f"""SELECT COUNT(*) AS total,
+            COALESCE(SUM(is_running),0) AS running,
+            COALESCE(SUM(NOT is_running),0) AS queued FROM (
+                SELECT j.status='running' OR EXISTS (SELECT 1 FROM review_recoveries b
+                    WHERE b.job_id=j.id AND b.status='running') AS is_running
+                FROM review_jobs j WHERE {task_view_clause('active')})""").fetchone())
         for key, view in (("attention", "attention"),
                           ("notification_failed", "notification_failed")):
             summary[key] = db.execute(
                 f"SELECT COUNT(*) FROM review_jobs j WHERE {task_view_clause(view)}"
             ).fetchone()[0]
-    return {"summary": summary, "todo": todo, "conclusion_candidates": conclusions,
+    return {"summary": summary, "todo": todo, "issue_todo": issue_todo,
+            "activity": activity, "conclusion_candidates": conclusions,
             "recent": search_jobs(store, {}, 1, 8)["items"]}
 
 
 def search_premerge(store: Store, repository_id: int | None, mr_iid: int | None,
                     status: str | None, latest_only: bool, page: int,
-                    page_size: int, summary_only: bool = False) -> dict[str, Any]:
+                    page_size: int, summary_only: bool = False,
+                    actionable_only: bool = False) -> dict[str, Any]:
     """在同一读快照中返回计数与分页；最新版本判断先于状态筛选。"""
 
     clauses: list[str] = []
@@ -62,8 +75,9 @@ def search_premerge(store: Store, repository_id: int | None, mr_iid: int | None,
             clauses.append(f"p.{field}=?")
             args.append(value)
     if latest_only:
-        clauses.append("""NOT EXISTS (SELECT 1 FROM premerge_reviews n
-            WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)""")
+        clauses.append(LATEST_PREMERGE_SCOPE)
+    if actionable_only:
+        clauses.append(PREMERGE_ACTIONABLE_SCOPE)
     facet_where = " WHERE " + " AND ".join(clauses) if clauses else ""
     facet_args = list(args)
     if status is not None:

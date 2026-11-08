@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ocr_manager.overview_scopes import OPEN_ISSUE_SCOPE
 from ocr_manager.review_issue_actions import IssueStatus, update_review_issues
 
 if TYPE_CHECKING:
@@ -210,12 +211,17 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
 
         where = """WHERE (? IS NULL OR i.repository_id=?)
             AND (? IS NOT NULL OR i.status!='merged')
-            AND (? IS NULL OR i.status=?) AND (? IS NULL OR i.severity=?)
+            AND (? IS NULL OR i.severity=?)
             AND (? IS NULL OR instr(lower(i.content),lower(?))>0
                  OR instr(lower(i.path),lower(?))>0 OR CAST(i.id AS TEXT)=?)"""
         keyword = q.strip() if q and q.strip() else None
-        params = (repository_id, repository_id, status, status, status, severity, severity,
-                  keyword, keyword, keyword, keyword)
+        params: list[Any] = [repository_id, repository_id, status, severity, severity,
+                             keyword, keyword, keyword, keyword]
+        if status == "open":
+            where += f" AND {OPEN_ISSUE_SCOPE}"
+        elif status is not None:
+            where += " AND i.status=?"
+            params.append(status)
         with store.connection() as db:
             db.execute("BEGIN")
             # 分面不应用当前处置状态；已合并历史独立计数，全部仍排除已合并。

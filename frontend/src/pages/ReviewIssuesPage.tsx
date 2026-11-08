@@ -82,7 +82,7 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
   });
   const refresh = () => {
     // 单项修改也可能影响其他任务卡片和统计，不能只刷新当前问题详情。
-    for (const key of ["jobs", "job-neighbors", "review-issues", "review-issue", "job", "review-effectiveness"]) {
+    for (const key of ["jobs", "job-neighbors", "review-issues", "review-issue", "job", "review-effectiveness", "overview"]) {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
   };

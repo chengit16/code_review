@@ -154,3 +154,150 @@ def test_premerge_search_rejects_invalid_filters(client: TestClient, query: str)
     """非法页码或筛选不得回退到无条件查询。"""
 
     assert client.get(f"/api/premerge-search?{query}", headers=ADMIN).status_code == 422
+
+
+def test_overview_issue_scope_lifecycle_and_unclassified(
+    client: TestClient, settings: Settings,
+) -> None:
+    """全局问题去重、不受项目暂停影响，合并和重开立即改变汇总。"""
+
+    repository_id = create_repository(client)
+    store = Store(settings.data_dir / "app.db")
+    finish_with_finding(store, repository_id, 1, "a" * 40)
+    finish_with_finding(store, repository_id, 2, "b" * 40)
+    with store.connection() as db:
+        for index, severity in enumerate(("critical", "medium", "low", None, "future")):
+            db.execute("""INSERT INTO review_issues
+                (repository_id,fingerprint,path,content,severity,status)
+                VALUES(?,?,?,?,?,'open')""",
+                (repository_id, str(index), "scope.py", "合成问题", severity))
+        db.execute("UPDATE repositories SET enabled=0 WHERE id=?", (repository_id,))
+    data = client.get("/api/overview?days=7&repository_id=999", headers=ADMIN).json()
+    assert data["issue_todo"] == {"open_count": 6, "severity_counts": {
+        "critical": 1, "high": 1, "medium": 1, "low": 1, "unclassified": 2}}
+    assert client.get("/api/review-issues?status=open", headers=ADMIN).json()["total"] == 6
+    for status, count in (("fixed", 5), ("ignored", 5), ("open", 6)):
+        assert client.patch("/api/review-issues/1", headers=ADMIN,
+                            json={"status": status}).status_code == 200
+        assert client.get("/api/overview", headers=ADMIN).json()[
+            "issue_todo"]["open_count"] == count
+    assert client.post("/api/review-issues/2/merge", headers=ADMIN,
+                       json={"target_id": 1}).status_code == 200
+    assert client.get("/api/overview", headers=ADMIN).json()["issue_todo"]["open_count"] == 5
+    assert client.get("/api/review-issues?status=open", headers=ADMIN).json()["total"] == 5
+
+
+def test_overview_activity_includes_recovery_and_running_precedes_queue(
+    client: TestClient, settings: Settings,
+) -> None:
+    """同任务初审与活动补审只计一次，补审不修改旧 summary 兼容字段。"""
+
+    store, _ = populate(client, settings, 4)
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET status='partial',attempts=1 WHERE id IN (1,2)")
+        db.execute("UPDATE review_jobs SET status='running',attempts=1 WHERE id=3")
+        for job_id, state in ((1, "queued"), (2, "running"), (3, "queued")):
+            db.execute("""INSERT INTO review_recoveries(job_id,source_attempt,source_revision,
+                client_key,source_digest,source_result_json,config_snapshot,approved_json,
+                token_budget,timeout_seconds,status) VALUES(?,1,0,?,'digest','{}','{}','[]',
+                1000,60,?)""", (job_id, f"overview-{job_id}", state))
+    result = client.get("/api/overview", headers=ADMIN).json()
+    assert result["activity"] == {"total": 4, "queued": 2, "running": 2}
+    assert result["summary"]["queued"] == 1 and result["summary"]["running"] == 1
+    assert result["activity"]["total"] == client.get(
+        "/api/task-search?view=active", headers=ADMIN).json()["total"]
+
+
+def test_actionable_scope_applies_to_items_total_facets_and_latest_version(
+    client: TestClient, settings: Settings,
+) -> None:
+    """列表默认历史范围不变；首页启用范围在所有投影中一致，先选最新再筛失败。"""
+
+    store, repository_id = populate(client, settings, 2)
+    with store.connection() as db:
+        db.execute("UPDATE merge_events SET status='needs_attention' WHERE id=1")
+    assert client.put(f"/api/repositories/{repository_id}/premerge", headers=ADMIN,
+                      json={"enabled": True}).status_code == 200
+    for sha in ("a", "b"):
+        enqueue_premerge(store, repository_id, 7, sha * 40)
+    with store.connection() as db:
+        db.execute("UPDATE premerge_reviews SET status='failed' WHERE id=1")
+        db.execute("UPDATE premerge_reviews SET status='partial' WHERE id=2")
+    url = "/api/premerge-search?actionable_only=true&latest_only=true"
+    scoped = client.get(url + "&status=failed", headers=ADMIN).json()
+    assert scoped["items"] == [] and scoped["total"] == 0
+    assert scoped["status_counts"] == {"all": 1, "partial": 1}
+    snapshot = client.get("/api/overview", headers=ADMIN).json()
+    assert snapshot["todo"]["premerge_partial"] == client.get(
+        url + "&status=partial", headers=ADMIN).json()["total"] == 1
+    assert snapshot["todo"]["events_attention"] == client.get(
+        "/api/event-search?actionable_only=true&status=needs_attention", headers=ADMIN
+    ).json()["total"] == 1
+    with store.connection() as db:
+        db.execute("UPDATE premerge_settings SET enabled=0")
+    assert client.get(url, headers=ADMIN).json()["status_counts"] == {"all": 0}
+    assert client.get("/api/premerge-search", headers=ADMIN).json()["total"] == 1
+    with store.connection() as db:
+        db.execute("UPDATE repositories SET enabled=0")
+    for path in ("/api/event-search?actionable_only=true", url):
+        result = client.get(path, headers=ADMIN).json()
+        assert result["items"] == [] and result["total"] == 0
+        assert result["status_counts"] == {"all": 0}
+    assert client.get("/api/event-search", headers=ADMIN).json()["total"] == 2
+    assert client.get("/api/overview", headers=ADMIN).json()["todo"] == {
+        "events_attention": 0, "premerge_failed": 0, "premerge_partial": 0}
+
+
+def test_empty_overview_has_confirmed_zero_summaries(client: TestClient) -> None:
+    """真实空库明确返回零，与旧服务缺字段或读取失败不同。"""
+
+    result = client.get("/api/overview", headers=ADMIN).json()
+    assert result["activity"] == {"total": 0, "queued": 0, "running": 0}
+    assert result["issue_todo"]["open_count"] == 0
+    assert set(result["issue_todo"]["severity_counts"].values()) == {0}
+
+
+def test_overview_issue_growth_does_not_add_per_issue_queries(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """合成五千条问题只增加聚合数据量，不增加 SQL 次数或返回问题正文。"""
+
+    import json
+    import time
+    from contextlib import contextmanager
+    from typing import Any
+
+    store, repository_id = populate(client, settings, 1)
+    original = Store.connection
+    statements: list[str] = []
+
+    @contextmanager
+    def traced(self: Store) -> Any:
+        with original(self) as db:
+            db.set_trace_callback(statements.append)
+            yield db
+
+    monkeypatch.setattr(Store, "connection", traced)
+
+    def measure() -> tuple[int, int, float]:
+        statements.clear()
+        start = time.perf_counter()
+        response = client.get("/api/overview", headers=ADMIN)
+        elapsed = time.perf_counter() - start
+        assert response.status_code == 200
+        assert "合成性能问题正文" not in response.text
+        reads = sum(sql.lstrip().upper().startswith(("SELECT", "WITH")) for sql in statements)
+        return reads, len(response.content), round(elapsed * 1000, 2)
+
+    baseline = measure()
+    with store.connection() as db:
+        db.executemany("""INSERT INTO review_issues
+            (repository_id,fingerprint,path,content,severity,status) VALUES(?,?,?,?,?,'open')""",
+            [(repository_id, str(index), "synthetic.py", "合成性能问题正文", "high")
+             for index in range(5000)])
+    grown = measure()
+    assert baseline[0] == grown[0]
+    assert grown[1] - baseline[1] < 32
+    assert client.get("/api/overview", headers=ADMIN).json()["issue_todo"]["open_count"] == 5000
+    print(json.dumps({"empty_issues": baseline, "five_thousand_issues": grown,
+                      "columns": ["read_queries", "response_bytes", "elapsed_ms"]}))

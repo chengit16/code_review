@@ -57,7 +57,7 @@ function JobDetail({ token, canEdit }: {
     mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
     onSuccess: async () => {
       // 反馈可能关闭跨任务共享的问题，刷新所有详情、问题列表及成效统计。
-      await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness"].map((key) =>
+      await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness", "overview"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })));
     },
   });

@@ -6397,6 +6397,16 @@
               ],
               "title": "Until"
             }
+          },
+          {
+            "in": "query",
+            "name": "actionable_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Actionable Only",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -9773,6 +9783,16 @@
             "schema": {
               "default": false,
               "title": "Summary Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actionable_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Actionable Only",
               "type": "boolean"
             }
           },

@@ -224,3 +224,25 @@ npx playwright test e2e/httpCompatibility.spec.ts
 合成百行完整响应 6,369,586 字节，安全摘要 54,786 字节（约减 99.1%），固定三条 SELECT，无逐行查询；含解析本地查询约 9.2 / 8.7ms，不代表生产延迟。只读 Git HEAD 提交基线与当前构建全部 assets 为 1,676,004 / 1,697,234 字节（+1.27%），逐文件 gzip 合计为 552,313 / 552,461 字节（+0.03%）。基线并非开始时未提交源码，且 Table 由独立 chunk 整合到主共享包，不能只比较主 chunk 判断总增长。当前主共享 JS 为 1,097.69 kB / gzip 355.89 kB，仍有超过 500kB 的构建警告；没有调整阈值掩盖，也未完成真实网络首屏性能验收。
 
 所有浏览器只使用临时 SQLite、8791 与合成外部替身，不调用真实模型、GitLab 或飞书，不扩大聊天读取与绑定范围。**代码与本地检查完成，部署未执行**：未覆盖 `frontend/dist`、未重启 API / Worker / monitor。此次无新增迁移；正式生效仍需前端产物与 API 配套更新，再核对实际入口，不以本地通过代替上线确认。实施范围与后续发布说明见[列表规划第 10 节](global-list-redesign-plan.md#10-后续实施落地2026-11-08pi-20261108-003)。
+
+## 运行概览修复验收（2026-11-08，PI-20261108-004）
+
+完整实现、统计边界、测量及未部署说明见[概览规划第 9 节](overview-repair-plan.md#9-后续实施记录2026-11-08pi-20261108-004)。本轮新增 `frontend/src/test/overview.test.tsx` 与 `frontend/e2e/overview.spec.ts`；不沿用前轮数字作为本轮通过。
+
+```sh
+.venv/bin/ruff check backend
+.venv/bin/mypy backend/ocr_manager
+PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract
+.venv/bin/pytest -q -rs
+.venv/bin/pytest -q -s backend/tests/test_workspace_queries.py -k growth
+cd frontend
+npx tsc -b && npm run lint && npm test
+npx vite build --outDir /tmp/ocr-overview-repair-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-overview-repair-dist \
+npx playwright test --output /tmp/ocr-overview-repair-complete
+```
+
+实际后端 **736 passed / 1 skipped**，组件 **167 passed**，完整普通浏览器 **98 passed / 19 skipped**。聊天 / 补审 / HTTP 专题按前节同样命令，将产物目录改为 `/tmp/ocr-overview-repair-dist` 后分别显式执行，实际 **4 / 12 / 3 passed**。所有浏览器仅使用临时 SQLite 和合成外部替身。
+
+首页专项覆盖五档视口、核心时间和尝试、各类型跳转范围、旧服务降级与读者入口、延迟 / 部分失败、启用范围保留与清除、键盘展开语义数据表。实际目视桌面与手机截图；**真实读屏、200% 放大未实测**，不以 DOM 或 aria 检查冒充。正式页面未发布，外部 OCR CLI 探针未运行，保留大包体警告。

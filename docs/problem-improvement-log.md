@@ -2017,3 +2017,75 @@
 - 关联文件或证据：frontend/src/pages/OverviewPage.tsx:39、:41、:45、:48；frontend/src/pages/ReviewEffectivenessSection.tsx:68；frontend/src/pages/jobs/TaskIssueSummary.tsx:16；/tmp/ocr-assessment-b-report.md；/tmp/ocr-assessment-b-detector.json；/tmp/ocr-assessment-b-browser.json；/tmp/ocr-b-extra.json；/tmp/ocr-a-desktop.png、/tmp/ocr-a-mobile.png 与 B 的隔离截图。
 - 遗留与下一步：向用户交付分级审查与建议结构，再确认首页首要工作目标；建议尚未实施。等待正常 monitor 周期后实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261108-004 --minimum-entries 4`，仅按只读结果报告同步，不强制采集；若后续实施则继续关联本编号并独立验证。
 - 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261108-004｜追加：受理运行概览修复规划
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户认可两条工作流分开与压缩重复卡片的方向，要求形成规划修复方案；本轮仅规划。
+- 关联记录：PI-20261108-004 前四条审查记录；PI-20261108-003 全项目列表统一。
+- 现象或目标：将审查发现转为可执行的页面结构、业务口径、文案、接口复用、实施批次和验收标准。
+- 原因或分析：不能只给视觉建议；需明确 Worker 缓存可信度、异常任务与去重代码问题的范围、独立查询更新时间和趋势数据的可访问替代。
+- 处理与改进：在既有审查和用户确认的方向内核对当前源码，新增专项修复规划及文档入口；不重新启动审查代理或展开整站重设计。
+- 代码修改：本段仅追加受理，不修改业务源码、运行产物或已同步历史；以本轮开始时工作区状态为准。
+- 本地验证：实际执行 git status、读取既有台账、文档索引、列表规划与 impeccable shape 方法；本轮业务测试、构建和浏览器检查尚未运行。
+- 部署生效：未部署，不覆盖 frontend/dist、不重启 API / Worker / monitor。
+- 关联文件或证据：用户本轮规划请求；frontend/src/pages/OverviewPage.tsx；docs/global-list-redesign-plan.md；既有双代理审查结论。
+- 遗留与下一步：完成专项规划、静态文档检查及真实结果追加，以本编号累计六条执行只读同步核验；不将方案完成视为缺陷修复或发布。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261108-004｜追加：完成运行概览分批修复规划，尚未实施
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户认可方向后的规划交付完成；关联本编号前五条。缺陷修复与发布尚未执行。
+- 现象或目标：将运行异常 / 代码问题分流、Worker 状态可信度、首屏重复、刷新反馈与趋势可访问性转为可落地方案。
+- 原因或分析：仅改文案和卡片不足以保证可信；源码还显示概览事件 / 合并前启用范围与默认列表范围不同，活动任务统计需包括补审并与入口一致，问题变更后也需补概览缓存失效。这些为源码核对出的实施边界，不冒充本轮运行复现。
+- 处理与改进：新增 docs/overview-repair-plan.md 并更新索引，包含页面结构、文案、五项发现、异常各类型单位、全量去重开放问题与分级、目标入口范围、兼容扩展 issue_todo / activity、Worker 缓存状态机、读取时间、手动刷新、趋势等价数据表、预计修改位置、四批顺序、验收矩阵、检查命令及发布 / 回滚边界。保留 Ant Design、任务耗时 / 尝试和创建时间，不引入进程控制或自动问题处置。
+- 代码修改：本轮仅新增专项规划、更新 docs/README.md、主动追加本编号两条规划记录；未改业务源码、接口、测试、数据库、运行产物或已同步历史。文中拟议 API 字段、范围参数和新文件均明确待实施。
+- 本地验证：实际执行 git diff --check 通过；实际运行 `.venv/bin/python -` 内联文档检查通过，核对 6 个本地链接、15 个现有源码 / 测试 / 文档路径、3 个明确待新增路径、18 个关键主题、索引入口及 LF / 末尾换行 / 行尾空白；实际 git diff --name-only 与未跟踪文件列表仅涉及本轮三份文档。核对现有查询、路由、缓存及工程规范。未运行 pytest、前端类型 / lint / 组件测试、构建、浏览器或真实读屏，规划命令不算已通过，前轮审查证据不沿用为本轮业务验收。
+- 部署生效：未部署；未覆盖 frontend/dist，未重启 API / Worker / monitor，未改写业务状态或触发外部服务。
+- 关联文件或证据：docs/overview-repair-plan.md；docs/README.md；frontend/src/pages/OverviewPage.tsx；backend/ocr_manager/workspace_queries.py；backend/ocr_manager/tasks.py；backend/ocr_manager/event_search.py；本轮文档静态检查输出。
+- 遗留与下一步：后续按可信状态 → 查询与工作流 → 首屏布局 → 趋势及完整验收四批实施；代码和本地验证完成后另行发布。等待正常 monitor 周期后实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261108-004 --minimum-entries 6`，以返回说明来源与页面同步，不强制采集或扩大授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"not_applicable","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261108-004｜追加：受理运行概览修复实施
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：用户确认按规划直接实施，进入开发；沿用同一编号，关联前六条规划与审查记录。
+- 现象或目标：完成运行异常 / 代码问题分流、Worker 状态可信度、刷新反馈、首屏重排和趋势可访问数据表。
+- 原因或分析：实施必须同步维护 SQLite 口径、URL 范围、React Query 缓存、Ant Design 交互和错误 / 权限状态，不能只改文案和 CSS。
+- 处理与改进：按四批顺序实现；先写失败 / 延迟边界测试，再改后端摘要与范围参数，最后落地前端布局及趋势表。
+- 代码修改：本段仅追加受理，业务代码尚未修改；保留已有未提交工作，不覆盖正式产物。
+- 本地验证：本轮实施测试尚未运行。
+- 部署生效：未部署，不重启 API / Worker / monitor，不改写业务状态。
+- 关联文件或证据：docs/overview-repair-plan.md；用户本轮实施授权；frontend/src/pages/OverviewPage.tsx。
+- 遗留与下一步：完成代码、测试、隔离浏览器回归后追加真实结果；按本编号累计条数执行只读台账核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261108-004｜追加：完成概览四批代码，进入完整隔离回归
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：开发完成、验证进行中；关联本编号前七条，尚不宣称验收闭环。
+- 现象或目标：让运行异常、代码问题待处置、最近任务与效果趋势各自表达真实范围。
+- 原因或分析：概览与列表必须共用启用范围；人工问题状态与执行状态独立，缓存健康失败不能沿用停止结论。
+- 处理与改进：新增开放问题与活动任务聚合、事件和合并前 actionable_only 范围；紧凑双工作区、最近任务时间尝试、独立读取时间与手动刷新反馈、趋势等价数据表；补问题变更后的 overview 失效。
+- 代码修改：已修改前后端业务代码与测试，更新 OpenAPI，未引入数据库迁移或外部调用；原规划文档保留原历史结论。
+- 本地验证：实际 `.venv/bin/pytest -q -rs` 为 735 通过、1 跳过（外部 OCR CLI 探针未开启）；`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、OpenAPI 更新后校验通过。前端 `npx tsc -b`、`npm run lint`、`npm test` 通过（164 项），Vite 产物输出到 /tmp/ocr-overview-repair-dist；主包仍有大于 500kB 提示。首页五档视口、延迟和健康失败、旧响应/读者共七个浏览器用例通过；范围清除测试最初用错可访问名称，已修为真实按钮名称，完整回归运行中。已目视桌面及手机合成长名称截图；未运行真实读屏。
+- 部署生效：未部署；未覆盖 frontend/dist，未重启真实 API / Worker / monitor，浏览器只用临时 SQLite 与 8791 服务。
+- 关联文件或证据：backend/ocr_manager/workspace_queries.py；frontend/src/pages/OverviewPage.tsx；frontend/src/pages/overview/；/tmp/ocr-overview-repair-e2e；/tmp/ocr-overview-browser.log。
+- 遗留与下一步：完成全量浏览器、显式专题、性能测量与文档收口，追加最终实际结果，再以累计条数核验同步；真实 VoiceOver、生产负载和正式发布单独标注限制。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261108-004｜追加：概览修复代码与隔离自动回归完成，未部署
+
+- 记录日期：2026-11-08（北京时间）。
+- 类型与进展：四批业务代码完成并通过隔离自动回归；真实读屏及放大验收未完成，不宣称所有人工门槛已通过，关联本编号前八条。
+- 现象或目标：消除健康缓存矛盾与混合待办误读，让问题处置、执行异常、时间尝试和趋势数据在概览中可判断、可定位。
+- 原因或分析：运行异常与开放代码问题是不同对象；健康、概览、效果各自读取，不能以部分成功代表整页已更新。开放问题与活动任务聚合、目标范围和缓存必须形成闭环。
+- 处理与改进：已落地双工作区、各类型精确入口及启用范围、全量去重开放问题分级、包含补审的活动统计、最近评审耗时尝试与创建时间、可信 Worker 状态、独立成功读取时间、手动刷新防重复与部分失败、UTC 同源趋势语义数据表。问题变更后失效 overview；旧响应缺摘要单区降级，读者不出现管理导航。更新操作指南、验收说明和规划实施章节。
+- 代码修改：前后端与新增测试已修改，OpenAPI 已更新；无新依赖、数据库迁移、Worker 调度或外部系统调用，未提交 Git。原规划与已同步历史不覆盖。
+- 本地验证：实际 `.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`（126 文件）、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 通过；最新 `.venv/bin/pytest -q -rs` 为 736 passed、1 skipped，跳过外部 OCR CLI 探针，已有 httpx 弃用提示。前端 `npx tsc -b`、`npm run lint`、`npm test` 通过（33 文件 / 167 项），隔离 Vite 构建通过。完整普通 Playwright 98 passed / 19 skipped；分别显式开启聊天 / 补审 / HTTP 专题为 4 / 12 / 3 passed；最终概览 / 导航 / 任务列表 / 工作流再跑 22 passed，不重复相加为独立用例。所有浏览器只用临时 SQLite、8791 和合成响应。git diff --check 与四份文档本地链接检查通过。
+- 性能与视觉：5000 条合成开放问题下读取 SQL 23→23、响应 2220→2226 字节、单次本地 7.87→8.43ms，无问题正文返回，不代表生产负载。对比此前隔离产物 assets 约 +0.44%、gzip 约 +0.27%，主包仍有大于 500kB 警告。五档视口自动断言通过并实际目视桌面 / 手机截图，未见整页横溢；核心时间事实、入口和趋势表可读。真实 VoiceOver / 同等读屏、200% 浏览器放大未实测；impeccable 官方引擎未产出有效 JSON，不能称自动设计扫描通过。
+- 部署生效：未部署；未覆盖 frontend/dist、未重启真实 API / Worker / monitor、未改写正式业务状态或扩大聊天读取授权。临时浏览器服务已退出。正式生效仍需同版前端与 API 配套发布并验收实际入口；仅本批无需 Worker 重启。
+- 关联文件或证据：docs/overview-repair-plan.md 第 9 节；docs/configuration-guide.md；docs/frontend-interaction-checks.md；frontend/e2e/overview.spec.ts；/tmp/ocr-overview-backend.log、/tmp/ocr-overview-components.log、/tmp/ocr-overview-browser.log、/tmp/ocr-overview-chat.log、/tmp/ocr-overview-recovery.log、/tmp/ocr-overview-http.log、/tmp/ocr-overview-final.log；截图 /tmp/ocr-overview-final 与 /tmp/ocr-overview-repair-complete。
+- 遗留与下一步：真实读屏 / 放大及正式发布另行验收；不以未执行项目冒充通过。追加后等待正常 monitor 周期，实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261108-004 --minimum-entries 9`，只依据返回说明同步，不强制采集或扩大授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
