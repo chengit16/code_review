@@ -9,6 +9,7 @@ import { DesignProvider } from "./app/DesignProvider";
 import "./styles.css";
 import "./styles/operations.css";
 import "./styles/task-migration.css";
+import "./styles/lists.css";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true } },

@@ -10,8 +10,9 @@ import { useState } from "react";
 
 import { apiRequest } from "../api/client";
 import type { ReviewFeedbackSummary } from "../api/types";
+import { ListSelect as SelectField } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { QueryState } from "../ui/QueryState";
-import { SelectField } from "../ui/SelectField";
 
 type Severity = ReviewFeedbackSummary["minimum_severity"];
 
@@ -55,11 +56,13 @@ export function ReviewFeedbackPanel({ token, repositoryId }: ReviewFeedbackPanel
     </div>}
     {save.error && <p className="form-error" role="alert">{save.error.message}</p>}
     {save.isSuccess && <p className="form-success" role="status">通知级别已保存，后续评审将使用新配置</p>}
-    {summary.data && <div className="table-scroll"><table><thead><tr><th>项目</th><th>已标记</th><th>有帮助</th><th>误报</th><th>已修复</th><th>误报率</th></tr></thead><tbody>
-      {(repositoryId === null ? summary.data : summary.data.filter((item) => item.repository_id === repositoryId)).map((item) => <tr key={item.repository_id}>
-        <td>{item.repository_name}</td><td>{item.total}</td><td>{item.helpful}</td><td>{item.false_positive}</td><td>{item.fixed}</td><td>{item.total ? `${Math.round(item.false_positive / item.total * 100)}%` : "—"}</td>
-      </tr>)}
-      {summary.data.length === 0 && <tr><td colSpan={6} className="empty-row">暂无项目反馈</td></tr>}
-    </tbody></table></div>}
+    <ListTable rowKey="repository_id" pagination={false} dataSource={repositoryId === null ? summary.data ?? [] : summary.data?.filter((item) => item.repository_id === repositoryId) ?? []} scroll={{ x: 650 }} loading={summary.isFetching} locale={{ emptyText: summary.error ? "无法读取项目反馈" : "暂无项目反馈" }} columns={[
+      { title: "项目", dataIndex: "repository_name", key: "name" },
+      { title: "已标记", dataIndex: "total", key: "total" },
+      { title: "有帮助", dataIndex: "helpful", key: "helpful" },
+      { title: "误报", dataIndex: "false_positive", key: "false_positive" },
+      { title: "已修复", dataIndex: "fixed", key: "fixed" },
+      { title: "误报率", key: "rate", render: (_, item) => item.total ? `${Math.round(item.false_positive / item.total * 100)}%` : "—" },
+    ]} /><p className="form-note">按发现反馈计数，不等于去重问题数；有帮助不代表已处置。</p>
   </section>;
 }

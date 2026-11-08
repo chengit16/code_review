@@ -6,9 +6,10 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
+import { ListSelect as SelectField } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { QueryState } from "../ui/QueryState";
 import { formatCategory } from "../ui/format";
-import { SelectField } from "../ui/SelectField";
 
 interface Snapshot {
   days: number;
@@ -68,8 +69,19 @@ export function ReviewEffectivenessSection({ token }: { /** 内存会话令牌�
         {buckets.map((item) => <div className="trend-column" key={item.label} title={`${item.label}：新增 ${item.new}，修复 ${item.fixed}`}><div className="trend-bars"><span className="trend-bar trend-bar-new" style={{ height: `${Math.max(item.new ? 6 : 0, item.new / max * 100)}%` }} /><span className="trend-bar trend-bar-fixed" style={{ height: `${Math.max(item.fixed ? 6 : 0, item.fixed / max * 100)}%` }} /></div><small>{item.label}</small></div>)}
       </div></section>
       <details className="effectiveness-details"><summary>展开类别与项目统计</summary>
-      <section className="section"><div className="section-head"><h2>问题类别</h2><span>按本期发现归类</span></div><div className="table-scroll"><table><thead><tr><th>类别</th><th>出现次数</th><th>关联问题</th><th>目前待处理</th></tr></thead><tbody>{metrics.data?.categories.map((item) => <tr key={item.category}><td>{formatCategory(item.category)}</td><td>{item.generated}</td><td>{item.issues}</td><td>{item.open_issues}{item.generated < 5 && <small className="table-sub">样本较少</small>}</td></tr>)}{metrics.data?.categories.length === 0 && <tr><td colSpan={4} className="empty-row">本期没有发现记录</td></tr>}</tbody></table></div><p className="effectiveness-note">OCR 当前结果没有稳定规则 ID，因此这里按类别统计，不推断单条审核规则的效果。</p></section>
-      <section className="section"><div className="section-head"><h2>项目对比</h2></div><div className="table-scroll"><table><thead><tr><th>项目</th><th>本期新问题</th><th>本期确认修复</th><th>当前待处理</th><th>生成 / 发布</th></tr></thead><tbody>{metrics.data?.projects.map((item) => <tr key={item.id}><td><Link to={`/issues?repository_id=${item.id}&status=open`}>{item.name}</Link></td><td>{item.new_issues}</td><td>{item.fixed_issues}</td><td>{item.open_issues}</td><td>{item.generated} / {item.published}</td></tr>)}{metrics.data?.projects.length === 0 && <tr><td colSpan={5} className="empty-row">暂无项目</td></tr>}</tbody></table></div></section>
+      <section className="section"><div className="section-head"><h2>问题类别</h2><span>按本期发现归类</span></div><ListTable rowKey="category" pagination={false} scroll={{ x: 600 }} dataSource={metrics.data?.categories ?? []} locale={{ emptyText: "本期没有发现记录" }} columns={[
+        { title: "类别", key: "category", render: (_, item) => formatCategory(item.category) },
+        { title: "出现次数", dataIndex: "generated", key: "generated" },
+        { title: "关联问题", dataIndex: "issues", key: "issues" },
+        { title: "目前待处理", key: "open", render: (_, item) => <>{item.open_issues}{item.generated < 5 && <span className="list-secondary">样本较少</span>}</> },
+      ]} /><p className="effectiveness-note">OCR 当前结果没有稳定规则 ID，因此这里按类别统计，不推断单条审核规则的效果。</p></section>
+      <section className="section"><div className="section-head"><h2>项目对比</h2></div><ListTable rowKey="id" pagination={false} scroll={{ x: 650 }} dataSource={metrics.data?.projects ?? []} locale={{ emptyText: "暂无项目" }} columns={[
+        { title: "项目", key: "name", render: (_, item) => <Link to={`/issues?repository_id=${item.id}&status=open`}>{item.name}</Link> },
+        { title: "本期新问题", dataIndex: "new_issues", key: "new" },
+        { title: "本期确认修复", dataIndex: "fixed_issues", key: "fixed" },
+        { title: "当前待处理", dataIndex: "open_issues", key: "open" },
+        { title: "生成 / 发布", key: "publication", render: (_, item) => `${item.generated} / ${item.published}` },
+      ]} /></section>
       </details>
     </>}
     {!summary && !metrics.isLoading && !metrics.error && <section className="section empty-inline"><BarChart3 size={18} /> 暂无统计数据</section>}

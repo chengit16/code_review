@@ -1,24 +1,25 @@
 /** @description GitLab 事件检索、异常恢复与 MR 时间范围补审的管理入口。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Collapse, Table } from "antd";
+import { App, Button, Card, Collapse, Input } from "antd";
 import type { TableColumnsType } from "antd";
-import { RefreshCw, RotateCcw, Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
 import type { FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
+import { apiRequest } from "../api/client";
 import { enqueueMrBackfill, listMrBackfills, retryEvent, searchEvents } from "../api/events";
 import type { MrBackfill } from "../api/events";
-import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
 import type { MergeEvent } from "../api/types";
+import { ListSelect as SelectField, ListStatusNav, ListTime, ListExcerpt, ListConditions } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { PageHeader } from "../ui/PageHeader";
 import { Pagination } from "../ui/Pagination";
 import { QueryState } from "../ui/QueryState";
-import { SelectField } from "../ui/SelectField";
 import { Status } from "../ui/Status";
-import { formatTime } from "../ui/format";
+
 
 function localDateTime(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -84,10 +85,10 @@ function BackfillForm({ token, repositories }: { token: string; repositories: Re
       <fieldset className="configuration-fields event-backfill-fields" disabled={create.isPending}>
         <SelectField label="项目" value={repositoryId} onValueChange={setRepositoryId}
           options={repositories.map((item) => ({ value: String(item.id), label: item.name }))}
-          placeholder="选择项目" required disabled={!repositories.length} />
-        <label>起始时间<input type="datetime-local" value={since} onChange={(event) => setSince(event.target.value)} required /></label>
-        <label>结束时间<input type="datetime-local" value={until} onChange={(event) => setUntil(event.target.value)} required /></label>
-        <button className="button button-primary" disabled={!repositories.length}><Search size={16} />{create.isPending ? "提交中…" : "创建补审申请"}</button>
+          placeholder="选择项目" required disabled={create.isPending || !repositories.length} />
+        <label>起始时间<Input type="datetime-local" value={since} onChange={(event) => setSince(event.target.value)} required /></label>
+        <label>结束时间<Input type="datetime-local" value={until} onChange={(event) => setUntil(event.target.value)} required /></label>
+        <Button type="primary" htmlType="submit" disabled={create.isPending || !repositories.length}><Search size={16} />{create.isPending ? "提交中…" : "创建补审申请"}</Button>
       </fieldset>
     </form>
     {(localError || create.error) && <p className="form-error" role="alert">{localError || create.error?.message}</p>}
@@ -105,12 +106,15 @@ function BackfillHistory({ token }: { token: string }) {
   const labels: Record<MrBackfill["status"], string> = {
     queued: "排队中", running: "扫描中", done: "扫描完成", failed: "失败",
   };
-  return <section className="section"><div className="section-head"><h2>补审申请记录</h2><span>{query.data?.length ?? 0} 条</span></div>
+  return <section className="section"><div className="section-head"><h2>补审申请记录</h2><span>最近 100 条 · 已加载 {query.data?.length ?? "—"} 条</span></div>
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
-    {query.data && <div className="table-scroll responsive-table"><table><thead><tr><th>项目 / 申请</th><th>时间范围</th><th>扫描 / 入队</th><th>状态</th><th>诊断</th></tr></thead><tbody>
-      {query.data.map((item) => <tr key={item.id}><td data-label="项目 / 申请">{item.repository_name}<small className="table-sub">申请 #{item.id} · {formatTime(item.created_at)}</small></td><td data-label="时间范围">{formatTime(item.since)} – {formatTime(item.until)}</td><td data-label="扫描 / 入队">{item.scanned} / {item.enqueued} 个 MR</td><td data-label="状态">{labels[item.status]}</td><td data-label="诊断">{item.error ?? "—"}</td></tr>)}
-      {query.data.length === 0 && <tr><td colSpan={5} className="empty-row">还没有补审申请</td></tr>}
-    </tbody></table></div>}
+    {query.data && <ListTable rowKey="id" dataSource={query.data} pagination={{ pageSize: 10, showSizeChanger: false }} scroll={{ x: 800 }} locale={{ emptyText: "还没有补审申请" }} columns={[
+      { title: "项目 / 申请", key: "source", render: (_, item) => <>{item.repository_name}<span className="list-secondary">申请 #{item.id} · <ListTime value={item.created_at} /></span></> },
+      { title: "时间范围", key: "range", render: (_, item) => <><ListTime value={item.since} /> – <ListTime value={item.until} /></> },
+      { title: "扫描 / 入队", key: "counts", render: (_, item) => `${item.scanned} / ${item.enqueued} 个 MR` },
+      { title: "状态", key: "status", render: (_, item) => labels[item.status] },
+      { title: "诊断", key: "error", render: (_, item) => <ListExcerpt text={item.error} /> },
+    ]} /> }
   </section>;
 }
 
@@ -121,6 +125,7 @@ export function EventCenterPage({ token, canEdit }: {
 }) {
   const [params, setParams] = useSearchParams();
   const client = useQueryClient();
+  const { modal } = App.useApp();
   const [message, setMessage] = useState("");
   const [repositoryFilter, setRepositoryFilter] = useState(params.get("repository_id") ?? "all");
   const [statusFilter, setStatusFilter] = useState(params.get("status") ?? "all");
@@ -142,10 +147,10 @@ export function EventCenterPage({ token, canEdit }: {
     { title: "项目 / MR", key: "source", width: 190, render: (_: unknown, item) => <>{item.repository_name ?? `项目 #${item.repository_id}`}<small className="table-sub">{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · 事件 #{item.id}</small></> },
     { title: "提交范围", key: "sha", width: 170, render: (_: unknown, item) => <span className="mono">{item.mr_iid < 0 ? `${item.squash_sha?.slice(0, 8) ?? "?"}…${item.merge_sha?.slice(0, 8) ?? "?"}` : item.merge_sha?.slice(0, 12) ?? "待 Worker 核验"}</span> },
     { title: "状态", key: "status", width: 140, render: (_: unknown, item) => <><Status value={item.status} /><small className="table-sub">尝试 {item.attempts} 次</small></> },
-    { title: "关联任务", key: "job", width: 180, render: (_: unknown, item) => item.latest_job_id ? <Link to={`/jobs/${item.latest_job_id}`}>查看最新任务 #{item.latest_job_id}</Link> : `${item.job_count ?? 0} 个任务` },
-    { title: "接收时间", dataIndex: "created_at", key: "created_at", width: 170, render: (value: string) => formatTime(value) },
-    { title: "诊断", dataIndex: "error", key: "error", render: (value: string | null) => value ?? "—" },
-    { title: "操作", key: "action", width: 64, render: (_: unknown, item) => canEdit && item.status === "needs_attention" ? <Button type="text" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { if (window.confirm(`重新处理事件 #${item.id}？Worker 会重新向 GitLab 核对 MR 和提交范围。`)) retry.mutate(item.id); }}><RotateCcw size={16} /></Button> : null },
+    { title: "关联任务", key: "job", width: 180, render: (_: unknown, item) => item.latest_job_id ? <><span>{item.job_count ?? "—"} 个任务</span><small className="list-secondary"><Link to={`/jobs/${item.latest_job_id}`}>最新任务 #{item.latest_job_id}</Link></small></> : `${item.job_count ?? 0} 个任务` },
+    { title: "接收时间", dataIndex: "created_at", key: "created_at", width: 170, render: (value: string) => <ListTime value={value} /> },
+    { title: "诊断", dataIndex: "error", key: "error", render: (value: string | null) => <ListExcerpt text={value} /> },
+    { title: "操作", key: "action", width: 90, render: (_: unknown, item) => canEdit && item.status === "needs_attention" ? <Button type="text" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { modal.confirm({ title: `重试事件 #${item.id}`, content: "Worker 会重新向 GitLab 核对 MR 和提交范围；排队成功不代表评审完成。", onOk: () => retry.mutateAsync(item.id) }); }}>重试</Button> : null },
   ];
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
@@ -179,25 +184,25 @@ export function EventCenterPage({ token, canEdit }: {
     <PageHeader title="合并事件" subtitle="检查 GitLab 事件处理状态，恢复异常并补扫历史 MR" actions={
       <button className="icon-button" type="button" aria-label="刷新事件" onClick={() => { void events.refetch(); void repositories.refetch(); }}><RefreshCw size={18} /></button>
     } />
-    <form className="event-filters section" key={params.toString()} onSubmit={applyFilters}>
+    <Card className="event-inbox-card list-surface" size="small">
+    <ListStatusNav value={params.get("status") ?? "all"} labels={{ all: "全部", queued: "排队中", running: "处理中", done: "已处理", needs_attention: "需要处理" }} counts={events.error ? undefined : events.data?.status_counts} disabled={retry.isPending} onChange={(value) => { const next = new URLSearchParams(params); if (value === "all") next.delete("status"); else next.set("status", value); next.delete("page"); setParams(next); }} />
+    <form className="list-toolbar" key={params.toString()} onSubmit={applyFilters}>
       <SelectField label="项目" name="repository_id" value={repositoryFilter}
         onValueChange={setRepositoryFilter}
         options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
-      <SelectField label="事件状态" name="status" value={statusFilter}
-        onValueChange={setStatusFilter}
-        options={[{ value: "all", label: "全部状态" }, ...[["queued", "排队中"], ["running", "处理中"], ["done", "已处理"], ["needs_attention", "需要处理"]].map(([value, label]) => ({ value, label }))]} />
-      <label>MR IID<input name="mr_iid" type="number" min="1" defaultValue={params.get("mr_iid") ?? ""} placeholder="全部 MR" /></label>
-      <label>起始时间<input name="since" type="datetime-local" defaultValue={toLocal(params.get("since"))} /></label>
-      <label>结束时间<input name="until" type="datetime-local" defaultValue={toLocal(params.get("until"))} /></label>
-      <div className="filter-actions"><button className="button button-primary"><Search size={16} />查询</button><Link className="button button-secondary" to="/events">清空</Link></div>
+      <input type="hidden" name="status" value={statusFilter} />
+      <label>MR IID<Input name="mr_iid" type="number" min="1" defaultValue={params.get("mr_iid") ?? ""} placeholder="全部 MR" /></label>
+      <details className="list-advanced"><summary>更多筛选</summary><div className="list-toolbar"><label>起始时间<Input name="since" type="datetime-local" defaultValue={toLocal(params.get("since"))} /></label>
+      <label>结束时间<Input name="until" type="datetime-local" defaultValue={toLocal(params.get("until"))} /></label></div></details>
+      <div className="filter-actions"><Button type="primary" htmlType="submit"><Search size={16} />查询</Button><Link className="button button-secondary" to="/events">清空</Link></div>
     </form>
     {filterError && <p className="form-error" role="alert">{filterError}</p>}
     {message && <p className="form-success" role="status">{message}</p>}
     {(retry.error || repositories.error) && <p className="form-error" role="alert">{retry.error?.message || repositories.error?.message}</p>}
-    <Card className="event-inbox-card" size="small" title={<h2 className="event-inbox-heading">事件收件箱</h2>} extra={`${events.data?.total ?? "—"} 条`}>
+    <ListConditions items={[{ key: "repository_id", label: "项目", value: params.get("repository_id") ?? "" }, { key: "mr_iid", label: "MR", value: params.get("mr_iid") ?? "" }, { key: "since", label: "起始时间", value: params.get("since") ?? "" }, { key: "until", label: "结束时间", value: params.get("until") ?? "" }]} onClear={(key) => { const next = new URLSearchParams(params); next.delete(key); next.delete("page"); setParams(next); }} />
       <QueryState loading={events.isLoading} error={events.error} onRetry={() => void events.refetch()} />
-      {events.data && <Table rowKey="id" size="middle" columns={columns} dataSource={items} loading={events.isFetching} locale={{ emptyText: events.error ? "无法读取事件" : "当前条件下没有事件；可清除筛选，或展开历史 MR 补扫。" }} scroll={{ x: 1050 }} pagination={false} />}
-      <div className="event-pagination"><Pagination label="事件分页" total={events.data?.total ?? 0} page={events.data?.page ?? Number(params.get("page") || 1)}
+      {events.data && <ListTable rowKey="id" size="middle" columns={columns} dataSource={items} loading={events.isFetching} locale={{ emptyText: events.error ? "无法读取事件" : "当前条件下没有事件；可清除筛选，或展开历史 MR 补扫。" }} scroll={{ x: 1050 }} pagination={false} />}
+      <div className="event-pagination"><Pagination label="事件分页" total={events.error ? undefined : events.data?.total} page={events.data?.page ?? Number(params.get("page") || 1)}
         pageSize={events.data?.page_size ?? Number(params.get("page_size") || 25)} disabled={events.isFetching || Boolean(events.error)}
         onPage={changePage} onPageSize={(size) => { const next = new URLSearchParams(params); next.set("page_size", String(size)); next.delete("page"); setParams(next); }} /></div>
     </Card>

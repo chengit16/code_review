@@ -61,10 +61,10 @@ it("通知页关联仓库失败不显示尚未关联，恢复后才展示真实�
     "/api/notification-targets": [{ id: 8, name: "合成通道", repository_count: 0 }],
   };
   const { writes } = mount(<FeishuHooksPage token="" />, responses);
-  expect(await screen.findByText("关联仓库待确认")).toBeVisible();
-  expect(screen.queryByText("尚未关联仓库")).toBeNull();
+  expect(await screen.findByText("关联项目待确认")).toBeVisible();
+  expect(screen.queryByText("尚未关联项目")).toBeNull();
   responses["/api/repositories"] = [];
   await userEvent.click(screen.getByRole("button", { name: "重新读取关联仓库" }));
-  await waitFor(() => expect(screen.getByText("尚未关联仓库")).toBeVisible());
+  await waitFor(() => expect(screen.getByText("尚未关联项目")).toBeVisible());
   expect(writes).toEqual([]);
 });

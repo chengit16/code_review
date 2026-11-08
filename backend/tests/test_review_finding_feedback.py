@@ -40,6 +40,12 @@ def test_stable_feedback_isolated_from_initial_indices_and_publications(
         assert detail["feedback"] == {} and detail["issue_ids"] == {"0": 1}
         listing = api.get("/api/task-search", headers=ADMIN).json()["items"][0]
         assert listing["finding_count"] == 3
+        assert listing["issue_summary"]["open_count"] == 2
+        assert listing["issue_summary"]["ignored_count"] == 1
+        assert listing["issue_summary"]["fixed_count"] == 0
+        assert api.get("/api/task-search?issue_state=open", headers=ADMIN).json()["total"] == 1
+        assert api.get("/api/task-search?issue_state=resolved", headers=ADMIN).json()["total"] == 0
+        assert api.get("/api/task-search", headers=ADMIN).json()["status_counts"]["complete"] == 1
         issues = api.get("/api/review-issues/2", headers=ADMIN).json()
         assert issues["status"] == "ignored"
         assert issues["occurrences"][0]["finding_id"] == CHILD

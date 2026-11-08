@@ -49,11 +49,9 @@ test("规则保存后清除离开提醒且不保存浏览器草稿", async ({ pa
 
 test("显式状态不会叠加冲突快捷视图", async ({ page }) => {
   await page.goto("/jobs?view=attention");
-  await page.getByRole("combobox", { name: "状态", exact: true }).click();
-  await page.getByRole("option", { name: "已完成", exact: true }).click();
-  await page.getByRole("button", { name: "查询", exact: true }).click();
+  await page.getByRole("button", { name: /^已完成(?:\s+\d+|\s+—)?$/ }).click();
   await expect(page).toHaveURL("/jobs?status=complete");
-  await expect(page.getByRole("button", { name: "待关注", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "移除快捷视图筛选" })).toHaveCount(0);
 });
 
 test("问题摘要搜索与侧栏保留筛选，窄屏无横向溢出", async ({ page }) => {

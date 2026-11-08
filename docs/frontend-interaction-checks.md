@@ -164,3 +164,63 @@ npx playwright test e2e/workflows.spec.ts e2e/improvements.spec.ts \
 ```
 
 该轮实跑 6 项隔离检查，覆盖项目表单回归、账号模式与只读界面、问题/主题归档、归档中复盘口径。配置历史表格未单独建立浏览器用例；仍需补齐配置历史恢复边界及全站逐页角色和视口验收。
+
+## 全项目列表统一实施验收（2026-11-08，PI-20261108-003）
+
+本节为后续实施的实际结果，不覆盖前文各轮历史验证边界。范围包括任务基准及其他 10 类主列表、首页小表、告警 / 审计 / 聊天、报告 / 反馈与详情证据；复杂配置编辑器、时间线、版本及恢复历史保留领域交互，不宣称所有存量控件均已迁移。
+
+### 实际检查命令
+
+根目录执行后端检查：
+
+```sh
+.venv/bin/ruff check backend
+.venv/bin/mypy backend/ocr_manager
+PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract
+.venv/bin/pytest -q -rs
+git diff --check
+```
+
+前端检查与最终完整浏览器使用隔离构建：
+
+```sh
+cd frontend
+npx tsc -b
+npm run lint
+npm test
+npx vite build --outDir /tmp/ocr-global-list-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-global-list-dist \
+npx playwright test --output /tmp/ocr-global-list-complete
+```
+
+普通套件默认跳过的专题分别显式开启；这些命令依次执行，不在同一 8791 端口并发启动：
+
+```sh
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-global-list-dist OCR_BROWSER_CHAT_CAPTURE=1 \
+npx playwright test e2e/chatCapture.spec.ts
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-global-list-dist OCR_BROWSER_REVIEW_RECOVERY=1 \
+npx playwright test e2e/reviewRecovery.spec.ts
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-global-list-dist OCR_BROWSER_HTTP_COMPAT=1 \
+npx playwright test e2e/httpCompatibility.spec.ts
+```
+
+### 结果与覆盖
+
+- 后端 Ruff、mypy（125 文件）、OpenAPI 校验通过；pytest 为 **731 passed、1 skipped、1 warning**。跳过的是未显式配置 `OCR_RESUME_PROBE_COMMAND` 的真实外部 OCR CLI 探测；警告为 Starlette TestClient 的 httpx 弃用提示。
+- 前端类型、lint、隔离构建通过；组件 **32 文件 / 160 项通过**。新增组件用例保护未知分面、URL 命名空间、返回白名单、恢复目标与时间；既有权限、批量冻结、草稿与失败恢复断言保持。
+- 最新完整普通浏览器 **90 passed、19 skipped、0 failed**；聊天、补审、HTTP 专题分别 **4 / 12 / 3 项通过**，默认跳过不冒充普通套件通过。最终列表 / 对齐 / 工作流定向复跑另为 **19 passed**，不与完整套件简单相加为独立用例数。
+- `globalLists.spec.ts` 覆盖 11 类主列表在 **1440 / 1280 / 768 / 390 / 320px** 的核心事实、长内容、无页面横向溢出、完整历史翻到百条之外、未知与密钥边界、详情返回。任务耗时 / 尝试、创建时间和问题处置不移除；平台记录代码 / 本地验证 / 部署分别展示。
+- 真实浏览器发现并修复手机隐藏表头后的全选入口缺失、长条件标签撑宽、历史复选触控高度和多节点单元格错位；桌面详情入口不再拆行。聊天写后采用返回版本、后台轮询不覆盖草稿，折叠工具与关闭收件箱停止轮询。配置恢复冻结目标，清筛选不残留旧详情。
+- 最终完整套件截图位于 `/tmp/ocr-global-list-complete`，列表截图关闭动画以避免捕捉过渡态；实际目视核对 320px 问题 / 项目列表与 1440px 平台记录，未将单一截图推断为所有状态或角色均完成视觉验收。
+
+完整普通浏览器日志为 `/tmp/ocr-global-list-complete.log`，专题分别为 `/tmp/ocr-global-chat.log`、`/tmp/ocr-global-recovery.log`、`/tmp/ocr-global-http.log`；后端与组件日志分别为 `/tmp/ocr-global-backend-latest.log`、`/tmp/ocr-global-components-latest.log`。临时目录仅作本机检查证据，不作为长期部署产物。
+
+### 性能与未部署边界
+
+合成百行完整响应 6,369,586 字节，安全摘要 54,786 字节（约减 99.1%），固定三条 SELECT，无逐行查询；含解析本地查询约 9.2 / 8.7ms，不代表生产延迟。只读 Git HEAD 提交基线与当前构建全部 assets 为 1,676,004 / 1,697,234 字节（+1.27%），逐文件 gzip 合计为 552,313 / 552,461 字节（+0.03%）。基线并非开始时未提交源码，且 Table 由独立 chunk 整合到主共享包，不能只比较主 chunk 判断总增长。当前主共享 JS 为 1,097.69 kB / gzip 355.89 kB，仍有超过 500kB 的构建警告；没有调整阈值掩盖，也未完成真实网络首屏性能验收。
+
+所有浏览器只使用临时 SQLite、8791 与合成外部替身，不调用真实模型、GitLab 或飞书，不扩大聊天读取与绑定范围。**代码与本地检查完成，部署未执行**：未覆盖 `frontend/dist`、未重启 API / Worker / monitor。此次无新增迁移；正式生效仍需前端产物与 API 配套更新，再核对实际入口，不以本地通过代替上线确认。实施范围与后续发布说明见[列表规划第 10 节](global-list-redesign-plan.md#10-后续实施落地2026-11-08pi-20261108-003)。

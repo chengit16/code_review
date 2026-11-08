@@ -1,6 +1,7 @@
 /** @description 使用合成响应验证聊天收件箱的权限失败、健康提示、关联冲突与撤权版本，不读取真实聊天。 */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -41,6 +42,7 @@ describe("混合聊天记录", () => {
       ? new Response(JSON.stringify({ detail: "线索已更新" }), { status: 409 })
       : new Response(JSON.stringify({ ...initial, bindings: [] })));
     panel();
+    await userEvent.click(await screen.findByRole("button", { name: "详情 / 关联" }));
     const input = await screen.findByLabelText("来源 #2 关联记录编号");
     fireEvent.change(input, { target: { value: "11" } });
     fireEvent.click(screen.getByRole("button", { name: "关联已有记录" }));
@@ -54,7 +56,8 @@ describe("混合聊天记录", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ...initial, bindings: [], items: [], total: 0 })));
     panel();
     expect(await screen.findByText("尚未绑定会话，不会自动读取其他聊天。")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "50" } });
+    await userEvent.click(screen.getByRole("combobox", { name: "每页条数" }));
+    await userEvent.click(screen.getByRole("option", { name: "50 条" }));
     await waitFor(() => expect(fetch.mock.calls.some((call) => String(call[0]).includes("page_size=50"))).toBe(true));
   });
 
@@ -64,4 +67,28 @@ describe("混合聊天记录", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("仅管理员可查看");
     expect(screen.queryByText(/尚无摄取记录/)).not.toBeInTheDocument();
   });
+});
+
+
+it("关联成功立即使用新版本解除关联，后台列表刷新不覆盖编号草稿", async () => {
+  let current = initial.items[0];
+  const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+    if (options?.method === "POST") {
+      const command = JSON.parse(String(options.body));
+      current = { ...current, improvement_id: command.improvement_id, version: current.version + 1 };
+      return new Response(JSON.stringify(current));
+    }
+    return new Response(JSON.stringify({ ...initial, bindings: [], items: [current] }));
+  });
+  panel();
+  await userEvent.click(await screen.findByRole("button", { name: "详情 / 关联" }));
+  const input = screen.getByLabelText("来源 #2 关联记录编号");
+  await userEvent.type(input, "11");
+  await userEvent.click(screen.getByRole("button", { name: "关联已有记录" }));
+  expect(await screen.findByRole("link", { name: "查看关联记录 #11" })).toBeVisible();
+  expect(input).toHaveValue(11);
+  await userEvent.click(screen.getByRole("button", { name: "解除关联" }));
+  await waitFor(() => expect(request.mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(2));
+  const versions = request.mock.calls.filter(([, options]) => options?.method === "POST").map(([, options]) => JSON.parse(String(options?.body)).expected_version);
+  expect(versions).toEqual([4, 5]);
 });

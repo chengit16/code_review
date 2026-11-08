@@ -37,11 +37,30 @@ class ReviewReason(BaseModel):
     message: str
 
 
+class TaskIssueSummary(BaseModel):
+    """当前有效发现按最终问题身份去重；未知关联与没有可用结论不得冒充已处置。"""
+
+    available: bool
+    finding_count: int | None
+    highest_severity: str | None
+    open_count: int
+    fixed_count: int
+    ignored_count: int
+    unknown_count: int
+    complete: bool
+    no_findings: bool
+    coverage_complete: bool
+    coverage_limited: bool
+
+
 class TaskExecutionResponse(BaseModel):
     """保留已有动态任务字段，新增可观测性字段提供明确 OpenAPI 契约。"""
 
     model_config = ConfigDict(extra="allow")
     id: int
+    list_status: str | None = Field(None, description="活动补审优先，其次为当前有效评审状态")
+    active_recovery_status: str | None = None
+    issue_summary: TaskIssueSummary | None = None
     effective_status: str | None = None
     effective_conclusion: ConclusionVersion | None = None
     effective_document: ConclusionDocument | None = None
@@ -70,3 +89,4 @@ class TaskSearchResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    status_counts: dict[str, int] = Field(default_factory=dict)

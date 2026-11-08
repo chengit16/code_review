@@ -1,29 +1,34 @@
 /** @description 同页维护 GitLab 项目、Webhook 与评审开关；飞书和模型配置独立。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Switch, Table, Tag } from "antd";
+import { Button, Card, Drawer, Switch, Tag } from "antd";
 import type { TableColumnsType } from "antd";
-import { Check, Copy, Plus, RotateCcw, Settings2, Trash2, X } from "lucide-react";
+import { Check, Copy, Plus, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, Repository, RepositoryInput, RepositoryUpdateInput } from "../api/types";
-import { copyText } from "../ui/clipboard";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { ListSearch, ListStatusNav, ListSelect } from "../ui/ListControls";
+import { ListTable as Table } from "../ui/ListTable";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
-import { ReadFeedback } from "../ui/ReadFeedback";
 import { QueryState } from "../ui/QueryState";
+import { ReadFeedback } from "../ui/ReadFeedback";
 import { SelectField } from "../ui/SelectField";
+import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
+import { copyText } from "../ui/clipboard";
 import { formatTime } from "../ui/format";
-import { WebhookTokenCell } from "./WebhookTokenCell";
-import { ProjectReviewLimits } from "./ProjectReviewLimits";
+import type { DraftStatus } from "../ui/useConfigurationDraft";
+import { useLocalList } from "../ui/useLocalList";
+
 import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
 import { PremergeSetting } from "./PremergeSetting";
-import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
-import type { DraftStatus } from "../ui/useConfigurationDraft";
+import { ProjectReviewLimits } from "./ProjectReviewLimits";
 import { RepositoryDiagnosis } from "./RepositoryDiagnosis";
+import { WebhookTokenCell } from "./WebhookTokenCell";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
 type RepositoryEditSection = "connection" | "review" | "publication" | "diagnosis";
@@ -180,15 +185,20 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     remove.mutate(repo.id);
   }
 
+  const [listParams] = useSearchParams();
+  const readinessFilter = listParams.get("repo_readiness") ?? "all";
+  const targetFilter = listParams.get("repo_target") ?? "all";
+  const getReadiness = (id: number) => !readiness.isSuccess || readiness.error ? "unknown" : readiness.data.find((item) => item.repository_id === id)?.status ?? "unknown";
+  const scoped = query.error ? undefined : query.data?.filter((item) => (readinessFilter === "all" || getReadiness(item.id) === readinessFilter) && (targetFilter === "all" || (targetFilter === "none" ? item.feishu_target_id == null : String(item.feishu_target_id) === targetFilter)));
+  const list = useLocalList(scoped, (item) => `${item.name} ${item.path_with_namespace} ${item.project_id}`, (item) => item.enabled ? "enabled" : "disabled", "repo_");
+  const [info, setInfo] = useState<Repository | null>(null);
   const repositoryColumns: TableColumnsType<Repository> = [
-    { title: "仓库", dataIndex: "name", key: "name", width: 210, render: (name: string, repo) => <div className="repository-name-cell"><strong>{name}</strong><small className="table-sub">{repo.path_with_namespace || repo.gitlab_url}</small></div> },
-    { title: "项目 ID", dataIndex: "project_id", key: "project_id", width: 100 },
+    { title: "仓库", dataIndex: "name", key: "name", width: 210, render: (name: string, repo) => <div className="repository-name-cell"><strong>{name}</strong><small className="table-sub">{repo.path_with_namespace || repo.gitlab_url} · ID {repo.project_id}</small></div> },
     { title: "目标分支", dataIndex: "target_branch", key: "target_branch", width: 130, render: (value: string) => <span className="mono">{value}</span> },
-    { title: "接入状态", key: "readiness", width: 135, render: (_: unknown, repo) => { const result = readiness.data?.find((item) => item.repository_id === repo.id); const label = readiness.isSuccess ? result ? ({ ready: "已验证", needs_check: "待重新测试", paused: "已暂停" } as Record<string, string>)[result.status] : "接入状态未知" : "接入状态待确认"; return <Tag variant="filled" color={result?.status === "ready" ? "green" : "default"}>{label}</Tag>; } },
+    { title: "接入状态", key: "readiness", width: 135, render: (_: unknown, repo) => { const result = !readiness.error ? readiness.data?.find((item) => item.repository_id === repo.id) : undefined; const label = readiness.isSuccess && !readiness.error ? result ? ({ ready: "已验证", needs_check: "待重新测试", paused: "已暂停" } as Record<string, string>)[result.status] : "接入状态未知" : "接入状态待确认"; return <Tag variant="filled" color={result?.status === "ready" ? "green" : "default"}>{label}</Tag>; } },
     { title: "飞书配置", key: "feishu", width: 170, render: (_: unknown, repo) => repo.feishu_target_id == null ? "未配置" : !targets.isSuccess ? "飞书配置待确认" : targets.data.find((target) => target.id === repo.feishu_target_id)?.name ?? "关联通道不存在，请核对" },
-    { title: "Webhook Token", key: "token", width: 210, render: (_: unknown, repo) => <div><WebhookTokenCell key={`${repo.id}-${tokenRevision}`} token={token} repositoryId={repo.id} repositoryName={repo.name} /><small className="table-sub">最近验证 {formatTime(repo.last_webhook_at)}</small></div> },
     { title: "接收", dataIndex: "enabled", key: "enabled", width: 86, render: (enabled: number, repo) => <Switch checked={Boolean(enabled)} disabled={toggle.isPending} onChange={(checked) => toggle.mutate({ id: repo.id, enabled: checked })} aria-label={`${repo.name} 接收 webhook`} /> },
-    { title: "操作", key: "actions", width: 100, render: (_: unknown, repo) => <div className="row-actions"><Button type="text" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}><Settings2 size={16} /></Button><Button danger type="text" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}><Trash2 size={16} /></Button></div> },
+    { title: "操作", key: "actions", width: 240, render: (_: unknown, repo) => <div className="row-actions"><Button type="link" onClick={() => setInfo(repo)}>接入信息</Button><Button type="text" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}>编辑</Button><Button danger type="text" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}>删除</Button></div> },
   ];
 
   return <div className="page"><UnsavedChangesGuard dirty={editDirty || (open && JSON.stringify(form) !== JSON.stringify(initial))} /><PageHeader title="项目配置" subtitle="GitLab 仓库、Webhook 与评审开关" actions={
@@ -199,10 +209,16 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     {callbackUrl && <div className="webhook-callback"><span>GitLab 回调地址</span><input className="mono" aria-label="GitLab 回调地址" value={callbackUrl} readOnly onFocus={(event) => event.target.select()} /><button className="button button-secondary" type="button" onClick={() => void copyCallback(callbackUrl)}>{callbackCopied ? <Check size={16} /> : <Copy size={16} />}{callbackCopied ? "已复制" : "复制地址"}</button></div>}
     {copyError && <p className="form-error" role="alert">{copyError}</p>}
     <Card className="repository-table-card" size="small" title={<h2 className="repository-table-heading">已接入仓库</h2>} extra={query.data ? `${query.data.length} 个` : "数量待确认"}>
-      <Table rowKey="id" columns={repositoryColumns} dataSource={query.data ?? []} loading={query.isFetching} locale={{ emptyText: query.error ? "无法读取项目配置" : "尚未接入仓库" }} scroll={{ x: 1180 }} pagination={{ pageSize: 25, pageSizeOptions: [25, 50, 100], showSizeChanger: true, locale: { items_per_page: "条/页", prev_page: "上一页", next_page: "下一页", page: "页", jump_to: "跳至", page_size: "每页条数" }, showTotal: (total) => `${total} 个仓库` }} />
+<div className="list-toolbar"><ListSearch key={list.q} label="搜索项目" value={list.q} onSearch={(value) => list.update("q", value)} />
+  <ListSelect label="接入验证" value={readinessFilter} onValueChange={(value) => list.update("readiness", value)} options={[{ value: "all", label: "全部接入状态" }, { value: "ready", label: "已验证" }, { value: "needs_check", label: "待重新测试" }, { value: "paused", label: "已暂停" }, { value: "unknown", label: "待确认 / 未知" }]} />
+  <ListSelect label="关联飞书" value={targetFilter} onValueChange={(value) => list.update("target", value)} options={[{ value: "all", label: "全部关联" }, { value: "none", label: "未配置" }, ...(targets.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
+</div><ListStatusNav value={list.status} labels={{ all: "全部", enabled: "接收已启用", disabled: "接收已暂停" }} counts={list.counts} onChange={(value) => list.update("status", value)} />      <Table rowKey="id" columns={repositoryColumns} dataSource={list.filtered ?? []} loading={query.isFetching} locale={{ emptyText: query.error ? "无法读取项目配置" : "尚未接入仓库" }} scroll={{ x: 1180 }} pagination={list.pagination} />
     </Card></>}
       {feedback && <p className="form-success" role="status">{feedback}</p>}
       {(toggle.error || remove.error) && <p className="form-error" role="alert">{(toggle.error || remove.error)?.message}</p>}
+  <Drawer open={info !== null} title={info ? `${info.name} · 接入信息` : "接入信息"} onClose={() => setInfo(null)} destroyOnHidden>
+    {info && <><p>Webhook Token 默认遮罩，仅在主动查看时读取；请勿写入 URL 或日志。</p><WebhookTokenCell key={`${info.id}-${tokenRevision}`} token={token} repositoryId={info.id} repositoryName={info.name} /><p>最近 Token 验证：{formatTime(info.last_webhook_at)}</p><p className="form-note">接入验证与接收开关独立，测试通过不代表后续任务一定成功。</p></>}
+  </Drawer>
   {open && <Modal titleId="add-repo-title" onClose={closeAdd}><div className="modal-heading"><h2 id="add-repo-title">添加 GitLab 仓库</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={closeAdd}><X size={19} /></button></div>
     <form onSubmit={submit} className="form-grid">
       <label>仓库名称<input value={form.name} onChange={(e) => field("name", e.target.value)} required /></label>

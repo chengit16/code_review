@@ -44,7 +44,10 @@ describe("问题批量处理", () => {
       targets: [{ id: 1, expected_status: "open" }, { id: 2, expected_status: "open" }],
       status: "ignored", note: "统一核查：非缺陷",
     });
+    expect(screen.queryByLabelText("批量处理说明")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "选择问题 1" }));
     expect(screen.getByLabelText("批量处理说明")).toHaveValue("");
+    await user.click(screen.getByRole("checkbox", { name: "选择问题 1" }));
     expect(screen.getByRole("checkbox", { name: "选择问题 1" })).not.toBeChecked();
   });
 
@@ -72,6 +75,8 @@ describe("问题批量处理", () => {
     expect(screen.getByLabelText("批量处理说明")).toHaveValue("保留说明");
     await user.click(screen.getByRole("button", { name: "刷新问题" }));
     expect(screen.getByRole("checkbox", { name: "选择问题 1" })).not.toBeChecked();
+    expect(screen.queryByLabelText("批量处理说明")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "选择问题 1" }));
     expect(screen.getByLabelText("批量处理说明")).toHaveValue("保留说明");
   });
 
@@ -81,7 +86,7 @@ describe("问题批量处理", () => {
     await user.click(await screen.findByRole("checkbox", { name: "选择问题 1" }));
     await user.click(screen.getByRole("button", { name: "下一页" }));
     expect(await screen.findByRole("checkbox", { name: "选择问题 3" })).not.toBeChecked();
-    expect(screen.getByRole("button", { name: "批量标记已修复" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "批量标记已修复" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "上一页" }));
     expect(await screen.findByRole("checkbox", { name: "选择问题 1" })).not.toBeChecked();
   });

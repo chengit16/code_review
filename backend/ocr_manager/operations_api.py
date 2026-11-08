@@ -13,7 +13,7 @@ from starlette.responses import Response
 
 from ocr_manager.attempt_history import attempt_job, compare_results
 from ocr_manager.config import Settings
-from ocr_manager.config_history import list_config_history, restore_config
+from ocr_manager.config_history import list_config_history, restore_config, search_config_history
 from ocr_manager.diagnostics import create_diagnostic_bundle
 from ocr_manager.monitoring import (
     eligible_artifacts,
@@ -42,6 +42,8 @@ def task_filters(
     since: datetime | None = None,
     until: datetime | None = None,
     view: Literal["active", "attention", "notification_failed"] | None = None,
+    issue_state: Literal["open", "resolved", "none", "unknown"] | None = None,
+    notification_failed: bool = False,
 ) -> dict[str, Any]:
     """列表和相邻任务统一校验条件；时间按 UTC 比较，无时区输入默认 UTC。"""
 
@@ -59,6 +61,8 @@ def task_filters(
         "repository_id": repository_id, "status": status, "target_branch": target_branch,
         "mr_iid": mr_iid, "sha": sha.lower() if sha else None, "since": start, "until": end,
         "view": view,
+        "issue_state": issue_state,
+        "notification_failed": notification_failed,
     }
 
 
@@ -77,13 +81,13 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
         mr_iid: int | None = Query(None, gt=0),
         status: Literal["queued", "running", "complete", "partial", "failed",
                         "skipped", "cancelled", "superseded"] | None = None,
-        latest_only: bool = True,
+        latest_only: bool = True, summary_only: bool = False,
         page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
     ) -> dict[str, Any]:
         """按项目和 MR 查询版本；最新指最新接收版本，不把旧结果当成当前结论。"""
 
         return search_premerge(store, repository_id, mr_iid, status, latest_only,
-                               page, page_size)
+                               page, page_size, summary_only)
 
     @app.get("/api/service-addresses", dependencies=[admin])
     def service_addresses() -> dict[str, str]:
@@ -165,6 +169,22 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
                            "ready" if tested else "needs_check",
                            "last_webhook_at": repository["last_webhook_at"]})
         return result
+
+    @app.get("/api/config-history-search", dependencies=[admin])
+    def config_history_search(
+        kind: Literal["repository", "notification_target", "model_profile"],
+        object_id: int | None = Query(None, gt=0),
+        action: Literal["baseline", "created", "updated", "deleted"] | None = None,
+        since: datetime | None = None, until: datetime | None = None,
+        page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
+    ) -> dict[str, Any]:
+        """完整历史分页；兼容保留原最近记录接口，拒绝无时区或反向区间。"""
+
+        try:
+            return search_config_history(store, kind, object_id, action, since, until,
+                                         page, page_size)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
 
     @app.get("/api/config-history/{kind}", dependencies=[admin])
     def config_history(

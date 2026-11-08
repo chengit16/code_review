@@ -127,6 +127,8 @@ class ImprovementThemePage(BaseModel):
     total: int
     page: int
     page_size: int
+    status_counts: dict[str, int] = Field(
+        default_factory=dict, description="忽略状态和分页、保留其他条件的全量数量")
 
 
 class ImprovementThemeRevision(ArchiveMetadata):

@@ -1,5 +1,8 @@
 /** @description 展示当前页问题批量操作；不发送请求或推断服务端权限。 */
+import { Button, Checkbox, Input } from "antd";
+
 import type { IssueActionStatus } from "../api/reviewIssues";
+
 import { issueActionLabels } from "./useIssueBatch";
 
 /** 受控批量操作栏，确认与持久化由页面业务 Hook 执行。 */
@@ -16,14 +19,14 @@ export function IssueBatchBar({ count, allSelected, disabled, pending, note, onN
 }) {
   return <section className="issue-batch-bar" aria-label="批量处理问题">
     <div className="issue-batch-selection">
-      <label className="issue-select-all"><input type="checkbox" checked={allSelected} disabled={disabled || pending} onChange={(event) => onSelectAll(event.target.checked)} />全选当前页</label>
+      <Checkbox className="issue-select-all" checked={allSelected} disabled={disabled || pending} onChange={(event) => onSelectAll(event.target.checked)}>全选本页可处理问题</Checkbox>
       <span aria-live="polite">已选 <strong>{count}</strong> 条</span>
-      <button className="text-link" type="button" disabled={!count || pending} onClick={onClear}>清空选择</button>
+      <Button type="link" disabled={!count || pending} onClick={onClear}>清空选择</Button>
       <small>仅处理当前页勾选项，已合并问题不可选</small>
     </div>
     <div className="issue-batch-actions">
-      <label>批量处理说明<input value={note} maxLength={500} disabled={pending} placeholder="可选，将记录到每条问题" onChange={(event) => onNote(event.target.value)} /></label>
-      {(["fixed", "ignored", "open"] as const).map((value) => <button key={value} type="button" className="button button-secondary" disabled={disabled || pending || !count} onClick={() => onSubmit(value)}>{pending ? "处理中…" : `批量${issueActionLabels[value]}`}</button>)}
+      <label>批量处理说明<Input value={note} maxLength={500} disabled={pending} placeholder="可选，将记录到每条问题" onChange={(event) => onNote(event.target.value)} /></label>
+      {(["fixed", "ignored", "open"] as const).map((value) => <Button key={value} disabled={disabled || pending || !count} onClick={() => onSubmit(value)}>{pending ? "处理中…" : `批量${issueActionLabels[value]}`}</Button>)}
     </div>
   </section>;
 }

@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, Collapse } from "antd";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { archiveActionLabels, getImprovementTheme, getImprovementThemeHistory } from "../api/improvements";
 import type { ImprovementThemeContent, ImprovementThemeRecord } from "../api/improvements";
@@ -10,6 +10,8 @@ import { PageHeader } from "../ui/PageHeader";
 import { Pagination } from "../ui/Pagination";
 import { QueryState } from "../ui/QueryState";
 import { formatTime } from "../ui/format";
+import { listReturnTarget } from "../ui/listReturn";
+
 import { ImprovementArchiveControl } from "./ImprovementArchiveControl";
 import { ImprovementThemeEditor } from "./ImprovementThemeEditor";
 import { categoryLabels, codeLabels, deploymentLabels, verificationLabels } from "./improvementFields";
@@ -35,6 +37,7 @@ function ThemeFacts({ theme }: { /** 当前摘要或历史完整快照。 */ the
 
 /** 问题记录通过独立关系表关联；打开问题不改变其状态。 */
 export function ImprovementThemeDetailPage({ token }: { /** 管理员内存会话。 */ token: string }) {
+  const location = useLocation();
   const { id } = useParams();
   const themeId = Number(id);
   const [editing, setEditing] = useState<ImprovementThemeRecord | null>(null);
@@ -45,7 +48,7 @@ export function ImprovementThemeDetailPage({ token }: { /** 管理员内存会�
   const valid = Number.isInteger(themeId) && themeId > 0;
   const theme = useQuery({ queryKey: ["improvement-theme", themeId], queryFn: ({ signal }) => getImprovementTheme(token, themeId, signal), enabled: valid });
   const history = useQuery({ queryKey: ["improvement-theme-history", themeId, historyPage, historyPageSize], queryFn: ({ signal }) => getImprovementThemeHistory(token, themeId, historyPage, signal, historyPageSize), enabled: valid && Boolean(theme.data) });
-  return <div className="page"><Link to="/improvements?view=themes">返回优化历程</Link>
+  return <div className="page"><Link to={listReturnTarget(location.search, true)}>返回优化历程</Link>
     <PageHeader title={theme.data?.title ?? "优化主题"} subtitle={theme.data ? `主题 #${themeId} · 版本 ${theme.data.version} · 更新于 ${formatTime(theme.data.updated_at)}` : "读取持久化主题"} actions={theme.data && !theme.data.archived_at && <button className="button button-primary" type="button" disabled={theme.isError} onClick={() => { setFeedback(""); setEditing(theme.data ?? null); }}>编辑主题与阶段</button>} />
     {!valid ? <p className="form-error" role="alert">主题编号无效</p> : <QueryState loading={theme.isLoading} error={theme.error} onRetry={() => void theme.refetch()} />}
     {feedback && <p className="form-success" role="status">{feedback}</p>}

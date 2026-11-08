@@ -35,13 +35,14 @@ test("问题和主题归档后可查询、追溯、恢复，默认列表不再�
     await expect(page.getByText(/归档 · 版本 2/)).toBeVisible();
   }
   await page.goto(`/improvements?q=${encodeURIComponent(title)}`);
-  await expect(page.getByText("当前条件下暂无记录。", { exact: false })).toBeVisible();
+  await expect(page.getByText("当前条件下暂无记录", { exact: false })).toBeVisible();
+  await page.getByText("更多筛选", { exact: true }).click();
   await page.getByRole("combobox", { name: "归档范围" }).click();
   await page.getByRole("option", { name: "已归档", exact: true }).click();
   await expect(page).toHaveURL(/archive=archived/);
   await expect(page.getByRole("link", { name: `#${issue.id} · ${title}`, exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("combobox", { name: "归档范围" })).toContainText("已归档");
+  await expect(page.locator(".list-conditions")).toContainText("已归档");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/archive-record-list-320.png", fullPage: true });
   await page.getByRole("link", { name: `#${issue.id} · ${title}`, exact: true }).click();

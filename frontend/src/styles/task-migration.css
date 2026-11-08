@@ -1,10 +1,10 @@
 /* 迁移批次只负责自身布局，不覆盖 Ant Design 内部状态和存量页面。 */
 .jobs-migration, .setup-migration { display: flex; flex-direction: column; gap: 16px; }
 .jobs-migration > .page-header, .setup-migration > .page-header { margin-bottom: 0; }
-.jobs-search-card { background: linear-gradient(110deg, #fff, #f7faff); }
+.jobs-search-card { background: linear-gradient(110deg, #fff, #fcfdff); }
 .jobs-quick-filters, .jobs-active-filters, .jobs-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.jobs-filter-form { margin-top: 18px; }
-.jobs-filter-main { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) minmax(100px, 1fr) auto; align-items: end; gap: 14px; }
+.jobs-filter-form { margin-top: 10px; }
+.jobs-filter-main { display: grid; grid-template-columns: minmax(160px, 250px) minmax(160px, 250px) auto; align-items: end; justify-content: start; gap: 12px; }
 .jobs-filter-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: 13px; }
 .jobs-filter-field .ant-select { width: 100%; }
 .jobs-filter-advanced { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -14,9 +14,21 @@
 .jobs-selection > div { flex-basis: 100%; min-width: 0; }
 .jobs-selection p, .jobs-selection ul { margin: 0; overflow-wrap: anywhere; }
 .jobs-selection small { color: var(--color-muted); }
-.jobs-table { min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
-.jobs-source { display: grid; gap: 5px; }
+.jobs-table { min-width: 0; overflow: hidden; }
+.jobs-source { display: grid; gap: 4px; min-width: 0; }
+.jobs-source > a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.jobs-source > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jobs-compact-cell, .jobs-issue-summary { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+.jobs-compact-cell > small, .jobs-issue-summary > small { color: var(--color-muted); line-height: 1.45; }
+.jobs-issue-summary > small a { color: var(--color-accent); font-weight: 600; }
+.jobs-quick-filters { padding: 8px; border-radius: 8px; background: #f4f6f8; }
+.jobs-quick-filters .ant-btn { border-color: transparent; box-shadow: none; }
+.jobs-quick-filters .ant-btn:not(.ant-btn-primary) { background: transparent; }
+.jobs-search-card .ant-card-body { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.jobs-status-count { font-variant-numeric: tabular-nums; opacity: .75; }
+.jobs-table .ant-table-cell { padding-block: 10px; }
 .jobs-table .table-sub, .jobs-table .execution-facts { line-height: 1.6; }
+.jobs-table .execution-facts { display: grid; gap: 2px; }
 .jobs-table .ant-table-cell { overflow-wrap: anywhere; }
 .jobs-source small, .jobs-source .mono { color: var(--color-muted); font-size: 12px; }
 .jobs-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 13px; }

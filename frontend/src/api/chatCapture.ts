@@ -21,8 +21,8 @@ export interface ChatInbox {
 }
 
 /** 查询绑定和脱敏来源，支持页面卸载取消。 */
-export function getChatInbox(token: string, page: number, pageSize: number, signal?: AbortSignal) {
-  return apiRequest<ChatInbox>(token, `/api/chat-capture?page=${page}&page_size=${pageSize}`, { signal });
+export function getChatInbox(token: string, page: number, pageSize: number, signal?: AbortSignal, classification = "") {
+  return apiRequest<ChatInbox>(token, `/api/chat-capture?page=${page}&page_size=${pageSize}${classification ? `&classification=${encodeURIComponent(classification)}` : ""}`, { signal });
 }
 
 /** 仅暂停或恢复已存在绑定；并发版本冲突由调用方显示，不重试覆盖。 */

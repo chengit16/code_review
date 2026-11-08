@@ -17,11 +17,11 @@ for (const width of [1280, 390, 320]) {
       total: 1, page: 1, page_size: 25,
     } }));
     await page.goto("/jobs");
-    const summary = width < 700 ? page.locator(".task-mobile-summary") : page.locator("td[data-label='评审结果']");
-    await expect(summary.getByText("变更文件均被 OCR 规则排除，未调用模型")).toBeVisible();
+    const summary = width < 700 ? page.locator(".task-mobile-summary") : page.locator("td[data-label='评审状态']");
+    await expect(summary.getByText("已跳过", { exact: true })).toBeVisible();
     const times = width < 700 ? summary : page.locator("td[data-label='耗时 / 尝试']");
-    await expect(times.getByText("初审累计执行 1 秒").first()).toBeVisible();
-    await expect(times.getByText("首次排队 6 小时 0 分").first()).toBeVisible();
+    await expect(times.getByText("初审执行 1 秒").first()).toBeVisible();
+    await expect(times.getByText("初审 1 次 · 补审 0 次").first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/review-execution-list-${width}.png`, fullPage: true });
     // 详情保留隔离服务的基础字段，仅覆盖合成诊断，验证长路径与三次执行的真实布局。

@@ -67,7 +67,7 @@ test("搜索条件与分页保留，空结果和加载失败明确区分", async
   await page.goto("/improvements?q=不存在的合成标题&page_size=50");
   await expect(page.getByLabel("搜索记录")).toHaveValue("不存在的合成标题");
   await expect(page.getByText(/当前条件下暂无记录/)).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "每页条数" })).toHaveValue("50");
+  await expect(page.locator(".jobs-pagination-controls")).toContainText("50 条");
   await page.route("**/api/improvements?**", (route) => route.fulfill({ status: 503, json: { detail: "合成查询失败" } }));
   await page.reload();
   await expect(page.getByRole("alert")).toContainText("合成查询失败");

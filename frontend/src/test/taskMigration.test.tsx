@@ -1,8 +1,8 @@
 /** @description 任务迁移保护筛选集中提交、冻结编号、取消无写入和请求失败不重放；接口全部合成。 */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ConfigProvider } from "antd";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ConfigProvider } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ import { TaskSelectionBar } from "../pages/TaskSelectionBar";
 it("未应用筛选不会检索，折叠后保留高级输入、UTC 时间与每页条数", async () => {
   const apply = vi.fn();
   const user = userEvent.setup();
-  render(<DesignProvider><TaskFilters params={new URLSearchParams("page=3&page_size=50&view=attention&sha=abcd")}
+  render(<DesignProvider><TaskFilters params={new URLSearchParams("page=3&page_size=50&view=attention&issue_state=open&sha=abcd")}
     repositories={[]} onApply={apply} /></DesignProvider>);
   const branch = screen.getByLabelText("分支", { exact: true });
   await user.type(branch, "main");
@@ -26,6 +26,7 @@ it("未应用筛选不会检索，折叠后保留高级输入、UTC 时间与每
   expect(params.get("target_branch")).toBe("main");
   expect(params.get("page_size")).toBe("50");
   expect(params.get("view")).toBe("attention");
+  expect(params.get("issue_state")).toBe("open");
   expect(params.has("page")).toBe(false);
   expect(params.get("since")).toBe(new Date("2026-01-01T08:00").toISOString());
 });

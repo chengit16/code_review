@@ -1,12 +1,14 @@
 /** @description 主动告警配置和通知历史；草稿跨视图及轮询保留，保存不代表已发送通知。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Checkbox, Input, Select, Table } from "antd";
+import { Button, Card, Checkbox, Input, Select } from "antd";
+import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget } from "../api/types";
+import { ListExcerpt, ListTime } from "../ui/ListControls";
+import { ListTable as Table } from "../ui/ListTable";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
-import { formatTime } from "../ui/format";
 import { useConfigurationDraft } from "../ui/useConfigurationDraft";
 
 interface Config { enabled: number | boolean; target_id: number | null; queue_minutes: number }
@@ -40,16 +42,19 @@ export function AlertsPanel({ token, active = true }: {
   /** 当前分区可见时才启用后台请求。 */ active?: boolean;
 }) {
   const client = useQueryClient();
+  const [params, setParams] = useSearchParams();
+  const page = Math.max(1, Math.floor(Number(params.get("alerts_page"))) || 1);
+  const setPage = (value: number) => { const next = new URLSearchParams(params); next.set("alerts_page", String(value)); setParams(next); };
   const query = useQuery({ queryKey: ["alerts"], enabled: active, queryFn: ({ signal }) => apiRequest<Alerts>(token, "/api/alerts", { signal }), refetchInterval: active ? 30000 : false });
   const targets = useQuery({ queryKey: ["notification-targets"], enabled: active, queryFn: ({ signal }) => apiRequest<NotificationTarget[]>(token, "/api/notification-targets", { signal }) });
   const retry = useMutation({ retry: false, mutationFn: (id: number) => apiRequest(token, `/api/alerts/${id}/retry`, { method: "POST" }), onSuccess: () => void client.invalidateQueries({ queryKey: ["alerts"] }) });
   return <div className="operations-alerts-section"><QueryState loading={query.isLoading || targets.isLoading} error={query.error || targets.error || retry.error} />
     {query.data && <>
       <Card title="主动告警设置"><p className="operations-caption">由独立 monitor 检查与发送；配置成功和通知投递成功是两件事。</p><Editor token={token} config={query.data.config} targets={targets.data ?? []} unavailable={!targets.data || !!targets.error} /></Card>
-      <Card title="告警与恢复通知"><Table rowKey="id" dataSource={query.data.deliveries} size="small" scroll={{ x: 750 }} pagination={{ pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "暂无告警通知" }} columns={[
-        { title: "消息", dataIndex: "message", width: 300 }, { title: "状态", dataIndex: "status", render: (status: string) => <Status value={status} /> },
-        { title: "尝试", dataIndex: "attempts" }, { title: "时间", dataIndex: "created_at", render: (time: string) => formatTime(time) },
-        { title: "诊断", dataIndex: "error", render: (error: string | null) => error ?? "—" },
+      <Card title="告警与恢复通知"><p className="operations-caption">仅显示最近 100 条投递，不代表全部历史或实时活跃告警数量。</p><Table rowKey="id" dataSource={query.data.deliveries} size="small" scroll={{ x: 750 }} pagination={{ current: Math.min(page, Math.max(1, Math.ceil(query.data.deliveries.length / 10))), onChange: setPage, pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "暂无告警通知" }} columns={[
+        { title: "消息", dataIndex: "message", width: 300, render: (message: string) => <ListExcerpt text={message} limit={70} /> }, { title: "状态", dataIndex: "status", render: (status: string) => <Status value={status} /> },
+        { title: "尝试", dataIndex: "attempts" }, { title: "时间", dataIndex: "created_at", render: (time: string) => <ListTime value={time} /> },
+        { title: "诊断", dataIndex: "error", render: (error: string | null) => <ListExcerpt text={error} /> },
         { title: "操作", render: (_, item) => item.status === "failed" && <Button aria-label={`重发告警 ${item.id}`} disabled={retry.isPending} onClick={() => retry.mutate(item.id)}>重发</Button> },
       ]} /></Card>
     </>}

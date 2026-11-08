@@ -39,7 +39,7 @@ export interface ImprovementRecord extends ImprovementContent, ArchiveMetadata {
 }
 
 /** 当前查询下的分页结果。 */
-export interface ImprovementPage { items: ImprovementRecord[]; total: number; page: number; page_size: number }
+export interface ImprovementPage { status_counts?: Record<string, number>; items: ImprovementRecord[]; total: number; page: number; page_size: number }
 
 /** 旧内容完整快照，不以最新结论覆盖。 */
 export interface ImprovementRevision extends ArchiveMetadata {
@@ -72,7 +72,7 @@ export interface ImprovementThemeRecord extends ImprovementThemeContent, Archive
 }
 
 /** 主题分页查询。 */
-export interface ImprovementThemePage { items: ImprovementThemeRecord[]; total: number; page: number; page_size: number }
+export interface ImprovementThemePage { status_counts?: Record<string, number>; items: ImprovementThemeRecord[]; total: number; page: number; page_size: number }
 
 /** 每次保存保留完整主题、阶段和当时的问题关联。 */
 export interface ImprovementThemeRevision extends ArchiveMetadata {

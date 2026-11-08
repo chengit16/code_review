@@ -1,18 +1,22 @@
 /** @description 飞书机器人作为独立通知通道，可被多个 GitLab 仓库共享。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Settings2, Trash2, X } from "lucide-react";
+import { Button } from "antd";
+import { Plus, Save, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, NotificationTargetInput, Repository } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { ListSearch } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
-import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
-import { ReadFeedback } from "../ui/ReadFeedback";
 import { QueryState } from "../ui/QueryState";
+import { ReadFeedback } from "../ui/ReadFeedback";
+import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
+import { useLocalList } from "../ui/useLocalList";
 
 interface TargetForm {
   name: string;
@@ -91,6 +95,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
     remove.mutate(target.id);
   }
 
+  const list = useLocalList(targets.error ? undefined : targets.data, (item) => item.name, undefined, "feishu_");
   const checkRepository = repositories.isSuccess && editing
     ? repositories.data?.find((repository) => repository.feishu_target_id === editing.id)
     : undefined;
@@ -102,23 +107,18 @@ export function FeishuHooksPage({ token, embedded = false }: {
     {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}
     <QueryState loading={targets.isLoading} error={targets.error} onRetry={() => void targets.refetch()} />
     <ReadFeedback name="关联仓库" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} />
-    {!targets.isLoading && !targets.error && <section className="section">
-      <div className="hook-list">
-        {targets.data?.map((target) => {
-          const linked = repositories.data?.filter((repository) => repository.feishu_target_id === target.id) ?? [];
-          return <article className="hook-row" key={target.id}>
-            <div className="hook-project"><strong>{target.name}</strong><span>{!repositories.isSuccess ? "关联仓库待确认" : linked.length ? linked.map((repository) => repository.name).join("、") : "尚未关联仓库"}</span></div>
-            <span>{target.repository_count} 个仓库</span>
-            <span className="hook-last">{target.has_signing_secret ? "签名校验已配置" : "未配置签名校验"}</span>
-            <div className="row-actions">
-              <button className="icon-button" type="button" title="编辑飞书配置" aria-label={`编辑 ${target.name}`} onClick={() => beginEdit(target)}><Settings2 size={16} /></button>
-              <button className="icon-button icon-button-danger" type="button" title="删除飞书配置" aria-label={`删除 ${target.name}`} onClick={() => deleteTarget(target)} disabled={remove.isPending}><Trash2 size={16} /></button>
-            </div>
-          </article>;
-        })}
-        {targets.data?.length === 0 && <p className="empty-inline">暂无飞书配置</p>}
-      </div>
-    </section>}
+    <section className="list-surface"><div className="list-toolbar"><ListSearch key={list.q} label="搜索通道" value={list.q} onSearch={(value) => list.update("q", value)} /></div>
+      <ListTable rowKey="id" dataSource={list.filtered ?? []} loading={targets.isFetching} pagination={list.pagination} scroll={{ x: 650 }} locale={{ emptyText: targets.error ? "无法读取飞书配置" : "暂无飞书配置" }} columns={[
+        { title: "通道名称", key: "name", width: 200, render: (_, target) => <strong>{target.name}</strong> },
+        { title: "关联项目", key: "linked", render: (_, target) => {
+          const linked = repositories.data?.filter((item) => item.feishu_target_id === target.id) ?? [];
+          return <><span>{target.repository_count} 个项目</span><span className="list-secondary">{!repositories.isSuccess ? "关联项目待确认" : linked.length ? linked.slice(0, 2).map((item) => item.name).join("、") : "尚未关联项目"}</span>{linked.length > 2 && <details><summary>其余 {linked.length - 2} 个项目</summary>{linked.slice(2).map((item) => <p key={item.id}>{item.name}</p>)}</details>}</>;
+        } },
+        { title: "签名配置", key: "signing", width: 150, render: (_, target) => target.has_signing_secret ? "签名校验已配置" : "未配置签名校验" },
+        { title: "操作", key: "actions", width: 150, render: (_, target) => <><Button type="link" aria-label={`编辑 ${target.name}`} onClick={() => beginEdit(target)}>编辑</Button><Button type="link" danger aria-label={`删除 ${target.name}`} disabled={remove.isPending} onClick={() => deleteTarget(target)}>删除</Button></> },
+      ]} />
+      <p className="form-note">签名配置不代表通道可用；测试会向真实群发送消息，须在编辑窗口中显式操作。</p>
+    </section>
     {open && <Modal titleId="target-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
       <form className="settings-form hook-form" onSubmit={submit}><fieldset className="form-fields" disabled={save.isPending}>

@@ -57,7 +57,7 @@ test("运行概览整合效果统计并保留筛选与低频报表", async ({ pa
   await page.getByRole("option", { name: "近 90 天" }).click();
   await expect(page).toHaveURL("/?days=90");
   await page.reload();
-  await expect(statistics.getByRole("combobox", { name: "时间", exact: true })).toContainText("近 90 天");
+  await expect(statistics.locator(".list-select").filter({ has: page.getByRole("combobox", { name: "时间", exact: true }) })).toContainText("近 90 天");
   await page.screenshot({ path: "test-results/overview-statistics-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

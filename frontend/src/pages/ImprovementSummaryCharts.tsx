@@ -2,6 +2,7 @@
 import { Link } from "react-router-dom";
 
 import type { ImprovementActivityDay } from "../api/improvementSummary";
+import { ListTable } from "../ui/ListTable";
 
 /** 横向分布条；点击回到明确筛选的列表，零分母不生成百分比。 */
 export function ImprovementBreakdown({ title, counts, labels, href }: {
@@ -38,9 +39,10 @@ export function ImprovementActivity({ days }: {
       </div>
     </div>
     <div className="summary-chart-axis"><span>{days[0]?.date}</span><span>{days.at(-1)?.date}</span></div>
-    <details><summary>逐日活动明细</summary><div className="summary-table-scroll" tabIndex={0} role="region" aria-label="逐日活动明细，可横向滚动"><table>
-      <caption>北京时间自然日的新增与追加进展</caption><thead><tr><th scope="col">日期</th><th scope="col">新增记录</th><th scope="col">记录追加</th><th scope="col">新增主题</th><th scope="col">主题追加</th></tr></thead>
-      <tbody>{days.map((day) => <tr key={day.date}><th scope="row">{day.date}</th><td>{day.records_created}</td><td>{day.record_updates}</td><td>{day.themes_created}</td><td>{day.theme_updates}</td></tr>)}</tbody>
-    </table></div></details>
+    <details><summary>逐日活动明细</summary><p>北京时间自然日的新增与追加进展</p><ListTable rowKey="date" pagination={false} scroll={{ x: 600 }} dataSource={days} columns={[
+      { title: "日期", dataIndex: "date", key: "date" }, { title: "新增记录", dataIndex: "records_created", key: "records" },
+      { title: "记录追加", dataIndex: "record_updates", key: "updates" }, { title: "新增主题", dataIndex: "themes_created", key: "themes" },
+      { title: "主题追加", dataIndex: "theme_updates", key: "theme_updates" },
+    ]} /></details>
   </section>;
 }

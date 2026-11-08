@@ -45,6 +45,7 @@ from ocr_manager.review_results import project_review_result
 from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES, CONCURRENCY_MIGRATION
 from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
+from ocr_manager.task_issue_summary import attach_task_facts
 
 SCHEMA_VERSION = 49
 SCHEMA = """
@@ -440,22 +441,21 @@ class Store:
                 (action, object_type, object_id, outcome, actor_id, actor_name, correlation_id),
             )
 
-    def list_audit(self, page: int, page_size: int) -> dict[str, Any]:
-        """分页返回管理动作，计数与当前页在同一读事务中保持一致。"""
+    def list_audit(self, page: int, page_size: int, q: str = "") -> dict[str, Any]:
+        """只读检索操作人、动作与对象，分页和总数共享快照；不查询请求体。"""
 
+        keyword = q.strip().lower()
+        where = """WHERE (?='' OR instr(lower(action),?)>0
+            OR instr(lower(COALESCE(actor_name,'')),?)>0
+            OR instr(lower(object_type),?)>0 OR CAST(object_id AS TEXT)=?)"""
+        args = (keyword,) * 5
         with self.connection() as db:
             db.execute("BEGIN")
-            total = db.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
-            rows = db.execute(
-                "SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?",
-                (page_size, (page - 1) * page_size),
-            ).fetchall()
-        return {
-            "items": [dict(row) for row in rows],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-        }
+            total = db.execute(f"SELECT COUNT(*) FROM audit_log {where}", args).fetchone()[0]
+            rows = db.execute(f"SELECT * FROM audit_log {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+                              (*args, page_size, (page - 1) * page_size)).fetchall()
+        return {"items": [dict(row) for row in rows], "total": total,
+                "page": page, "page_size": page_size}
 
     def add_repository(self, values: dict[str, Any]) -> int:
         """持久化项目配置；调用方负责在写入前加密凭据。"""
@@ -1512,6 +1512,7 @@ class Store:
             result["stage_timings"] = [dict(stage) for stage in db.execute(
                 "SELECT * FROM review_stage_timings WHERE job_id=? ORDER BY id", (job_id,))]
             enrich_jobs(db, [result], include_scope_paths=True)
+            attach_task_facts(db, [result], detail=True)
             return result
 
     def retry_job(self, job_id: int, config_hash: str | None = None) -> int | None:

@@ -682,11 +682,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/audit-logs", dependencies=[admin])
     def list_audit_logs(
         page: int = Query(1, ge=1),
+        q: str = Query("", max_length=200),
         page_size: int = Query(20, ge=1, le=100),
     ) -> dict[str, Any]:
         """分页展示管理写操作及 HTTP 结果，不返回请求内容。"""
 
-        return store.list_audit(page, page_size)
+        return store.list_audit(page, page_size, q)
 
     @app.get("/api/notification-targets", dependencies=[admin])
     def list_notification_targets() -> list[dict[str, Any]]:

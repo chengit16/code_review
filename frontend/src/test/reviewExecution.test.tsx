@@ -23,6 +23,20 @@ it("累计三小时与首次排队六小时分开显示", () => {
   expect(screen.getByText("总历时 11 小时 0 分 · 初审 3 次 / 补审执行 0 次")).toBeVisible();
 });
 
+it("紧凑列表只显示初审执行与独立的初审、补审次数", () => {
+  render(<JobTimeFacts job={{ ...job, recovery_execution_count: 2 }} compact />);
+  expect(screen.getByText("初审执行 3 小时 0 分")).toBeVisible();
+  expect(screen.getByText("初审 3 次 · 补审 2 次")).toBeVisible();
+  expect(screen.queryByText(/总历时/)).not.toBeInTheDocument();
+});
+
+it("尚未领取的排队任务只显示等待，不把排队误计为执行", () => {
+  render(<JobTimeFacts job={{ ...job, status: "queued", attempts: 0 }} compact />);
+  expect(screen.getByText("已排队 6 小时 0 分")).toBeVisible();
+  expect(screen.getByText("尚未执行")).toBeVisible();
+  expect(screen.queryByText(/初审执行/)).not.toBeInTheDocument();
+});
+
 it.each(["failed", "skipped", "cancelled", "partial"])("%s 不显示零发现作为成功结论", (status) => {
   expect(resultText({ ...job, reason: undefined, status })).not.toContain("0 条发现");
 });

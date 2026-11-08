@@ -104,21 +104,30 @@ def list_improvements(store: Store, status: ImprovementStatus | None,
     """按编号倒序稳定分页，参数化检索不把用户文字作为 SQL 通配表达式。"""
 
     keyword = q.strip().lower()
-    where = """WHERE (?='all' OR (?='archived')=(archived_at IS NOT NULL))
-        AND (? IS NULL OR status=?) AND (? IS NULL OR kind=?)
+    facet_where = """WHERE (?='all' OR (?='archived')=(archived_at IS NOT NULL))
+        AND (? IS NULL OR kind=?)
         AND (? IS NULL OR category=?) AND (?='' OR instr(lower(title),?)>0
         OR instr(lower(description),?)>0 OR instr(lower(scope),?)>0
         OR instr(lower(analysis),?)>0 OR instr(lower(solution),?)>0)"""
-    params = (archive, archive, status, status, kind, kind, category, category,
+    facet_params = (archive, archive, kind, kind, category, category,
               *(keyword for _ in range(6)))
+    # 共享基础范围；只在列表行与 total 上增加当前状态，避免分面漏带其他条件。
+    where = facet_where + " AND (? IS NULL OR status=?)"
+    params = (*facet_params, status, status)
     with store.connection() as db:
         db.execute("BEGIN")
+        counts = {row["status"]: row["count"] for row in db.execute(
+            f"SELECT status,COUNT(*) AS count FROM project_improvements {facet_where} "
+            "GROUP BY status",
+            facet_params)}
+        counts["all"] = sum(counts.values())
         total = db.execute(f"SELECT COUNT(*) FROM project_improvements {where}", params
                            ).fetchone()[0]
         rows = db.execute(f"""SELECT {PUBLIC_COLUMNS} FROM project_improvements {where}
             ORDER BY id DESC LIMIT ? OFFSET ?""", (*params, page_size, (page - 1) * page_size))
         items = [ImprovementRecord.model_validate(dict(row)) for row in rows]
-    return ImprovementPage(items=items, total=total, page=page, page_size=page_size)
+    return ImprovementPage(items=items, total=total, page=page, page_size=page_size,
+                           status_counts=counts)
 
 
 def improvement_history(store: Store, record_id: int,

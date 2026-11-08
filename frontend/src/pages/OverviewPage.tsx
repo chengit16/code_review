@@ -6,11 +6,15 @@ import { Link } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { Health, ReviewJob } from "../api/types";
+import { ListTime } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
-import { formatTime, shortSha } from "../ui/format";
+import { shortSha } from "../ui/format";
+
 import { ReviewEffectivenessSection } from "./ReviewEffectivenessSection";
+import { IssueSummary } from "./jobs/TaskIssueSummary";
 
 interface Overview {
   summary: { repositories: number; queued: number; running: number; complete: number;
@@ -52,10 +56,13 @@ export function OverviewPage({ token }: { /** 内存中的管理口令。 */ tok
       </div>
     </section>}
     {overview.data && <section className="section"><div className="section-head"><h2>最近评审</h2><Link to="/jobs">查看全部 <ArrowUpRight size={15} /></Link></div>
-      <div className="table-scroll responsive-table"><table><thead><tr><th>任务</th><th>仓库 / 来源</th><th>提交</th><th>状态</th><th>创建时间</th><th aria-label="操作" /></tr></thead><tbody>
-        {overview.data.recent.map((job) => <tr key={job.id}><td data-label="任务">#{job.id}</td><td data-label="仓库 / 来源">{job.repository_name}<small className="table-sub">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"}</small></td><td data-label="提交" className="mono">{shortSha(job.commit_sha)}</td><td data-label="状态"><Status value={job.effective_status ?? job.status} /></td><td data-label="创建时间">{formatTime(job.created_at)}</td><td data-label="操作"><Link className="row-link" to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}><ArrowUpRight size={16} /></Link></td></tr>)}
-        {overview.data.recent.length === 0 && <tr><td colSpan={6} className="empty-row">暂无任务，先在项目配置中完成接入。</td></tr>}
-      </tbody></table></div>
+      <ListTable rowKey="id" dataSource={overview.data.recent} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: "暂无任务，先在项目配置中完成接入" }} columns={[
+        { title: "任务 / 来源", key: "source", width: 250, render: (_, job) => <><Link className="list-primary" to={`/jobs/${job.id}`}>#{job.id} · {job.repository_name}</Link><span className="list-secondary">{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "默认分支 Push"} · {shortSha(job.commit_sha)}</span></> },
+        { title: "评审状态", key: "status", width: 120, render: (_, job) => <Status value={job.list_status ?? job.effective_status ?? job.status} /> },
+        { title: "问题处理", key: "issues", render: (_, job) => <IssueSummary job={job} detailPath={(id) => `/jobs/${id}`} /> },
+        { title: "创建时间", key: "time", width: 140, render: (_, job) => <ListTime value={job.created_at} /> },
+        { title: "操作", key: "action", width: 75, render: (_, job) => <Link to={`/jobs/${job.id}`} aria-label={`查看任务 ${job.id}`}>详情</Link> },
+      ]} /><p className="form-note">仅展示最近 8 个任务，不代表全部任务或当前队列总数。</p>
     </section>}
     <ReviewEffectivenessSection token={token} />
   </div>;

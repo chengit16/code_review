@@ -172,16 +172,24 @@ def list_themes(store: Store, status: ImprovementThemeStatus | None,
     """对筛选结果稳定分页，批量读取阶段和链接避免逐主题附加查询。"""
 
     keyword = q.strip().lower()
-    where = """WHERE (?='all' OR (?='archived')=(archived_at IS NOT NULL))
-        AND (? IS NULL OR status=?) AND (? IS NULL OR category=?)
+    facet_where = """WHERE (?='all' OR (?='archived')=(archived_at IS NOT NULL))
+        AND (? IS NULL OR category=?)
         AND (? IS NULL OR EXISTS(SELECT 1 FROM improvement_theme_links link
           WHERE link.theme_id=improvement_themes.id AND link.improvement_id=?))
         AND (?='' OR instr(lower(title),?)>0 OR instr(lower(objective),?)>0
         OR instr(lower(scope),?)>0 OR instr(lower(rationale),?)>0 OR instr(lower(outcome),?)>0)"""
-    params = (archive, archive, status, status, category, category, improvement_id, improvement_id,
+    facet_params = (archive, archive, category, category, improvement_id, improvement_id,
               *(keyword for _ in range(6)))
+    # 共享基础范围；只在列表行与 total 上增加当前状态，避免分面漏带其他条件。
+    where = facet_where + " AND (? IS NULL OR status=?)"
+    params = (*facet_params, status, status)
     with store.connection() as db:
         db.execute("BEGIN")
+        counts = {row["status"]: row["count"] for row in db.execute(
+            f"SELECT status,COUNT(*) AS count FROM improvement_themes {facet_where} "
+            "GROUP BY status",
+            facet_params)}
+        counts["all"] = sum(counts.values())
         total = db.execute(f"SELECT COUNT(*) FROM improvement_themes {where}", params
                            ).fetchone()[0]
         rows = db.execute(f"""SELECT {PUBLIC_COLUMNS} FROM improvement_themes {where}
@@ -208,7 +216,8 @@ def list_themes(store: Store, status: ImprovementThemeStatus | None,
             themes = [ImprovementThemeRecord.model_validate({**dict(row),
                 "phases": phases[int(row["id"])], "improvement_ids": links[int(row["id"])]})
                 for row in rows]
-    return ImprovementThemePage(items=themes, total=total, page=page, page_size=page_size)
+    return ImprovementThemePage(items=themes, total=total, page=page, page_size=page_size,
+                                status_counts=counts)
 
 
 def theme_history(store: Store, theme_id: int, page: int,

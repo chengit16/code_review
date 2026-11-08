@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 
@@ -26,10 +26,11 @@ def register_chat_capture(app: FastAPI, store: Store, admin: Any) -> None:
     dependencies = [admin, Depends(authorize)]
 
     @app.get("/api/chat-capture", dependencies=dependencies, response_model=ChatInbox)
-    def listing(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100)) -> ChatInbox:
+    def listing(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
+                classification: Literal["issue", "pending", "progress"] | None = None) -> ChatInbox:
         """返回绑定健康度与脱敏候选，不返回会话路径、原文或凭据。"""
 
-        return inbox(store, page, page_size)
+        return inbox(store, page, page_size, classification)
 
     @app.put("/api/chat-capture/bindings/{binding_id}", dependencies=dependencies)
     def binding_update(binding_id: int, payload: ChatBindingChange) -> dict[str, str]:

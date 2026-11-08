@@ -27,7 +27,8 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await expect(page.getByRole("button", { name: "编辑 修改后仓库" })).toBeVisible();
   await page.goto("/config-history");
   // 对象名称与版本分别加载，按对象单元格和新增版本定位，避免提前选中最新修改。
-  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: "修改后仓库", exact: true }) }).filter({ hasText: "新增" }).getByRole("button", { name: /恢复版本/ }).click();
+  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: /修改后仓库/ }) }).filter({ hasText: "新增" }).getByRole("button", { name: /恢复版本/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "确定", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("配置内容已恢复");
   await page.goto("/repositories");
   await page.getByRole("button", { name: "删除 验收仓库" }).click();
@@ -177,7 +178,10 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
   await page.goto("/jobs");
   await expect(page.getByRole("heading", { name: "评审任务" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Token 消耗" })).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "预估费用" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "问题处理" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "耗时 / 尝试" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "创建时间" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "预估费用" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "合并事件" })).toBeVisible();
   await expect(page.getByText("按合并时间补审", { exact: true })).toHaveCount(0);
   await page.getByText("补触发与高级操作", { exact: true }).click();
@@ -186,7 +190,7 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
   expect(commandBarTops).toHaveLength(2);
   expect(Math.max(...commandBarTops) - Math.min(...commandBarTops)).toBeLessThan(2);
   const filterControlBoxes = await page.locator(".jobs-filter-main .ant-select, .jobs-filter-main input:not(.ant-select-input), .jobs-filter-main button").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
-  expect(filterControlBoxes.length).toBeGreaterThanOrEqual(5);
+  expect(filterControlBoxes.length).toBeGreaterThanOrEqual(4);
   for (const [index, first] of filterControlBoxes.entries()) {
     for (const second of filterControlBoxes.slice(index + 1)) {
       expect(first.right <= second.left || second.right <= first.left || first.bottom <= second.top || second.bottom <= first.top).toBe(true);
@@ -205,7 +209,7 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
 
   await page.goto("/events");
   await expect(page.getByRole("heading", { name: "合并事件" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "事件收件箱" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "列表状态" })).toBeVisible();
   await page.getByText("历史 MR 补扫与申请记录", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "按合并时间补审 MR" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });

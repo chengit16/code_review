@@ -1,7 +1,7 @@
 /** @description 管理 API 的稳定前端投影；密文字段不进入浏览器类型。 */
-import type { CumulativeUsage, ReviewTiming, ScopeAnalysis } from "./reviewExecution";
-import type { FailureAnalysis } from "./reviewDiagnostics";
 import type { ConclusionDocument, ConclusionOverview, ConclusionVersion } from "./reviewConclusions";
+import type { FailureAnalysis } from "./reviewDiagnostics";
+import type { CumulativeUsage, ReviewTiming, ScopeAnalysis } from "./reviewExecution";
 
 /** 仓库接入信息与 GitLab 回调地址。 */
 export interface Repository {
@@ -197,6 +197,13 @@ export interface ReviewJob {
   /** 各次历史单价和已知用量的累计，未知部分不作为零。 */ cumulative_usage?: CumulativeUsage;
   /** 当前尝试已持久化的发现数量；不代表完整覆盖。 */ finding_count?: number;
   /** 当前尝试发现的最高严重级别。 */ highest_severity?: string | null;
+  /** 活动补审优先的列表状态，筛选和分面数量使用同一口径。 */ list_status?: string | null;
+  /** 当前补审排队或执行状态，不改变初审事实。 */ active_recovery_status?: "queued" | "running" | null;
+  /** 当前有效发现关联问题的去重处理摘要；缺失表示旧服务端或无法核实。 */ issue_summary?: {
+    open_count: number; fixed_count: number; ignored_count: number; unknown_count: number;
+    finding_count: number | null; highest_severity: string | null; complete: boolean; no_findings: boolean;
+    available: boolean; coverage_complete: boolean; coverage_limited: boolean;
+  };
   /** 飞书发送状态，与评审状态相互独立。 */ delivery_status?: string | null;
   id: number;
   repository_id: number;
@@ -232,6 +239,7 @@ export interface TaskPage {
   total: number;
   page: number;
   page_size: number;
+  /** 忽略分页和状态导航自身条件，保留其余筛选的全量分面计数。 */ status_counts?: Record<string, number>;
 }
 
 /** OCR 发现；行号为 0 时代表文件级问题。 */
@@ -270,6 +278,7 @@ export interface ReviewPreview {
 
 /** 评审详情包含 OCR 的机器可读发现与覆盖情况。 */
 export interface ReviewJobDetail extends ReviewJob {
+  /** 当前有效发现解析到最终合并目标，缺失项保持未知，不由反馈推断。 */ resolved_finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" }>;
   /** 稳定主身份的当前人工反馈。 */ finding_feedback?: Record<string, "helpful" | "false_positive" | "fixed">;
   /** 稳定主身份的问题关联，不与初审下标混用。 */ finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" | "merged" }>;
   /** 与飞书通知相互独立的 MR 行内发布记录。 */

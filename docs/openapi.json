@@ -1558,6 +1558,14 @@
             "title": "Page Size",
             "type": "integer"
           },
+          "status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "忽略状态和分页、保留其他条件的全量数量",
+            "title": "Status Counts",
+            "type": "object"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -2311,6 +2319,14 @@
           "page_size": {
             "title": "Page Size",
             "type": "integer"
+          },
+          "status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "忽略状态和分页、保留其他条件的全量数量",
+            "title": "Status Counts",
+            "type": "object"
           },
           "total": {
             "title": "Total",
@@ -4832,6 +4848,17 @@
             ],
             "title": "Active Recovery Id"
           },
+          "active_recovery_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Recovery Status"
+          },
           "conclusions": {
             "anyOf": [
               {
@@ -4926,6 +4953,28 @@
               }
             ]
           },
+          "issue_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskIssueSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "list_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "活动补审优先，其次为当前有效评审状态",
+            "title": "List Status"
+          },
           "reason": {
             "$ref": "#/components/schemas/ReviewReason"
           },
@@ -4965,6 +5014,84 @@
         "title": "TaskExecutionResponse",
         "type": "object"
       },
+      "TaskIssueSummary": {
+        "description": "当前有效发现按最终问题身份去重；未知关联与没有可用结论不得冒充已处置。",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "coverage_complete": {
+            "title": "Coverage Complete",
+            "type": "boolean"
+          },
+          "coverage_limited": {
+            "title": "Coverage Limited",
+            "type": "boolean"
+          },
+          "finding_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Count"
+          },
+          "fixed_count": {
+            "title": "Fixed Count",
+            "type": "integer"
+          },
+          "highest_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highest Severity"
+          },
+          "ignored_count": {
+            "title": "Ignored Count",
+            "type": "integer"
+          },
+          "no_findings": {
+            "title": "No Findings",
+            "type": "boolean"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "unknown_count": {
+            "title": "Unknown Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "finding_count",
+          "highest_severity",
+          "open_count",
+          "fixed_count",
+          "ignored_count",
+          "unknown_count",
+          "complete",
+          "no_findings",
+          "coverage_complete",
+          "coverage_limited"
+        ],
+        "title": "TaskIssueSummary",
+        "type": "object"
+      },
       "TaskSearchResponse": {
         "description": "全量检索的稳定分页响应，条目保留既有兼容字段。",
         "properties": {
@@ -4982,6 +5109,13 @@
           "page_size": {
             "title": "Page Size",
             "type": "integer"
+          },
+          "status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status Counts",
+            "type": "object"
           },
           "total": {
             "title": "Total",
@@ -5242,6 +5376,17 @@
               "minimum": 1,
               "title": "Page",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
             }
           },
           {
@@ -5617,6 +5762,27 @@
               "title": "Page Size",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "classification",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "issue",
+                    "pending",
+                    "progress"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Classification"
+            }
           }
         ],
         "responses": {
@@ -5746,6 +5912,149 @@
           }
         },
         "summary": "Event Link"
+      }
+    },
+    "/api/config-history-search": {
+      "get": {
+        "description": "完整历史分页；兼容保留原最近记录接口，拒绝无时区或反向区间。",
+        "operationId": "config_history_search_api_config_history_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "repository",
+                "notification_target",
+                "model_profile"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "object_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Object Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "baseline",
+                    "created",
+                    "updated",
+                    "deleted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Config History Search Api Config History Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Config History Search"
       }
     },
     "/api/config-history/{kind}": {
@@ -7990,6 +8299,38 @@
               ],
               "title": "View"
             }
+          },
+          {
+            "in": "query",
+            "name": "issue_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "resolved",
+                    "none",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notification_failed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Notification Failed",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -9422,6 +9763,16 @@
             "schema": {
               "default": true,
               "title": "Latest Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "summary_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Summary Only",
               "type": "boolean"
             }
           },
@@ -11526,6 +11877,38 @@
                 }
               ],
               "title": "View"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issue_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "open",
+                    "resolved",
+                    "none",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notification_failed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Notification Failed",
+              "type": "boolean"
             }
           }
         ],

@@ -1,13 +1,15 @@
 /** @description 台账详情与逐次历史；编辑失败不破坏快照，部署状态始终单列。 */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { archiveActionLabels, getImprovement, getImprovementHistory } from "../api/improvements";
 import type { ImprovementRecord } from "../api/improvements";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { formatTime } from "../ui/format";
+import { listReturnTarget } from "../ui/listReturn";
+
 import { ImprovementArchiveControl } from "./ImprovementArchiveControl";
 import { ImprovementEditor } from "./ImprovementEditor";
 import { ImprovementFacts } from "./ImprovementFacts";
@@ -15,6 +17,7 @@ import { RelatedImprovementThemes } from "./RelatedImprovementThemes";
 
 /** 当前摘要和历史独立查询；历史失败不妨碍阅读已有摘要。 */
 export function ImprovementDetailPage({ token }: { /** 内存管理员会话。 */ token: string }) {
+  const location = useLocation();
   const { id } = useParams();
   const recordId = Number(id);
   const [editing, setEditing] = useState<ImprovementRecord | null>(null);
@@ -25,7 +28,7 @@ export function ImprovementDetailPage({ token }: { /** 内存管理员会话。 
   const detail = useQuery({ queryKey: ["improvement", recordId], queryFn: ({ signal }) => getImprovement(token, recordId, signal), enabled: valid });
   const history = useQuery({ queryKey: ["improvement-history", recordId, historyPage], queryFn: ({ signal }) => getImprovementHistory(token, recordId, historyPage, signal), enabled: valid && Boolean(detail.data) });
   return <div className="page">
-    <Link to="/improvements">返回问题与改进</Link>
+    <Link to={listReturnTarget(location.search)}>返回问题与改进</Link>
     <PageHeader title={detail.data?.title ?? "记录详情"} subtitle={detail.data ? `记录 #${recordId} · 版本 ${detail.data.version} · 更新于 ${formatTime(detail.data.updated_at)}` : "读取持久化记录"} actions={detail.data && !detail.data.archived_at && <button className="button button-primary" type="button" disabled={detail.isError} onClick={() => { setFeedback(""); setEditing(detail.data ?? null); }}>编辑并追加进展</button>} />
     {!valid ? <p className="form-error" role="alert">记录编号无效</p> : <QueryState loading={detail.isLoading} error={detail.error} onRetry={() => void detail.refetch()} />}
     {feedback && <p className="form-success" role="status">{feedback}</p>}

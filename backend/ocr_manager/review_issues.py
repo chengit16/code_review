@@ -218,6 +218,17 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                   keyword, keyword, keyword, keyword)
         with store.connection() as db:
             db.execute("BEGIN")
+            # 分面不应用当前处置状态；已合并历史独立计数，全部仍排除已合并。
+            facet_params = (repository_id, repository_id, severity, severity,
+                            keyword, keyword, keyword, keyword)
+            facet_where = """WHERE (? IS NULL OR i.repository_id=?)
+                AND (? IS NULL OR i.severity=?) AND (? IS NULL
+                OR instr(lower(i.content),lower(?))>0
+                OR instr(lower(i.path),lower(?))>0 OR CAST(i.id AS TEXT)=?)"""
+            counts = {row["status"]: row["count"] for row in db.execute(
+                f"SELECT i.status,COUNT(*) AS count FROM review_issues i {facet_where} "
+                "GROUP BY i.status", facet_params)}
+            counts["all"] = sum(counts.get(key, 0) for key in ("open", "fixed", "ignored"))
             total = db.execute(
                 f"SELECT COUNT(*) FROM review_issues i {where}", params
             ).fetchone()[0]
@@ -232,7 +243,7 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                 ON r.id=i.repository_id {where} ORDER BY i.id DESC LIMIT ? OFFSET ?""",
                 (*params, page_size, (page - 1) * page_size)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total,
-                "page": page, "page_size": page_size}
+                "page": page, "page_size": page_size, "status_counts": counts}
 
     @app.post("/api/review-issues/batch-update", dependencies=[admin],
               response_model=IssueBatchResult)

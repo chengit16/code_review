@@ -6,23 +6,26 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
-import { AttemptTimeline, JobExecution } from "./JobExecution";
-import { JobFiles } from "./JobFiles";
-import { ReviewFailureAnalysis } from "./ReviewFailureAnalysis";
-import { JobNavigation } from "./JobNavigation";
-import { ModelUsage } from "./ModelUsage";
-import { TaskStop } from "./TaskControls";
-import { AttemptReports } from "./AttemptReports";
-import { EffectiveReview } from "./EffectiveReview";
-import { ReviewRecoveryPanel } from "./ReviewRecoveryPanel";
-import { FindingsPanel } from "./FindingsPanel";
-import { CoverageReasons } from "./CoverageReasons";
-import { GitLabPublications } from "./GitLabPublications";
 import type { ReviewJobDetail } from "../api/types";
+import { ListExcerpt } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { Status } from "../ui/Status";
 import { formatTime } from "../ui/format";
+
+import { AttemptReports } from "./AttemptReports";
+import { CoverageReasons } from "./CoverageReasons";
+import { EffectiveReview } from "./EffectiveReview";
+import { FindingsPanel } from "./FindingsPanel";
+import { GitLabPublications } from "./GitLabPublications";
+import { AttemptTimeline, JobExecution } from "./JobExecution";
+import { JobFiles } from "./JobFiles";
+import { JobNavigation } from "./JobNavigation";
+import { ModelUsage } from "./ModelUsage";
+import { ReviewFailureAnalysis } from "./ReviewFailureAnalysis";
+import { ReviewRecoveryPanel } from "./ReviewRecoveryPanel";
+import { TaskStop } from "./TaskControls";
 
 /** 按任务重新挂载详情，防止连续导航时沿用旧任务的发现筛选和操作状态。 */
 export function JobDetailPage({ token, canEdit = true }: {
@@ -41,7 +44,10 @@ function JobDetail({ token, canEdit }: {
   const navigate = useNavigate();
   const location = useLocation();
   // 来源保存在 URL 中，刷新和分享仍保留筛选；兼容旧版列表的路由 state。
-  const back = location.search ? `/jobs${location.search}` : typeof location.state?.back === "string" && location.state.back.startsWith("/jobs?") ? location.state.back : "/jobs";
+  const listParams = new URLSearchParams(location.search);
+  const openFindings = listParams.get("finding_state") === "open";
+  listParams.delete("finding_state");
+  const back = listParams.size ? `/jobs?${listParams}` : typeof location.state?.back === "string" && location.state.back.startsWith("/jobs?") ? location.state.back : "/jobs";
   const download = useMutation({ mutationFn: () => downloadTaskReport(token, Number(id)) });
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["job", id], queryFn: ({ signal }) => apiRequest<ReviewJobDetail>(token, `/api/jobs/${id}`, { signal }), refetchInterval: (current) => (["queued", "running"].includes(current.state.data?.status ?? "") || current.state.data?.active_recovery_id) ? 5000 : 30000, enabled: Boolean(id) });
@@ -51,13 +57,21 @@ function JobDetail({ token, canEdit }: {
     mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
     onSuccess: async () => {
       // 反馈可能关闭跨任务共享的问题，刷新所有详情、问题列表及成效统计。
-      await Promise.all(["job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness"].map((key) =>
+      await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })));
     },
   });
   const job = query.data;
   const coverage = job?.result?.manifest?.coverage;
   const comments = job?.result?.comments ?? [];
+  const issueIds = { ...job?.issue_ids };
+  const issueStatuses = { ...job?.issue_statuses };
+  if (job?.resolved_finding_issues) {
+    comments.forEach((_, index) => {
+      const issue = job.resolved_finding_issues?.[`j${job.id}:a${job.attempts}:c${index}`];
+      if (issue) { issueIds[index] = issue.id; issueStatuses[index] = issue.status; }
+    });
+  }
   const excluded = job?.result?.preview?.files.filter((file) => !file.will_review) ?? [];
   return <div className="page job-detail-page">
     <JobNavigation token={token} id={Number(id)} back={back} />
@@ -89,7 +103,7 @@ function JobDetail({ token, canEdit }: {
       {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
       {job.error && <div className="detail-error" role="alert">{job.error}<p>{["configuration", "ocr_configuration"].includes(job.failure_stage ?? "") ? <Link to="/settings?tab=model">检查模型配置 →</Link> : <Link to="/repositories">打开项目配置，查看接入诊断 →</Link>}</p></div>}
       <section id="job-result" className="job-detail-region" aria-label="评审结论与发现">
-        {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} /> : <FindingsPanel comments={comments} feedback={job.feedback} issueIds={job.issue_ids} issueStatuses={job.issue_statuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />}
+        {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} initialIssueState={openFindings ? "open" : "all"} /> : <FindingsPanel initialIssueState={openFindings ? "open" : "all"} comments={comments} feedback={job.feedback} issueIds={issueIds} issueStatuses={issueStatuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />}
       </section>
       <section id="job-execution" className="job-detail-region" aria-label="失败与补审">
         <JobExecution job={job} />
@@ -107,7 +121,10 @@ function JobDetail({ token, canEdit }: {
       </div>
       {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
       {canEdit && !job.effective_document && <GitLabPublications token={token} job={job} />}
-      <details id="job-history" className="advanced-panel"><summary>变更文件与排除范围</summary><JobFiles job={job} />      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><div className="table-scroll"><table><thead><tr><th>文件</th><th>原因</th></tr></thead><tbody>{excluded.map((file) => <tr key={file.path}><td className="mono file-path">{file.path}</td><td>{file.exclude_reason ?? "未说明"}</td></tr>)}</tbody></table></div></section>}
+      <details id="job-history" className="advanced-panel"><summary>变更文件与排除范围</summary><JobFiles job={job} />      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><ListTable rowKey="path" dataSource={excluded} pagination={false} scroll={{ x: 650 }} columns={[
+        { title: "文件", key: "path", render: (_, file) => <ListExcerpt text={file.path} /> },
+        { title: "原因", key: "reason", render: (_, file) => <ListExcerpt text={file.exclude_reason ?? "未说明"} /> },
+      ]} /></section>}
 </details>
       <details className="advanced-panel"><summary>历史报告与对比</summary><AttemptReports token={token} job={job} key={`${job.id}-${job.attempts}`} /></details>
       <div id="job-notifications" className="job-footer-grid job-detail-region">

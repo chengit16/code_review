@@ -1,20 +1,23 @@
 /** @description 管理 OCR 模型配置，只有一个配置可处于启用状态。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Table } from "antd";
+import { Button, Card } from "antd";
 import type { TableColumnsType } from "antd";
-import { Check, Plus, RefreshCw, Settings2, Trash2, X } from "lucide-react";
+import { Plus, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { apiRequest } from "../api/client";
 import type { ModelConfiguration } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { ListSearch, ListStatusNav } from "../ui/ListControls";
+import { ListTable as Table } from "../ui/ListTable";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
-import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
+import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
+import { useLocalList } from "../ui/useLocalList";
 
 interface ModelForm {
   name: string;
@@ -95,14 +98,14 @@ export function SettingsPage({ token, embedded = false }: {
     setOpen(true);
   }
   const active = profiles.data?.find((profile) => profile.enabled);
+  const list = useLocalList(profiles.error ? undefined : profiles.data, (item) => `${item.name} ${item.model} ${item.provider} ${item.base_url}`, (item) => item.enabled ? "enabled" : "disabled", "model_");
   const columns: TableColumnsType<ModelConfiguration> = [
-    { title: "配置名称", dataIndex: "name", key: "name", render: (name: string) => <strong>{name}</strong> },
+    { title: "配置名称", dataIndex: "name", key: "name", render: (name: string, profile) => <><strong>{name}</strong><span className="list-secondary mono">{profile.model}</span></> },
     { title: "Provider", dataIndex: "provider", key: "provider", width: 150, render: (value: string) => value === "dashscope" ? "百练 / DashScope" : value },
-    { title: "模型标识", dataIndex: "model", key: "model", width: 180, render: (value: string) => <span className="mono">{value}</span> },
     { title: "Base URL", dataIndex: "base_url", key: "base_url", width: 220, render: (value: string) => <span className="mono">{value || "内置端点"}</span> },
     { title: "单价 / 百万 Token", key: "price", width: 210, render: (_: unknown, profile) => profile.input_price_per_million != null || profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million ?? "未配置"} 输入 / ${profile.output_price_per_million ?? "未配置"} 输出` : "未配置" },
     { title: "状态", dataIndex: "enabled", key: "enabled", width: 100, render: (enabled: number) => enabled ? "已启用" : "未启用" },
-    { title: "操作", key: "actions", width: 132, render: (_: unknown, profile) => <div className="row-actions">{!profile.enabled && <Button type="text" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}><Check size={16} /></Button>}<Button type="text" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}><Settings2 size={16} /></Button><Button danger type="text" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}><Trash2 size={16} /></Button></div> },
+    { title: "操作", key: "actions", width: 132, render: (_: unknown, profile) => <div className="row-actions">{!profile.enabled && <Button type="text" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>启用</Button>}<Button type="text" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="text" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
   ];
   return <div className={embedded ? "settings-content" : "page"}>
     <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
@@ -111,7 +114,7 @@ export function SettingsPage({ token, embedded = false }: {
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
     {!profiles.isLoading && !profiles.error && <Card className="model-profile-card" size="small" title={<h2 className="model-profile-heading">模型配置</h2>}>
-      <Table rowKey="id" size="middle" columns={columns} dataSource={profiles.data ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1000 }} pagination={{ pageSize: 25, pageSizeOptions: [25, 50, 100], showSizeChanger: true, locale: { items_per_page: "条/页", prev_page: "上一页", next_page: "下一页", page: "页", jump_to: "跳至", page_size: "每页条数" }, showTotal: (total) => `${total} 个配置` }} />
+<div className="list-toolbar"><ListSearch key={list.q} label="搜索配置" value={list.q} onSearch={(value) => list.update("q", value)} /></div><ListStatusNav value={list.status} labels={{ all: "全部", enabled: "已启用", disabled: "未启用" }} counts={list.counts} onChange={(value) => list.update("status", value)} />      <Table rowKey="id" size="middle" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1000 }} pagination={list.pagination} />
       <p className="form-note">连接测试只测试当前已启用的模型{active ? `“${active.name}”` : ""}，保存配置不会发起模型请求。切换模型后请重新测试，最近结果可能来自之前启用的配置。</p>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </Card>}

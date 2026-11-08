@@ -82,6 +82,7 @@ test("HTTP 回调及令牌复制有降级路径，失败提示手动复制且不
   await expect(page.getByRole("button", { name: "已复制", exact: true })).toBeVisible();
   // 使用合成令牌；不读取或污染用户真实业务令牌。
   await page.route("**/api/repositories/*/webhook-token", (route) => route.fulfill({ json: { webhook_token: "synthetic-http-token" } }));
+  await page.getByRole("row").filter({ hasText: "验收任务项目" }).getByRole("button", { name: "接入信息" }).click();
   const copy = page.getByRole("button", { name: "复制 验收任务项目 的 Webhook Token", exact: true });
   await copy.click();
   await expect(page.getByRole("status").filter({ hasText: /^已复制$/ })).toBeVisible();
@@ -94,6 +95,7 @@ test("HTTP 回调及令牌复制有降级路径，失败提示手动复制且不
   await expect(page.getByLabel("验收任务项目 的 Webhook Token", { exact: true })).toHaveValue("synthetic-http-token");
   await copy.click();
   await expect(page.getByRole("alert")).toContainText("手动选择令牌");
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page.locator(".webhook-callback").getByRole("button").click();
   await expect(page.getByText("复制失败，请手动选择回调地址", { exact: true })).toBeVisible();
   expect(await page.locator('textarea[aria-label="临时复制内容"]').count()).toBe(0);

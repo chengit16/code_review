@@ -1,5 +1,7 @@
 /** @description 展示 OCR 覆盖失败和豁免的安全原因字段，不回显原始模型内容。 */
 import type { ReviewJobDetail } from "../api/types";
+import { ListExcerpt } from "../ui/ListControls";
+import { ListTable } from "../ui/ListTable";
 
 interface Item { item_id?: string; path?: string; classification?: string; reason?: string; message?: string }
 
@@ -18,5 +20,9 @@ export function CoverageReasons({ job }: { /** 已鉴权的任务详情。 */ jo
   const coverage = job.result?.manifest?.coverage;
   const groups = [{ label: "失败文件", items: project(coverage?.failed ?? []) }, { label: "豁免文件", items: project(coverage?.waived ?? []) }];
   if (groups.every((group) => !group.items.length)) return null;
-  return <section className="section"><div className="section-head"><h2>失败与豁免原因</h2></div>{groups[0].items.length > 0 && <p className="coverage-note">以下为 OCR 文件级失败记录，不是已确认的根因。请求重试、HTTP 状态与计时见上方“分层失败诊断”；历史记录缺失时不会在此推测详细原因。</p>}{groups.map((group) => group.items.length > 0 && <div key={group.label}><h3>{group.label}</h3><div className="table-scroll"><table><thead><tr><th>文件或项</th><th>分类</th><th>原因</th></tr></thead><tbody>{group.items.map((item, index) => <tr key={index}><td className="mono">{item.path ?? item.item_id ?? "未提供"}</td><td>{item.classification ?? "未提供"}</td><td>{item.reason ?? item.message ?? "未提供"}</td></tr>)}</tbody></table></div></div>)}</section>;
+  return <section className="section"><div className="section-head"><h2>失败与豁免原因</h2></div>{groups[0].items.length > 0 && <p className="coverage-note">以下为 OCR 文件级失败记录，不是已确认的根因。请求重试、HTTP 状态与计时见上方“分层失败诊断”；历史记录缺失时不会在此推测详细原因。</p>}{groups.map((group) => group.items.length > 0 && <div key={group.label}><h3>{group.label}</h3><ListTable rowKey="key" dataSource={group.items.map((item, index) => ({ ...item, key: index }))} pagination={false} scroll={{ x: 650 }} columns={[
+    { title: "文件或项", key: "path", render: (_, item) => <ListExcerpt text={item.path ?? item.item_id ?? "未提供"} /> },
+    { title: "分类", key: "classification", render: (_, item) => item.classification ?? "未提供" },
+    { title: "原因", key: "reason", render: (_, item) => <ListExcerpt text={item.reason ?? item.message ?? "未提供"} /> },
+  ]} /></div>)}</section>;
 }

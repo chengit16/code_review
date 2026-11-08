@@ -53,14 +53,14 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
                since: datetime | None = None, until: datetime | None = None) -> dict[str, Any]:
         """返回全量事件的稳定分页，任务数量和最新任务 ID 同事务读取。"""
 
-        if since and until and since > until:
-            raise HTTPException(422, "起始时间不能晚于结束时间")
+        # 先拒绝无时区输入，再比较区间，避免混合时间类型触发服务端异常。
         if (since and since.tzinfo is None) or (until and until.tzinfo is None):
             raise HTTPException(422, "时间必须包含时区")
+        if since and until and since > until:
+            raise HTTPException(422, "起始时间不能晚于结束时间")
         conditions: list[str] = []
         args: list[Any] = []
-        for name, filter_value in (("repository_id", repository_id), ("status", status),
-                                   ("mr_iid", mr_iid)):
+        for name, filter_value in (("repository_id", repository_id), ("mr_iid", mr_iid)):
             if filter_value is not None:
                 conditions.append(f"e.{name}=?")
                 args.append(filter_value)
@@ -72,9 +72,18 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
             conditions.append("e.created_at < ?")
             args.append((until.astimezone(UTC) + timedelta(minutes=1)).strftime(
                 "%Y-%m-%d %H:%M:%S"))
+        facet_where = " WHERE " + " AND ".join(conditions) if conditions else ""
+        facet_args = list(args)
+        if status is not None:
+            conditions.append("e.status=?")
+            args.append(status)
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         with store.connection() as db:
             db.execute("BEGIN")
+            counts = {row["status"]: row["count"] for row in db.execute(
+                f"SELECT e.status,COUNT(*) AS count FROM merge_events e{facet_where} "
+                "GROUP BY e.status", facet_args)}
+            counts["all"] = sum(counts.values())
             total = db.execute(f"SELECT COUNT(*) FROM merge_events e{where}", args).fetchone()[0]
             rows = db.execute(f"""SELECT e.*, r.name AS repository_name,
                 COUNT(j.id) AS job_count, MAX(j.id) AS latest_job_id
@@ -83,7 +92,7 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
                 GROUP BY e.id ORDER BY e.id DESC LIMIT ? OFFSET ?""",
                 (*args, page_size, (page-1)*page_size)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total,
-                "page": page, "page_size": page_size}
+                "page": page, "page_size": page_size, "status_counts": counts}
 
     @app.post("/api/repositories/{repository_id}/mrs/backfill", dependencies=[admin])
     def enqueue(repository_id: int, payload: BackfillRequest) -> dict[str, int]:

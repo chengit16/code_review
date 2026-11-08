@@ -208,7 +208,8 @@ def change_binding(store: Store, binding_id: int, payload: ChatBindingChange) ->
             raise ValueError("授权已变更，请刷新后核对")
 
 
-def inbox(store: Store, page: int = 1, page_size: int = 25) -> ChatInbox:
+def inbox(store: Store, page: int = 1, page_size: int = 25,
+          classification: str | None = None) -> ChatInbox:
     """一致读取脱敏分页及运行事实；未运行或失败不伪装为空收件箱。"""
 
     with store.connection() as db:
@@ -217,13 +218,15 @@ def inbox(store: Store, page: int = 1, page_size: int = 25) -> ChatInbox:
             ChatBinding.model_validate(dict(row))
             for row in db.execute("SELECT * FROM chat_source_bindings ORDER BY id")
         ]
-        total = db.execute("SELECT count(*) FROM chat_capture_events").fetchone()[0]
+        where = "WHERE (? IS NULL OR classification=?)"
+        args = (classification, classification)
+        total = db.execute(f"SELECT count(*) FROM chat_capture_events {where}", args).fetchone()[0]
         pending = db.execute(
             "SELECT count(*) FROM chat_capture_events WHERE improvement_id IS NULL AND role='user'"
         ).fetchone()[0]
         rows = db.execute(
-            "SELECT * FROM chat_capture_events ORDER BY id DESC LIMIT ? OFFSET ?",
-            (page_size, (page - 1) * page_size),
+            f"SELECT * FROM chat_capture_events {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            (*args, page_size, (page - 1) * page_size),
         ).fetchall()
     return ChatInbox(
         bindings=bindings,

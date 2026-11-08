@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from ocr_manager.model_pricing import PRICE_FIELDS
@@ -71,6 +72,45 @@ def list_config_history(store: Store, kind: str, object_id: int | None) -> list[
             AND (? IS NULL OR object_id=?) ORDER BY id DESC LIMIT 100""",
             (kind, object_id, object_id),
         ).fetchall()
+    return _public_revisions(rows, kind)
+
+
+def search_config_history(store: Store, kind: str, object_id: int | None,
+                          action: str | None, since: datetime | None,
+                          until: datetime | None, page: int, page_size: int) -> dict[str, Any]:
+    """全历史按同一快照分页，只投影脱敏字段差异；时间区间必须有时区。"""
+
+    if any(value and value.tzinfo is None for value in (since, until)):
+        raise ValueError("时间必须包含时区")
+    if since and until and since > until:
+        raise ValueError("起始时间不能晚于结束时间")
+    conditions = ["object_type=?"]
+    args: list[Any] = [kind]
+    for name, value in (("object_id", object_id), ("action", action)):
+        if value is not None:
+            conditions.append(f"{name}=?")
+            args.append(value)
+    if since:
+        conditions.append("created_at>=?")
+        args.append(since.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S"))
+    if until:
+        conditions.append("created_at<?")
+        args.append((until.astimezone(UTC) + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S"))
+    where = " AND ".join(conditions)
+    with store.connection() as db:
+        db.execute("BEGIN")
+        total = db.execute(f"SELECT COUNT(*) FROM config_revisions WHERE {where}", args
+                           ).fetchone()[0]
+        rows = db.execute(f"SELECT * FROM config_revisions WHERE {where} "
+                          "ORDER BY id DESC LIMIT ? OFFSET ?",
+                          (*args, page_size, (page - 1) * page_size)).fetchall()
+    return {"items": _public_revisions(rows, kind), "total": total,
+            "page": page, "page_size": page_size}
+
+
+def _public_revisions(rows: list[Any], kind: str) -> list[dict[str, Any]]:
+    """新旧查询共用脱敏投影，密文和凭据长度均不进入结果。"""
+
     result = []
     for row in rows:
         before = json.loads(row["before_json"] or "{}")

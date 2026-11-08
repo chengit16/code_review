@@ -4,11 +4,16 @@ import type { ReviewComment } from "./types";
 /** 合并前一个 MR 版本的服务端事实，不包含凭据。 */
 export interface PremergeReview {
   id: number; repository_id: number; repository_name: string; mr_iid: number;
-  head_sha: string; status: string; result_json: string | null;
+  head_sha: string; status: string;
+  /** 摘要模式不返回完整模型结果，详情接口才提供。 */ result_json?: string | null;
   changed_files?: string | null; context_json?: string | null;
   /** 安全执行策略快照；旧记录为空，不代表已经采用当前策略。 */
   execution_policy?: string | null;
   error: string | null; created_at: string;
+  /** 列表只读摘要；旧服务缺失时显示待核实，不解析正文推断成功。 */
+  summary?: { result_available: boolean; findings_count: number | null; highest_severity: string | null;
+    coverage: "complete" | "partial" | "unknown"; excluded_count: number | null; waived_count: number | null };
+
 }
 
 /** 独立于合并后任务的版本状态。 */

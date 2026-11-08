@@ -5,6 +5,8 @@ import type { MergeEvent } from "./types";
 
 /** 一页事件及其关联任务数量，事件记录以 SQLite 为准。 */
 export interface EventPage {
+  /** 忽略当前事件状态及分页，保留其他条件的全量数量。 */
+  status_counts?: Record<string, number>;
   items: MergeEvent[];
   total: number;
   page: number;

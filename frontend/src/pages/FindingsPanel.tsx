@@ -1,4 +1,5 @@
 /** @description 任务发现筛选和就地处理；问题状态以服务端为准，索引始终使用原始结果位置。 */
+import { Select } from "antd";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -16,7 +17,7 @@ const feedbackOptions = [
 ] as const;
 
 /** 文件、级别和反馈筛选只改变视图，服务端继续校验原始发现索引。 */
-export function FindingsPanel({ comments, findingIds, findingSources, feedback, issueIds = {}, issueStatuses = {}, status, coverageWaived, onFeedback, pending, canEdit = true }: {
+export function FindingsPanel({ comments, findingIds, findingSources, feedback, issueIds = {}, issueStatuses = {}, status, coverageWaived, onFeedback, pending, canEdit = true, initialIssueState = "all" }: {
   /** OCR 发现原始顺序。 */ comments: ReviewComment[];
   /** 聚合后的稳定来源身份，不作为旧接口索引。 */ findingIds?: string[];
   /** 每条发现的可读来源。 */ findingSources?: string[];
@@ -28,14 +29,17 @@ export function FindingsPanel({ comments, findingIds, findingSources, feedback, 
   /** 发送原始索引及新标记。 */ onFeedback: (index: number, verdict: Verdict | null) => void;
   /** 保存期间禁止重复触发。 */ pending: boolean;
   /** 只控制反馈按钮，服务端仍执行角色授权。 */ canEdit?: boolean;
+  /** 详情直达时的初始视图，筛选只改变展示，不提交处置。 */ initialIssueState?: "all" | "open";
 }) {
   const [severity, setSeverity] = useState("all");
   const [file, setFile] = useState("all");
   const [verdict, setVerdict] = useState("all");
+  const [issueState, setIssueState] = useState(initialIssueState);
   const files = [...new Set(comments.map((comment) => comment.path))].sort();
   const visible = comments.map((comment, index) => ({ comment, index })).filter(({ comment, index }) =>
     (severity === "all" || (comment.severity ?? "none") === severity) &&
     (file === "all" || comment.path === file) &&
+    (issueState === "all" || issueStatuses[index] === "open") &&
     (verdict === "all" || (feedback[index] ?? "unmarked") === verdict));
   const canSubmit = !pending && ["complete", "partial", "failed", "skipped"].includes(status);
 
@@ -47,6 +51,7 @@ export function FindingsPanel({ comments, findingIds, findingSources, feedback, 
         <SelectField label="严重级别" value={severity} onValueChange={setSeverity} options={[{ value: "all", label: "全部级别" }, ...[...new Set(comments.map((comment) => comment.severity ?? "none"))].map((value) => ({ value, label: value === "none" ? "未分级" : formatSeverity(value) }))]} />
         <SelectField label="文件" value={file} onValueChange={setFile} options={[{ value: "all", label: "全部文件" }, ...files.map((value) => ({ value, label: value }))]} />
         <SelectField label="反馈" value={verdict} onValueChange={setVerdict} options={[{ value: "all", label: "全部反馈" }, { value: "unmarked", label: "未标记" }, ...feedbackOptions.map(({ value, label }) => ({ value, label }))]} />
+        <label className="jobs-filter-field">问题处理<Select aria-label="发现的问题处理" value={issueState} onChange={setIssueState} options={[{ value: "all", label: "全部问题" }, { value: "open", label: "待处理问题" }]} /></label>
       </div>
     </>}
     {visible.length ? <div className="findings">{visible.map(({ comment, index }) => {

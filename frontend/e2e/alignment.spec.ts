@@ -46,6 +46,7 @@ for (const width of [1280, 390, 320]) {
     let writes = 0;
     page.on("request", (request) => { if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) writes += 1; });
     await page.goto("/premerge");
+    await page.getByText("更多筛选", { exact: true }).click();
     await expect(page.getByRole("checkbox", { name: /包含历史版本/ })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.locator(".version-toggle").screenshot({ path: `test-results/history-checkbox-${width}.png` });

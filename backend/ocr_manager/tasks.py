@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import Any
 
 from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.review_effective import status_sql
 from ocr_manager.review_observability import enrich_jobs
 from ocr_manager.storage import Store
+from ocr_manager.task_issue_summary import TASK_FACTS_CTE, attach_task_facts
 
 
 def task_view_clause(view: str | None) -> str | None:
@@ -41,8 +43,15 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
         clauses.append(f"({view})")
     for field in ("repository_id", "status", "target_branch", "mr_iid"):
         if filters.get(field) is not None:
-            clauses.append(f"{status_sql() if field == 'status' else f'j.{field}'}=?")
+            clauses.append(f"{'f.list_status' if field == 'status' else f'j.{field}'}=?")
             values.append(filters[field])
+    issue_state = filters.get("issue_state")
+    issue_clauses = {"open": "f.open_count>0", "resolved": "f.resolved=1",
+                     "none": "f.no_findings=1", "unknown": "f.unknown=1"}
+    if issue_state in issue_clauses:
+        clauses.append(issue_clauses[issue_state])
+    if filters.get("notification_failed"):
+        clauses.append(f"({task_view_clause('notification_failed')})")
     if filters.get("sha"):
         clauses.append("j.commit_sha LIKE ?")
         values.append(f"{filters['sha']}%")
@@ -61,9 +70,11 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
     with store.connection() as db:
         # 数量和数据在同一读事务内，避免 Worker 更新时出现自相矛盾的分页结果。
         db.execute("BEGIN")
-        total = db.execute(f"SELECT COUNT(*) FROM review_jobs j{where}", values).fetchone()[0]
+        total = db.execute(f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
+            JOIN task_facts f ON f.job_id=j.id{where}""", values).fetchone()[0]
         rows = db.execute(
-            f"""SELECT j.id, j.repository_id, j.event_id, j.mr_iid, j.commit_sha, j.commit_author,
+            f"""{TASK_FACTS_CTE} SELECT j.id, j.repository_id, j.event_id,
+            j.mr_iid, j.commit_sha, j.commit_author,
             j.ordinal, j.target_branch, j.status, j.error, j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
             j.usage_json, j.config_snapshot,
@@ -81,7 +92,7 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
               WHEN 'low' THEN 1 ELSE 0 END DESC LIMIT 1) AS highest_severity,
             (SELECT d.status FROM notification_deliveries d WHERE d.job_id=j.id)
               AS delivery_status FROM review_jobs j
-            JOIN repositories r ON r.id=j.repository_id{where}
+            JOIN repositories r ON r.id=j.repository_id JOIN task_facts f ON f.job_id=j.id{where}
             ORDER BY j.id DESC LIMIT ? OFFSET ?""",
             [*values, page_size, (page - 1) * page_size],
         )
@@ -96,7 +107,31 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
             item["estimated_cost"] = estimate_cost(usage, snapshot)
             items.append(item)
         enrich_jobs(db, items)
-        return {"items": items, "total": total, "page": page, "page_size": page_size}
+        attach_task_facts(db, items)
+        status_counts = _status_counts(db, filters)
+        return {"items": items, "total": total, "page": page, "page_size": page_size,
+                "status_counts": status_counts}
+
+
+def _status_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[str, int]:
+    """同一事务忽略状态导航自身条件和分页，保留项目、问题处置及通知条件。"""
+
+    base = dict(filters)
+    base.pop("status", None)
+    if base.get("view") in {"active", "attention"}:
+        base.pop("view", None)
+    clauses, values = _job_filters(base)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    rows = db.execute(f"""{TASK_FACTS_CTE} SELECT f.list_status AS state,COUNT(*) AS count
+        FROM review_jobs j JOIN task_facts f ON f.job_id=j.id{where} GROUP BY f.list_status""",
+        values)
+    counts = {key: 0 for key in ("queued", "running", "complete", "partial", "failed",
+                                "skipped", "cancelled")}
+    for row in rows:
+        if row["state"] in counts:
+            counts[row["state"]] = row["count"]
+    counts["total"] = sum(counts.values())
+    return counts
 
 
 def job_neighbors(store: Store, job_id: int, filters: dict[str, Any]) -> dict[str, int | None]:
@@ -112,7 +147,8 @@ def job_neighbors(store: Store, job_id: int, filters: dict[str, Any]) -> dict[st
         for direction, operator, order in (("previous_id", ">", "ASC"), ("next_id", "<", "DESC")):
             where = " AND ".join([*clauses, f"j.id {operator} ?"])
             row = db.execute(
-                f"SELECT j.id FROM review_jobs j WHERE {where} ORDER BY j.id {order} LIMIT 1",
+                f"""{TASK_FACTS_CTE} SELECT j.id FROM review_jobs j
+                JOIN task_facts f ON f.job_id=j.id WHERE {where} ORDER BY j.id {order} LIMIT 1""",
                 [*values, job_id],
             ).fetchone()
             neighbors[direction] = row["id"] if row else None

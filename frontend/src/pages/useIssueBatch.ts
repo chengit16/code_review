@@ -30,7 +30,7 @@ export function useIssueBatch(token: string, items: IssueSelectable[]) {
       setSelected({});
       setNote("");
       // 问题可能被多个任务引用，批量结果同步刷新列表、详情、卡片和成效统计。
-      await Promise.all(["review-issues", "review-issue", "job", "review-effectiveness"].map((key) =>
+      await Promise.all(["jobs", "job-neighbors", "review-issues", "review-issue", "job", "review-effectiveness"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })));
     },
   });

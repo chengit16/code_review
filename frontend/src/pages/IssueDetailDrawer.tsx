@@ -38,7 +38,7 @@ export function IssueDetailDrawer({ token, id, canEdit, batchPending, onSelect }
   const candidates = useQuery({ queryKey: ["issue-merge-candidates", detail.data?.repository_id, debouncedSearch],
     queryFn: ({ signal }) => apiRequest<{ items: Issue[] }>(token, `/api/review-issues?repository_id=${detail.data?.repository_id}&status=open&page_size=10&q=${encodeURIComponent(debouncedSearch)}`, { signal }),
     enabled: canEdit && detail.data?.status === "open" && Boolean(debouncedSearch) && search.trim() === debouncedSearch });
-  const refresh = () => { for (const key of ["review-issues", "review-issue", "job", "review-effectiveness", "issue-merge-candidates"]) void client.invalidateQueries({ queryKey: [key] }); };
+  const refresh = () => { for (const key of ["jobs", "job-neighbors", "review-issues", "review-issue", "job", "review-effectiveness", "issue-merge-candidates"]) void client.invalidateQueries({ queryKey: [key] }); };
   const change = useMutation({ mutationFn: (status: string) => apiRequest(token, `/api/review-issues/${id}`, { method: "PATCH", body: JSON.stringify({ status, note: note.trim() || null }) }), onSuccess: () => { setNote(""); refresh(); } });
   const merge = useMutation({ mutationFn: () => apiRequest(token, `/api/review-issues/${id}/merge`, { method: "POST", body: JSON.stringify({ target_id: Number(target) }) }), onSuccess: () => { setTarget(""); setSearch(""); refresh(); } });
   const issue = detail.data;

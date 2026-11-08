@@ -1,7 +1,7 @@
 /** @description 展示服务端累计耗时、范围分析和逐次执行；不读取工件或推断缺失时间。 */
 import type { ReviewJob, ReviewJobDetail } from "../api/types";
-import { formatCost, formatDuration, formatSeverity, formatTime } from "../ui/format";
 import { Status } from "../ui/Status";
+import { formatCost, formatDuration, formatSeverity, formatTime } from "../ui/format";
 
 /** 服务端秒数的可读展示，未知不以零代替。 */
 export function secondsText(value: number | null | undefined): string {
@@ -27,9 +27,14 @@ export function resultText(job: ReviewJob): string {
 }
 
 /** 列表时间以累计执行为主，排队期间不继续增长执行秒数。 */
-export function JobTimeFacts({ job }: { /** 只读服务端任务事实。 */ job: ReviewJob }) {
+export function JobTimeFacts({ job, compact = false }: {
+  /** 只读服务端任务事实。 */ job: ReviewJob;
+  /** 任务列表仅展示主要耗时和次数，详情仍保留完整时间口径。 */ compact?: boolean;
+}) {
   const timing = job.timing;
-  return <div className="execution-facts"><span>初审累计执行 {secondsText(timing?.cumulative_execution_seconds)}{timing && !timing.execution_complete ? "（历史不完整）" : ""}</span><small>首次排队 {secondsText(timing?.first_queue_seconds)}</small><small>总历时 {secondsText(timing?.total_elapsed_seconds)} · 初审 {job.attempts} 次 / 补审执行 {job.recovery_execution_count ?? 0} 次</small></div>;
+  if (!compact) return <div className="execution-facts"><span>初审累计执行 {secondsText(timing?.cumulative_execution_seconds)}{timing && !timing.execution_complete ? "（历史不完整）" : ""}</span><small>首次排队 {secondsText(timing?.first_queue_seconds)}</small><small>总历时 {secondsText(timing?.total_elapsed_seconds)} · 初审 {job.attempts} 次 / 补审执行 {job.recovery_execution_count ?? 0} 次</small></div>;
+  if (job.status === "queued" && job.attempts === 0) return <div className="execution-facts"><span>已排队 {secondsText(timing?.first_queue_seconds)}</span><small>尚未执行</small></div>;
+  return <div className="execution-facts"><span>初审执行 {secondsText(timing?.cumulative_execution_seconds)}{timing && !timing.execution_complete ? "（历史不完整）" : ""}</span><small>初审 {job.attempts} 次 · 补审 {job.recovery_execution_count ?? 0} 次</small></div>;
 }
 
 /** 列表累计费用明确标记未知部分，旧服务端响应保留单次费用兼容。 */

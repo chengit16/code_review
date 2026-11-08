@@ -1,11 +1,12 @@
 /** @description 七天固定分组表格与本地筛选；不合成总体分位数，不将缺失用量当零费用。 */
-import { Collapse, Select, Table } from "antd";
+import { Collapse, Select } from "antd";
 import type { TableColumnsType } from "antd";
-import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { PerformanceGroup } from "../api/reviewExecution";
+import { ListTable as Table } from "../ui/ListTable";
 import { Status } from "../ui/Status";
+
 import { secondsText } from "./JobExecution";
 
 function quantiles(p50: number | null, p95: number | null, samples: number) {
@@ -27,11 +28,12 @@ export function ReviewPerformance({ groups = [] }: { /** 近七天按项目、�
   const repository = params.get("performance_repository") ?? undefined;
   const status = params.get("performance_status") ?? undefined;
   const size = params.get("performance_size") ?? undefined;
-  const [page, setPage] = useState(1);
+  const page = Math.max(1, Number(params.get("performance_page")) || 1);
+  const setPage = (value: number) => { const next = new URLSearchParams(params); next.set("performance_page", String(value)); setParams(next); };
   const setFilter = (key: string, value: string | undefined) => {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value); else next.delete(key);
-    setParams(next); setPage(1);
+    next.delete("performance_page"); setParams(next);
   };
   const filtered = groups.filter((group) => (!repository || String(group.repository_id) === repository) && (!status || group.status === status) && (!size || group.size_bucket === size));
   return <section className="operations-performance">

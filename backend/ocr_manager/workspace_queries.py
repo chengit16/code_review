@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ocr_manager.premerge_summary import premerge_summary
 from ocr_manager.review_conclusions import candidate_counts
 from ocr_manager.review_effective import status_sql
 from ocr_manager.storage import Store
@@ -51,26 +52,42 @@ def overview_snapshot(store: Store) -> dict[str, Any]:
 
 def search_premerge(store: Store, repository_id: int | None, mr_iid: int | None,
                     status: str | None, latest_only: bool, page: int,
-                    page_size: int) -> dict[str, Any]:
+                    page_size: int, summary_only: bool = False) -> dict[str, Any]:
     """在同一读快照中返回计数与分页；最新版本判断先于状态筛选。"""
 
     clauses: list[str] = []
     args: list[Any] = []
-    for field, value in (("repository_id", repository_id), ("mr_iid", mr_iid),
-                         ("status", status)):
+    for field, value in (("repository_id", repository_id), ("mr_iid", mr_iid)):
         if value is not None:
             clauses.append(f"p.{field}=?")
             args.append(value)
     if latest_only:
         clauses.append("""NOT EXISTS (SELECT 1 FROM premerge_reviews n
             WHERE n.repository_id=p.repository_id AND n.mr_iid=p.mr_iid AND n.id>p.id)""")
+    facet_where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    facet_args = list(args)
+    if status is not None:
+        clauses.append("p.status=?")
+        args.append(status)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     with store.connection() as db:
         db.execute("BEGIN")
+        counts = {row["status"]: row["count"] for row in db.execute(
+            f"SELECT p.status,COUNT(*) AS count FROM premerge_reviews p{facet_where} "
+            "GROUP BY p.status", facet_args)}
+        counts["all"] = sum(counts.values())
         total = db.execute(f"SELECT COUNT(*) FROM premerge_reviews p{where}", args).fetchone()[0]
         rows = db.execute(f"""SELECT p.*,r.name AS repository_name
             FROM premerge_reviews p JOIN repositories r ON r.id=p.repository_id
             {where} ORDER BY p.id DESC LIMIT ? OFFSET ?""",
             [*args, page_size, (page - 1) * page_size]).fetchall()
-    return {"items": [dict(row) for row in rows], "total": total,
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["summary"] = premerge_summary(item["result_json"])
+        if summary_only:
+            for field in ("result_json", "context_json", "changed_files"):
+                item.pop(field, None)
+        items.append(item)
+    return {"items": items, "total": total, "status_counts": counts,
             "page": page, "page_size": page_size}

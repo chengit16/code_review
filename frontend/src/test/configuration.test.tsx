@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiRequest } from "../api/client";
@@ -17,7 +18,7 @@ describe("配置与状态", () => {
         { status: options?.method === "POST" ? 409 : 200 }),
     );
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={queryClient}><FeishuHooksPage token="" /></QueryClientProvider>);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><FeishuHooksPage token="" /></MemoryRouter></QueryClientProvider>);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "新增飞书配置" }));
     await user.type(screen.getByLabelText("配置名称"), "测试通知");
