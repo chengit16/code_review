@@ -18,11 +18,12 @@ from ocr_manager.auth import AUTH_MIGRATION
 from ocr_manager.chat_capture_migration import CHAT_CAPTURE_MIGRATION
 from ocr_manager.config_history import history_migration
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
-from ocr_manager.feedback_issues import sync_feedback_issue
+from ocr_manager.feedback_value_migration import MIGRATION as FEEDBACK_VALUE_MIGRATION
 from ocr_manager.improvement_archive_migration import IMPROVEMENT_ARCHIVE_MIGRATION
 from ocr_manager.improvement_maintenance_migration import IMPROVEMENT_MAINTENANCE_MIGRATION
 from ocr_manager.improvement_migration import IMPROVEMENT_MIGRATION
 from ocr_manager.improvement_theme_migration import IMPROVEMENT_THEME_MIGRATION
+from ocr_manager.issue_disposition_migration import MIGRATION as ISSUE_DISPOSITION_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
 from ocr_manager.newline_filter_migration import NEWLINE_FILTER_MIGRATION
@@ -47,7 +48,7 @@ from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 51
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -367,6 +368,8 @@ class Store:
                 (47, CHAT_CAPTURE_MIGRATION),
                 (48, RECOVERY_BUDGET_MIGRATION),
                 (49, CONCURRENCY_MIGRATION),
+                (50, ISSUE_DISPOSITION_MIGRATION),
+                (51, FEEDBACK_VALUE_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -856,7 +859,7 @@ class Store:
             )
 
     def feedback_summary(self) -> list[dict[str, Any]]:
-        """按项目聚合人工反馈；误报率以已标记的发现为分母。"""
+        """按项目聚合三类价值反馈；历史修复值不进入有效评价统计。"""
 
         from ocr_manager.review_feedback_queries import CURRENT_FEEDBACK
 
@@ -864,10 +867,11 @@ class Store:
             return [dict(row) for row in db.execute(
                 f"""SELECT r.id AS repository_id, r.name AS repository_name,
                 COALESCE(p.minimum_severity, 'medium') AS minimum_severity,
-                COUNT(f.job_id) AS total,
+                SUM(CASE WHEN f.verdict IN ('helpful','false_positive','ignored')
+                    THEN 1 ELSE 0 END) AS total,
                 SUM(CASE WHEN f.verdict='helpful' THEN 1 ELSE 0 END) AS helpful,
                 SUM(CASE WHEN f.verdict='false_positive' THEN 1 ELSE 0 END) AS false_positive,
-                SUM(CASE WHEN f.verdict='fixed' THEN 1 ELSE 0 END) AS fixed
+                SUM(CASE WHEN f.verdict='ignored' THEN 1 ELSE 0 END) AS ignored
                 FROM repositories r LEFT JOIN project_policies p ON p.repository_id=r.id
                 LEFT JOIN review_jobs j ON j.repository_id=r.id
                 LEFT JOIN ({CURRENT_FEEDBACK}) f ON f.job_id=j.id
@@ -877,9 +881,9 @@ class Store:
     def set_review_feedback(
         self, job_id: int, comment_index: int, verdict: str, actor: str = "系统",
     ) -> None:
-        """终态发现反馈与关联问题处理同事务提交；操作者由管理接口可信身份提供。"""
+        """终态反馈及稳定身份镜像同事务提交；价值反馈不修改共享问题处置。"""
 
-        if verdict not in {"helpful", "false_positive", "fixed"}:
+        if verdict not in {"helpful", "false_positive", "ignored"}:
             raise ValueError("反馈类型无效")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -904,7 +908,6 @@ class Store:
                 verdict=excluded.verdict, updated_at=CURRENT_TIMESTAMP""",
                 (job_id, comment_index, verdict),
             )
-            sync_feedback_issue(db, job_id, row["attempts"], comment_index, verdict, actor)
             from ocr_manager.review_finding_feedback import mirror_initial_feedback
 
             mirror_initial_feedback(db, job_id, row["attempts"], comment_index, verdict, actor)
@@ -912,7 +915,7 @@ class Store:
     def clear_review_feedback(
         self, job_id: int, comment_index: int, actor: str = "系统",
     ) -> bool:
-        """撤销反馈及本卡片的关闭决定；其他入口的后续处理不会被重新打开。"""
+        """只撤销价值反馈及镜像；已有问题决定及历史审计不撤销。"""
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -922,7 +925,6 @@ class Store:
             ).rowcount == 1
             row = db.execute("SELECT attempts FROM review_jobs WHERE id=?", (job_id,)).fetchone()
             if deleted and row is not None:
-                sync_feedback_issue(db, job_id, row["attempts"], comment_index, None, actor)
                 from ocr_manager.review_finding_feedback import mirror_initial_feedback
 
                 mirror_initial_feedback(db, job_id, row["attempts"], comment_index, None, actor)
@@ -1499,7 +1501,7 @@ class Store:
                 "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
                 (job_id,))]
             issues = db.execute("""SELECT o.comment_index,o.issue_id,i.status
-                FROM review_issue_occurrences o JOIN review_issues i ON i.id=o.issue_id
+                FROM review_issue_occurrences o JOIN review_issue_states i ON i.id=o.issue_id
                 WHERE o.job_id=? AND o.attempt_number=? AND o.recovery_id IS NULL""",
                 (job_id, result["attempts"])).fetchall()
             result["issue_ids"] = {

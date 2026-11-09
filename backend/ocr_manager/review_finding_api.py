@@ -6,10 +6,10 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 
 from ocr_manager.config import Settings
 from ocr_manager.review_finding_feedback import (
+    FeedbackChoice,
     FindingFeedbackRecord,
     FindingFeedbackVersion,
     FindingFeedbackWrite,
-    Verdict,
     read_feedback,
     write_feedback,
 )
@@ -37,7 +37,7 @@ def register_finding_api(app: FastAPI, store: Store, settings: Settings, admin: 
             raise HTTPException(404, {"code": "conclusion_not_found"}) from error
 
     def apply(job_id: int, finding_id: str, payload: FindingFeedbackVersion,
-              verdict: Verdict | None, request: Request) -> None:
+              verdict: FeedbackChoice | None, request: Request) -> None:
         try:
             write_feedback(store, job_id, finding_id, payload, verdict,
                            request.state.identity["username"])

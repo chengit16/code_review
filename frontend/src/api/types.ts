@@ -200,7 +200,7 @@ export interface ReviewJob {
   /** 活动补审优先的列表状态，筛选和分面数量使用同一口径。 */ list_status?: string | null;
   /** 当前补审排队或执行状态，不改变初审事实。 */ active_recovery_status?: "queued" | "running" | null;
   /** 当前有效发现关联问题的去重处理摘要；缺失表示旧服务端或无法核实。 */ issue_summary?: {
-    open_count: number; fixed_count: number; ignored_count: number; unknown_count: number;
+    open_count: number; fixed_count: number; ignored_count: number; false_positive_count?: number; unknown_count: number;
     finding_count: number | null; highest_severity: string | null; complete: boolean; no_findings: boolean;
     available: boolean; coverage_complete: boolean; coverage_limited: boolean;
   };
@@ -278,9 +278,9 @@ export interface ReviewPreview {
 
 /** 评审详情包含 OCR 的机器可读发现与覆盖情况。 */
 export interface ReviewJobDetail extends ReviewJob {
-  /** 当前有效发现解析到最终合并目标，缺失项保持未知，不由反馈推断。 */ resolved_finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" }>;
-  /** 稳定主身份的当前人工反馈。 */ finding_feedback?: Record<string, "helpful" | "false_positive" | "fixed">;
-  /** 稳定主身份的问题关联，不与初审下标混用。 */ finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" | "merged" }>;
+  /** 当前有效发现解析到最终合并目标，缺失项保持未知，不由反馈推断。 */ resolved_finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" | "false_positive" }>;
+  /** 稳定主身份的当前人工反馈。 */ finding_feedback?: Record<string, "helpful" | "false_positive" | "ignored" | "fixed">;
+  /** 稳定主身份的问题关联，不与初审下标混用。 */ finding_issues?: Record<string, { id: number; status: "open" | "fixed" | "ignored" | "false_positive" | "merged" }>;
   /** 与飞书通知相互独立的 MR 行内发布记录。 */
   publications?: Array<{ id: number; comment_index: number; attempt_number: number; status: string; attempts: number; error: string | null; discussion_id: string | null }>;
   /** Worker 确认停止前保持 running 状态。 */
@@ -313,11 +313,11 @@ export interface ReviewJobDetail extends ReviewJob {
   } | null;
   result_path: string | null;
   notification_min_severity: "critical" | "high" | "medium" | "low";
-  feedback: Record<number, "helpful" | "false_positive" | "fixed">;
+  feedback: Record<number, "helpful" | "false_positive" | "ignored" | "fixed">;
   /** 当前尝试中每条发现关联的跨评审问题。 */
   issue_ids: Record<number, number>;
   /** 关联问题的持久化处理状态，不由反馈标记推断。 */
-  issue_statuses?: Record<number, "open" | "fixed" | "ignored" | "merged">;
+  issue_statuses?: Record<number, "open" | "fixed" | "ignored" | "false_positive" | "merged">;
   changed_files?: string | null;
   attempt_history: Array<{
     id: number;
@@ -351,7 +351,7 @@ export interface ReviewFeedbackSummary {
   total: number;
   helpful: number;
   false_positive: number;
-  fixed: number;
+  /** 明确忽略的价值反馈，不是问题已忽略数量。 */ ignored?: number;
 }
 
 /** 由 Worker 异步执行的外部连接测试，不包含凭据或原始响应。 */

@@ -5,7 +5,7 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.goto("/settings");
   const navigation = page.getByRole("navigation", { name: "主导航" });
   await expect(navigation.getByRole("link")).toHaveText([
-    "运行概览", "评审任务", "待跟进问题", "合并前审查", "合并事件",
+    "项目总览", "评审任务", "待跟进问题", "合并前审查", "合并事件",
     "运行监控", "配置历史", "问题与改进", "首次接入引导", "项目配置", "系统设置", "访问权限",
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("系统设置");
@@ -39,25 +39,19 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.screenshot({ path: "test-results/system-settings-mobile.png", fullPage: true });
 });
 
-test("运行概览整合效果统计并保留筛选与低频报表", async ({ page }) => {
+test("旧效果地址兼容并保留项目与时间筛选", async ({ page }) => {
+  await page.route("**/api/repositories", (route) => route.fulfill({ json: [{ id: 1, name: "演示项目" }] }));
+  await page.route("**/api/review-effectiveness**", (route) => route.fulfill({ json: {
+    days: 7, summary: { reviews: 4, failed_reviews: 1, generated: 8, published: 4, new_issues: 3, new_still_open: 2, fixed: 1, ignored: 0, open_now: 2, feedback_marked: 0, false_positive: 0 },
+    current_issues: { open_count: 2, severity_counts: { critical: 1, high: 0, medium: 1, low: 0, unclassified: 0 } },
+    trend: [{ day: "2026-11-01", new: 1, fixed: 0 }], categories: [],
+    projects: [{ id: 1, name: "演示项目", open_issues: 2, new_issues: 3, fixed_issues: 1, generated: 8, published: 4, reviews: 4, critical_issues: 1, high_issues: 0 }],
+  } }));
   await page.goto("/effectiveness?days=7&repository_id=1");
   await expect(page).toHaveURL("/?days=7&repository_id=1");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("运行概览");
-  const statistics = page.getByRole("region", { name: "评审效果", exact: true });
-  await expect(statistics.getByRole("region", { name: "评审效果摘要" })).toBeVisible();
-  await expect(statistics.getByText("人工标记已修复", { exact: true })).toBeVisible();
-  await expect(statistics.getByText(/不代表系统已验证代码修复/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "项目对比" })).not.toBeVisible();
-  await statistics.getByText("展开类别与项目统计", { exact: true }).click();
-  await expect(page.getByRole("heading", { name: "项目对比" })).toBeVisible();
-  await statistics.getByRole("combobox", { name: "项目", exact: true }).click();
-  await page.getByRole("option", { name: "全部项目" }).click();
-  await expect(page).toHaveURL("/?days=7");
-  await statistics.getByRole("combobox", { name: "时间", exact: true }).click();
-  await page.getByRole("option", { name: "近 90 天" }).click();
-  await expect(page).toHaveURL("/?days=90");
-  await page.reload();
-  await expect(statistics.locator(".list-select").filter({ has: page.getByRole("combobox", { name: "时间", exact: true }) })).toContainText("近 90 天");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("项目总览");
+  await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("本期人工标记修复");
+  await expect(page.getByText("更多效果分析与统计口径")).toBeVisible();
   await page.screenshot({ path: "test-results/overview-statistics-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

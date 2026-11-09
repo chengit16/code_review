@@ -976,13 +976,21 @@
             "type": "string"
           },
           "verdict": {
-            "enum": [
-              "helpful",
-              "false_positive",
-              "fixed"
+            "anyOf": [
+              {
+                "enum": [
+                  "helpful",
+                  "false_positive",
+                  "ignored"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "fixed",
+                "type": "string"
+              }
             ],
-            "title": "Verdict",
-            "type": "string"
+            "title": "Verdict"
           }
         },
         "required": [
@@ -1012,7 +1020,7 @@
             "enum": [
               "helpful",
               "false_positive",
-              "fixed"
+              "ignored"
             ],
             "title": "Verdict",
             "type": "string"
@@ -2854,7 +2862,8 @@
             "enum": [
               "open",
               "fixed",
-              "ignored"
+              "ignored",
+              "false_positive"
             ],
             "title": "Status",
             "type": "string"
@@ -2884,7 +2893,8 @@
             "enum": [
               "open",
               "fixed",
-              "ignored"
+              "ignored",
+              "false_positive"
             ],
             "title": "Expected Status",
             "type": "string"
@@ -2922,7 +2932,8 @@
             "enum": [
               "open",
               "fixed",
-              "ignored"
+              "ignored",
+              "false_positive"
             ],
             "title": "Status",
             "type": "string"
@@ -2980,7 +2991,8 @@
             "enum": [
               "open",
               "fixed",
-              "ignored"
+              "ignored",
+              "false_positive"
             ],
             "title": "Status",
             "type": "string"
@@ -4589,13 +4601,13 @@
       },
       "ReviewFeedbackInput": {
         "additionalProperties": false,
-        "description": "人工标记单条发现，可在重评审前修改或撤销。",
+        "description": "新人工反馈只表达价值；历史修复值仅可读取，不再接受新写入。",
         "properties": {
           "verdict": {
             "enum": [
               "helpful",
               "false_positive",
-              "fixed"
+              "ignored"
             ],
             "title": "Verdict",
             "type": "string"
@@ -5032,6 +5044,11 @@
           "coverage_limited": {
             "title": "Coverage Limited",
             "type": "boolean"
+          },
+          "false_positive_count": {
+            "default": 0,
+            "title": "False Positive Count",
+            "type": "integer"
           },
           "finding_count": {
             "anyOf": [
@@ -5685,7 +5702,7 @@
         "summary": "Delete User"
       },
       "patch": {
-        "description": "最后一名启用管理员不可降权或停用，且变更会撤销目标会话。",
+        "description": "POST 兼容隧道；保留最后管理员保护，变更仍撤销目标会话。",
         "operationId": "update_user_api_auth_users__user_id__patch",
         "parameters": [
           {
@@ -5715,6 +5732,56 @@
                 "schema": {
                   "additionalProperties": true,
                   "title": "Response Update User Api Auth Users  User Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update User"
+      },
+      "post": {
+        "description": "POST 兼容隧道；保留最后管理员保护，变更仍撤销目标会话。",
+        "operationId": "update_user_api_auth_users__user_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update User Api Auth Users  User Id  Post",
                   "type": "object"
                 }
               }
@@ -7794,7 +7861,7 @@
     },
     "/api/jobs/{job_id}/feedback/{comment_index}": {
       "delete": {
-        "description": "撤销已有反馈及其拥有的问题处理；缺失记录明确返回 404。",
+        "description": "仅撤销价值反馈；不撤销问题处置，缺失记录明确返回 404。",
         "operationId": "delete_review_feedback_api_jobs__job_id__feedback__comment_index__delete",
         "parameters": [
           {
@@ -7845,7 +7912,7 @@
         "summary": "Delete Review Feedback"
       },
       "put": {
-        "description": "校验终态发现并同步问题处理；身份取自鉴权上下文而非请求体。",
+        "description": "校验终态发现并记录价值反馈；不修改问题处置，身份取自鉴权上下文。",
         "operationId": "put_review_feedback_api_jobs__job_id__feedback__comment_index__put",
         "parameters": [
           {
@@ -9420,7 +9487,7 @@
         "summary": "Delete Notification Target"
       },
       "patch": {
-        "description": "修改共享通道后，Worker 下一次投递会直接读取新凭据。",
+        "description": "合并通道草稿；POST 兼容隧道转发，Worker 下次投递读取新凭据。",
         "operationId": "update_notification_target_api_notification_targets__target_id__patch",
         "parameters": [
           {
@@ -9450,6 +9517,56 @@
                 "schema": {
                   "additionalProperties": true,
                   "title": "Response Update Notification Target Api Notification Targets  Target Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Notification Target"
+      },
+      "post": {
+        "description": "合并通道草稿；POST 兼容隧道转发，Worker 下次投递读取新凭据。",
+        "operationId": "update_notification_target_api_notification_targets__target_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target_id",
+            "required": true,
+            "schema": {
+              "title": "Target Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationTargetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Notification Target Api Notification Targets  Target Id  Post",
                   "type": "object"
                 }
               }
@@ -10078,7 +10195,7 @@
         "summary": "Delete Repository"
       },
       "patch": {
-        "description": "校验修改后的仓库来源，并在保留业务历史的前提下更新接入设置。",
+        "description": "校验仓库来源并保留历史；POST 兼容隧道，沿用相同授权与更新约束。",
         "operationId": "update_repository_api_repositories__repository_id__patch",
         "parameters": [
           {
@@ -10108,6 +10225,56 @@
                 "schema": {
                   "additionalProperties": true,
                   "title": "Response Update Repository Api Repositories  Repository Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Repository"
+      },
+      "post": {
+        "description": "校验仓库来源并保留历史；POST 兼容隧道，沿用相同授权与更新约束。",
+        "operationId": "update_repository_api_repositories__repository_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Repository Api Repositories  Repository Id  Post",
                   "type": "object"
                 }
               }
@@ -10966,6 +11133,191 @@
         "summary": "Effectiveness"
       }
     },
+    "/api/review-effectiveness/findings": {
+      "get": {
+        "description": "只读样本沿用聚合集合、权限与窗口；显式窗口避免午夜翻页偷偷改变范围。",
+        "operationId": "findings_api_review_effectiveness_findings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedback",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "helpful",
+                "false_positive",
+                "ignored",
+                "fixed",
+                "unmarked"
+              ],
+              "title": "Feedback",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(critical|high|medium|low|unclassified)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "open",
+                "fixed",
+                "ignored",
+                "false_positive",
+                "unknown"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Findings Api Review Effectiveness Findings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Findings"
+      }
+    },
     "/api/review-feedback/summary": {
       "get": {
         "description": "反馈统计以已标记发现为分母，未标记发现不推断为有用或误报。",
@@ -11023,6 +11375,7 @@
                     "open",
                     "fixed",
                     "ignored",
+                    "false_positive",
                     "merged"
                   ],
                   "type": "string"
@@ -11200,7 +11553,7 @@
         "summary": "Issue Detail"
       },
       "patch": {
-        "description": "记录状态变化和操作者；重复保存不生成无意义事件。",
+        "description": "POST 兼容隧道；记录状态与操作者，重复保存不生成无意义事件。",
         "operationId": "update_issue_api_review_issues__issue_id__patch",
         "parameters": [
           {
@@ -11232,6 +11585,58 @@
                     "type": "string"
                   },
                   "title": "Response Update Issue Api Review Issues  Issue Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Issue"
+      },
+      "post": {
+        "description": "POST 兼容隧道；记录状态与操作者，重复保存不生成无意义事件。",
+        "operationId": "update_issue_api_review_issues__issue_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "issue_id",
+            "required": true,
+            "schema": {
+              "title": "Issue Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Update Issue Api Review Issues  Issue Id  Post",
                   "type": "object"
                 }
               }

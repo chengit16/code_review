@@ -45,7 +45,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
   const save = useMutation({
     mutationFn: ({ targetId, input }: { targetId: number | null; input: NotificationTargetInput }) =>
       apiRequest<NotificationTarget>(token, targetId === null ? "/api/notification-targets" : `/api/notification-targets/${targetId}`, {
-        method: targetId === null ? "POST" : "PATCH", body: JSON.stringify(input),
+        method: "POST", body: JSON.stringify(input),
       }),
     onSuccess: () => {
       setOpen(false);

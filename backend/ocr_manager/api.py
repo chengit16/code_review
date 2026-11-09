@@ -126,9 +126,9 @@ class ProjectNotificationPolicy(BaseModel):
 
 
 class ReviewFeedbackInput(BaseModel):
-    """人工标记单条发现，可在重评审前修改或撤销。"""
+    """新人工反馈只表达价值；历史修复值仅可读取，不再接受新写入。"""
 
-    verdict: Literal["helpful", "false_positive", "fixed"]
+    verdict: Literal["helpful", "false_positive", "ignored"]
 
     model_config = {"extra": "forbid"}
 
@@ -708,11 +708,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         assert row is not None
         return public_notification_target(row) | {"repository_count": 0}
 
+    @app.post("/api/notification-targets/{target_id}", dependencies=[admin])
     @app.patch("/api/notification-targets/{target_id}", dependencies=[admin])
     def update_notification_target(
         target_id: int, payload: NotificationTargetUpdate
     ) -> dict[str, Any]:
-        """修改共享通道后，Worker 下一次投递会直接读取新凭据。"""
+        """合并通道草稿；POST 兼容隧道转发，Worker 下次投递读取新凭据。"""
 
         if store.get_notification_target(target_id) is None:
             raise HTTPException(status_code=404, detail="飞书配置不存在")
@@ -817,9 +818,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "passed", "repository_path": path,
                 "next": "保存后执行 Git 与 GitLab API 连接测试"}
 
+    @app.post("/api/repositories/{repository_id}", dependencies=[admin])
     @app.patch("/api/repositories/{repository_id}", dependencies=[admin])
     def update_repository(repository_id: int, payload: RepositoryUpdate) -> dict[str, Any]:
-        """校验修改后的仓库来源，并在保留业务历史的前提下更新接入设置。"""
+        """校验仓库来源并保留历史；POST 兼容隧道，沿用相同授权与更新约束。"""
 
         current = store.get_repository(repository_id)
         if current is None:
@@ -1101,7 +1103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def put_review_feedback(
         job_id: int, comment_index: int, payload: ReviewFeedbackInput, request: Request,
     ) -> dict[str, str]:
-        """校验终态发现并同步问题处理；身份取自鉴权上下文而非请求体。"""
+        """校验终态发现并记录价值反馈；不修改问题处置，身份取自鉴权上下文。"""
 
         try:
             store.set_review_feedback(
@@ -1117,7 +1119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_review_feedback(
         job_id: int, comment_index: int, request: Request,
     ) -> dict[str, str]:
-        """撤销已有反馈及其拥有的问题处理；缺失记录明确返回 404。"""
+        """仅撤销价值反馈；不撤销问题处置，缺失记录明确返回 404。"""
 
         if not store.clear_review_feedback(
             job_id, comment_index, request.state.identity["username"],

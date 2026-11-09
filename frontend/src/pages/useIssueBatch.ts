@@ -6,7 +6,7 @@ import { updateReviewIssues } from "../api/reviewIssues";
 import type { IssueActionStatus, IssueBatchTarget } from "../api/reviewIssues";
 
 /** 批量动作与确认提示共用的中文标签。 */
-export const issueActionLabels = { open: "恢复待处理", fixed: "标记已修复", ignored: "标记已忽略" };
+export const issueActionLabels = { open: "恢复待处理", fixed: "标记已修复", ignored: "标记已忽略", false_positive: "标记误报" };
 
 /** 当前列表最小选择事实；已合并问题仅供查看。 */
 export interface IssueSelectable {

@@ -1,4 +1,4 @@
-/** @description 管理 OCR 模型配置，只有一个配置可处于启用状态。 */
+/** @description 管理 OCR 模型配置与连接测试；密钥只留在编辑草稿，启用约束和写入授权由服务端执行。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card } from "antd";
@@ -16,8 +16,11 @@ import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
+import { Status } from "../ui/Status";
 import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 import { useLocalList } from "../ui/useLocalList";
+
+import "../styles/configuration-lists.css";
 
 interface ModelForm {
   name: string;
@@ -104,17 +107,19 @@ export function SettingsPage({ token, embedded = false }: {
     { title: "Provider", dataIndex: "provider", key: "provider", width: 150, render: (value: string) => value === "dashscope" ? "百练 / DashScope" : value },
     { title: "Base URL", dataIndex: "base_url", key: "base_url", width: 220, render: (value: string) => <span className="mono">{value || "内置端点"}</span> },
     { title: "单价 / 百万 Token", key: "price", width: 210, render: (_: unknown, profile) => profile.input_price_per_million != null || profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million ?? "未配置"} 输入 / ${profile.output_price_per_million ?? "未配置"} 输出` : "未配置" },
-    { title: "状态", dataIndex: "enabled", key: "enabled", width: 100, render: (enabled: number) => enabled ? "已启用" : "未启用" },
-    { title: "操作", key: "actions", width: 132, render: (_: unknown, profile) => <div className="row-actions">{!profile.enabled && <Button type="text" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>启用</Button>}<Button type="text" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="text" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
+    { title: "状态", dataIndex: "enabled", key: "enabled", width: 110, render: (enabled: number) => enabled ? <Status value="enabled" /> : <span className="status status--disabled">未启用</span> },
+    { title: "操作", key: "actions", width: 200, render: (_: unknown, profile) => <div className="config-row-actions">{!profile.enabled && <Button type="link" size="small" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>启用</Button>}<Button type="link" size="small" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="link" size="small" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
   ];
-  return <div className={embedded ? "settings-content" : "page"}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<button className="button button-primary" type="button" onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}><Plus size={17} />新增模型</button>} />
+  return <div className={`configuration-list-page ${embedded ? "settings-content" : "page"}`}>
+    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
     {!profiles.isLoading && !profiles.error && <Card className="model-profile-card" size="small" title={<h2 className="model-profile-heading">模型配置</h2>}>
-<div className="list-toolbar"><ListSearch key={list.q} label="搜索配置" value={list.q} onSearch={(value) => list.update("q", value)} /></div><ListStatusNav value={list.status} labels={{ all: "全部", enabled: "已启用", disabled: "未启用" }} counts={list.counts} onChange={(value) => list.update("status", value)} />      <Table rowKey="id" size="middle" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1000 }} pagination={list.pagination} />
+      <div className="list-toolbar"><ListSearch key={list.q} label="搜索配置" value={list.q} onSearch={(value) => list.update("q", value)} /></div>
+      <ListStatusNav value={list.status} labels={{ all: "全部", enabled: "已启用", disabled: "未启用" }} counts={list.counts} onChange={(value) => list.update("status", value)} />
+      <Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1100 }} pagination={list.pagination} />
       <p className="form-note">连接测试只测试当前已启用的模型{active ? `“${active.name}”` : ""}，保存配置不会发起模型请求。切换模型后请重新测试，最近结果可能来自之前启用的配置。</p>
       <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
     </Card>}

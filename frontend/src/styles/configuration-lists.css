@@ -1,0 +1,11 @@
+/* 只约束模型和账号列表的短操作，不改变其他列表的长内容换行策略。 */
+.configuration-list-page .config-row-actions { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.configuration-list-page .config-row-actions .ant-btn { flex: 0 0 auto; min-width: 44px; min-height: 32px; white-space: nowrap; }
+.configuration-list-page .auth-mode-card { margin-bottom: 16px; }
+.configuration-list-page .auth-mode-setting { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; }
+.configuration-list-page .auth-mode-setting h2 { margin: 0; font-size: 16px; }
+.configuration-list-page .auth-mode-setting .ant-checkbox-wrapper { min-height: 40px; align-items: center; }
+.configuration-list-page .users-table-card .form-note { display: block; margin-bottom: 12px; }
+@media (max-width: 600px) {
+  .configuration-list-page .auth-mode-setting { align-items: flex-start; flex-direction: column; gap: 8px; }
+}

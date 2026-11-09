@@ -1,6 +1,15 @@
 /** @description 验证关键配置与评审流程；仅使用隔离数据库和合成凭据。 */
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  // 模拟不支持带请求体 PATCH 的穿透入口，全部页面流程必须使用兼容写入。
+  await page.route("**/api/**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      await route.fulfill({ status: 502, body: "合成隧道拒绝 PATCH" });
+    } else await route.continue();
+  });
+});
+
 test("项目新增、编辑、恢复和删除", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("/repositories");
@@ -35,16 +44,22 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await expect(page.getByRole("button", { name: "编辑 验收仓库" })).toHaveCount(0);
 });
 
-test("飞书删除立即更新列表", async ({ page }) => {
+test("飞书兼容编辑保留凭据，删除立即更新列表", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("/feishu");
   await page.getByRole("button", { name: "新增飞书配置" }).click();
   await page.getByLabel("配置名称").fill("验收飞书");
   await page.getByLabel("Webhook URL").fill("https://open.feishu.cn/open-apis/bot/v2/hook/synthetic");
   await page.getByRole("button", { name: "保存", exact: true }).click();
-  await page.getByRole("button", { name: "删除 验收飞书" }).click();
+  await page.getByRole("button", { name: "编辑 验收飞书" }).click();
+  await page.getByLabel("配置名称").fill("修改后飞书");
+  const saved = page.waitForResponse((response) => response.request().method() === "POST"
+    && /\/api\/notification-targets\/\d+$/.test(response.url()));
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  expect((await saved).ok()).toBe(true);
+  await page.getByRole("button", { name: "删除 修改后飞书" }).click();
   await expect(page.getByRole("status")).toContainText("飞书配置已删除");
-  await expect(page.getByRole("button", { name: "编辑 验收飞书" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "编辑 修改后飞书" })).toHaveCount(0);
 });
 
 test("百练模型单价配置与评审详情用量", async ({ page }) => {
@@ -111,6 +126,7 @@ test("告警设置布局与管理操作分页", async ({ page }) => {
 });
 
 test("跟进问题当前页批量处理、确认取消与恢复", async ({ page }) => {
+  expect((await page.request.post("/api/review-issues/1", { data: { status: "open" } })).ok()).toBe(true);
   await page.goto("/issues");
   await expect(page.getByRole("checkbox", { name: "选择问题 1", exact: true })).toBeVisible();
   await page.getByRole("checkbox", { name: "全选当前页" }).check();
@@ -141,6 +157,7 @@ test("跟进问题当前页批量处理、确认取消与恢复", async ({ page 
 });
 
 test("部分结果、反馈与重审", async ({ page }) => {
+  expect((await page.request.post("/api/review-issues/1", { data: { status: "open" } })).ok()).toBe(true);
   await page.goto("/jobs/1");
   await expect(page.getByText("部分完成").first()).toBeVisible();
   const issue = page.getByRole("link", { name: /跟进问题 #\d+/ });
@@ -152,23 +169,22 @@ test("部分结果、反馈与重审", async ({ page }) => {
   const feedback = page.getByRole("button", { name: "误报", exact: true });
   await feedback.click();
   await expect(feedback).toHaveAttribute("aria-pressed", "true");
-  await expect(issue).toContainText("已忽略，无需处理");
+  await expect(helpful).toHaveAttribute("aria-pressed", "false");
+  await expect(issue).toContainText("待处理");
   await page.reload();
-  await expect(issue).toContainText("已忽略，无需处理");
+  await expect(feedback).toHaveAttribute("aria-pressed", "true");
+  await expect(issue).toContainText("待处理");
   const listing = await page.request.get("/api/review-issues?status=open");
-  expect((await listing.json()).total).toBe(0);
+  expect((await listing.json()).total).toBe(1);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.locator(".findings-section").screenshot({ path: "test-results/finding-handled-mobile.png" });
   await feedback.click();
+  await expect(feedback).toHaveAttribute("aria-pressed", "false");
   await expect(issue).toContainText("待处理");
-  const fixed = page.getByRole("button", { name: "已修复", exact: true });
-  await fixed.click();
-  await expect(issue).toContainText("已修复");
+  await expect(page.getByRole("button", { name: "已修复", exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.locator(".findings-section").screenshot({ path: "test-results/finding-handled-desktop.png" });
-  await fixed.click();
-  await expect(issue).toContainText("待处理");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "重新评审" }).click();
   await expect(page.getByText("排队中").first()).toBeVisible();
@@ -292,10 +308,10 @@ test("账号模式登录与只读界面", async ({ page }) => {
   await expect(page.getByText("browser-reader · 只读")).toBeVisible();
   await expect(page.getByRole("link", { name: "项目配置" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "系统设置" })).toHaveCount(0);
-  await page.getByRole("link", { name: "运行概览" }).click();
-  await expect(page.getByRole("region", { name: "评审效果", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "评审效果摘要" })).toBeVisible();
-  await page.getByRole("link", { name: "评审任务" }).click();
+  await page.getByRole("link", { name: "项目总览" }).click();
+  await expect(page.getByRole("region", { name: "项目数据", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "项目核心指标" })).toBeVisible();
+  await page.getByRole("link", { name: "评审任务", exact: true }).click();
   await page.getByRole("link", { name: "查看任务 1" }).click();
   await expect(page.getByText("部分完成").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "重新评审" })).toHaveCount(0);

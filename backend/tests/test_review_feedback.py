@@ -77,7 +77,12 @@ def test_feedback_api_validates_index_and_aggregates(
     url = f"/api/jobs/{job_id}/feedback/1"
     assert client.put(url, json={"verdict": "false_positive"}).status_code == 401
     assert client.put(url, headers=ADMIN, json={"verdict": "false_positive"}).status_code == 200
-    assert client.put(url, headers=ADMIN, json={"verdict": "fixed"}).status_code == 200
+    assert client.put(url, headers=ADMIN, json={"verdict": "fixed"}).status_code == 422
+    with store.connection() as db:
+        db.execute("UPDATE review_feedback SET verdict='fixed' WHERE job_id=? AND comment_index=1",
+                   (job_id,))
+        db.execute("UPDATE review_finding_feedback SET verdict='fixed' WHERE finding_id=?",
+                   (f"j{job_id}:a1:c1",))
     assert (
         client.put(
             f"/api/jobs/{job_id}/feedback/2", headers=ADMIN, json={"verdict": "helpful"}
@@ -95,7 +100,8 @@ def test_feedback_api_validates_index_and_aggregates(
     assert detail["feedback"] == {"1": "fixed"}
     summary = client.get("/api/review-feedback/summary", headers=ADMIN).json()
     assert summary[0]["repository_id"] == repository_id
-    assert (summary[0]["total"], summary[0]["fixed"], summary[0]["false_positive"]) == (1, 1, 0)
+    assert summary[0]["total"] == 0
+    assert "fixed" not in summary[0]
     assert client.delete(url, headers=ADMIN).status_code == 200
     assert client.delete(url, headers=ADMIN).status_code == 404
     assert client.get("/api/review-feedback/summary", headers=ADMIN).json()[0]["total"] == 0

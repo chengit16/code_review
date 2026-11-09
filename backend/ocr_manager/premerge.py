@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from ocr_manager.finding_policy import VERSION as FINDING_POLICY_VERSION
 from ocr_manager.range_preflight import input_policy
 from ocr_manager.review_failures import REVIEW_POLICY
 from ocr_manager.review_results import project_review_result
@@ -63,6 +64,7 @@ def premerge_policy(db: sqlite3.Connection, repository_id: int) -> str:
                      "WHERE repository_id=?",
                      (repository_id,)).fetchone()
     return json.dumps({"review_policy": REVIEW_POLICY,
+                       "finding_policy_version": FINDING_POLICY_VERSION,
                        "input_policy": input_policy(bool(row and row[0]))}, sort_keys=True)
 
 

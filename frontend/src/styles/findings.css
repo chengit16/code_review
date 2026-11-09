@@ -1,0 +1,48 @@
+/* 发现阅读区沿用灰白蓝变量；颜色只区分风险与建议，不接管组件库交互样式。 */
+.findings-section .finding-help { margin: 0 0 var(--space-4); color: var(--color-muted); font-size: 13px; line-height: 1.8; }
+.finding-help strong { color: var(--color-ink); margin-inline-end: var(--space-2); }
+.findings-section .finding-filters { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) repeat(2, minmax(120px, 1fr)); gap: var(--space-4); padding: var(--space-4); margin-bottom: var(--space-6); }
+.finding-filters > label { display: grid; gap: var(--space-2); min-width: 0; color: var(--color-muted); font-size: 12px; }
+.finding-filters .ant-select { width: 100%; min-width: 0; }
+.findings-section .findings { gap: var(--space-6); }
+.findings-section .finding-card { border: 1px solid var(--color-border-strong); border-radius: 8px; }
+.finding-card .finding-head { display: grid; justify-content: stretch; gap: var(--space-3); padding: var(--space-4) var(--space-6); }
+.finding-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.finding-meta strong { margin-inline-end: var(--space-1); color: var(--color-ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.finding-meta .ant-tag { margin-inline-end: 0; }
+.finding-card .finding-path { font-size: 12px; line-height: 1.6; }
+.finding-card .finding-body { padding: var(--space-6); }
+.finding-source { display: block; margin-bottom: var(--space-4); color: var(--color-muted); font-size: 12px; }
+.finding-description { display: grid; gap: var(--space-3); }
+.finding-description-section { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: start; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); }
+.finding-description-section h3 { display: flex; gap: var(--space-2); align-items: baseline; margin: 0; color: var(--color-muted); font-size: 13px; line-height: 1.9; }
+.finding-section-number { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.finding-description p { margin: 0; max-inline-size: 100ch; font-size: 14px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-text-blocks { display: grid; gap: var(--space-3); min-width: 0; }
+.finding-text-blocks li > span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.comparison-finding { display: grid; gap: var(--space-3); min-width: 0; padding-block: var(--space-4); border-top: 1px solid var(--color-border); }
+.comparison-finding > strong { overflow-wrap: anywhere; }
+.issue-detail-drawer .finding-description { margin-block: var(--space-6); }
+.issue-detail-drawer .finding-description-section h3 { margin: 0; font-size: 13px; }
+.finding-ordered-list { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.9; }
+.finding-ordered-list li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2); }
+.finding-list-marker { font-variant-numeric: tabular-nums; }
+.finding-description-section[data-tone="consequence"] { background: var(--color-warning-soft); }
+.finding-description-section[data-tone="consequence"] h3 { color: var(--color-warning); }
+.finding-description-section[data-tone="suggestion"] { background: var(--color-accent-soft); }
+.finding-description-section[data-tone="suggestion"] h3 { color: var(--color-accent-text); }
+.finding-description code { padding: 1px var(--space-1); border-radius: 3px; background: var(--color-surface-subtle); color: var(--color-ink); font-size: .92em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-card .finding-footer { flex-wrap: wrap; gap: var(--space-4); padding: var(--space-4) var(--space-6); }
+.finding-card .finding-issue-link { margin: 0; line-height: 1.8; }
+.finding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.finding-actions .ant-btn { min-height: 40px; }
+.finding-feedback-legacy { color: var(--color-muted); line-height: 1.7; }
+.finding-note-field { display: grid; gap: var(--space-2); margin-block: var(--space-4); }
+@media (max-width: 1000px) {
+  .findings-section .finding-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finding-card .finding-footer { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .finding-card .finding-head, .finding-card .finding-body, .finding-card .finding-footer { padding: var(--space-4); }
+  .finding-description-section { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: var(--space-3); }
+}

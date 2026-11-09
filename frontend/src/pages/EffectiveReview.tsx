@@ -5,6 +5,7 @@ import { setFindingFeedback } from "../api/reviewConclusions";
 import type { ReviewJobDetail } from "../api/types";
 import { Status } from "../ui/Status";
 
+import type { FindingFeedbackChoice } from "./FindingActions";
 import { FindingsPanel } from "./FindingsPanel";
 
 /** 已验证有效结论的来源和覆盖；旧初审作为不可覆盖的独立证据保留。 */
@@ -17,13 +18,13 @@ export function EffectiveReview({ token, job, canEdit, initialIssueState = "all"
   const client = useQueryClient();
   const document = job.effective_document;
   const feedback = useMutation({
-    mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => {
+    mutationFn: ({ index, verdict }: { index: number; verdict: FindingFeedbackChoice | null }) => {
       if (!document) throw new Error("有效结论尚不可用，请刷新");
       const finding = document.findings[index];
       const version = { source_attempt: document.version.source_attempt, revision: document.version.revision };
       return setFindingFeedback(token, job.id, finding.finding_id, version, verdict);
     },
-    onSuccess: async () => { await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness"].map((key) => client.invalidateQueries({ queryKey: [key] }))); },
+    onSuccess: async () => { await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness", "overview"].map((key) => client.invalidateQueries({ queryKey: [key] }))); },
   });
   if (!document) return null;
   const coverage = document.version.coverage;

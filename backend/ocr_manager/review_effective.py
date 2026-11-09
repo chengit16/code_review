@@ -91,6 +91,6 @@ def attach_effective(db: sqlite3.Connection, jobs: list[dict[str, Any]], *,
                 job["finding_issues"] = {item["finding_id"]: {
                     "id": item["issue_id"], "status": item["status"]} for item in db.execute("""
                     SELECT o.finding_id,o.issue_id,i.status FROM review_issue_occurrences o
-                    JOIN review_issues i ON i.id=o.issue_id
+                    JOIN review_issue_states i ON i.id=o.issue_id
                     WHERE o.job_id=? AND o.attempt_number=?""",
                     (job["id"], version["source_attempt"])) if item["finding_id"] in identities}

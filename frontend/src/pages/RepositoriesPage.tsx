@@ -84,7 +84,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
         enable_merge_requests: input.enable_merge_requests ?? Boolean(editing.enable_merge_requests),
         enable_default_branch_pushes: input.enable_default_branch_pushes ?? Boolean(editing.enable_default_branch_pushes),
       }) });
-      return apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+      return apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "POST", body: JSON.stringify(input) });
     },
     onSuccess: (result, { input }) => {
       // 仅更新基础配置基线并清除已提交密钥，其他页签草稿继续保留。
@@ -103,7 +103,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     },
   });
   const toggle = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => apiRequest<Repository>(token, `/api/repositories/${id}`, { method: "POST", body: JSON.stringify({ enabled }) }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["repositories"] }),
   });
   const remove = useMutation({

@@ -1,4 +1,4 @@
-"""按已验证来源身份处理反馈；仅写 SQLite，与问题决策同事务，不发布候选或调用外部服务。"""
+"""按已验证来源身份记录价值反馈；不修改问题处置，不发布候选或调用外部服务。"""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ocr_manager.feedback_issues import sync_feedback_issue
 from ocr_manager.review_conclusions import read_conclusion
 from ocr_manager.review_recovery_domain import RecoveryConflict
 
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
-Verdict = Literal["helpful", "false_positive", "fixed"]
+FeedbackChoice = Literal["helpful", "false_positive", "ignored"]
+PersistedVerdict = FeedbackChoice | Literal["fixed"]
 
 
 class FindingFeedbackVersion(BaseModel):
@@ -28,14 +28,14 @@ class FindingFeedbackVersion(BaseModel):
 class FindingFeedbackWrite(FindingFeedbackVersion):
     """操作者只从服务端鉴权身份取得，不接收客户端提供的作者。"""
 
-    verdict: Verdict
+    verdict: FeedbackChoice
 
 
 class FindingFeedbackRecord(BaseModel):
     """反馈随稳定发现身份保留；重审后旧版本可读但不可继续写入。"""
 
     finding_id: str
-    verdict: Verdict
+    verdict: PersistedVerdict
     actor: str
     updated_at: str
 
@@ -67,9 +67,9 @@ def read_feedback(db: sqlite3.Connection, job_id: int, source_attempt: int,
 
 
 def write_feedback(store: Store, job_id: int, finding_id: str,
-                   version: FindingFeedbackVersion, verdict: Verdict | None,
+                   version: FindingFeedbackVersion, verdict: FeedbackChoice | None,
                    actor: str) -> None:
-    """写锁内校验当前最新版本与主身份；反馈、旧入口镜像和问题审计原子提交或回滚。"""
+    """写锁内校验最新版本与主身份；反馈和旧入口镜像原子提交，不混写问题审计。"""
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -106,6 +106,3 @@ def write_feedback(store: Store, job_id: int, finding_id: str,
                     VALUES(?,?,?) ON CONFLICT(job_id,comment_index) DO UPDATE SET
                     verdict=excluded.verdict,updated_at=CURRENT_TIMESTAMP""",
                     (job_id, origin.comment_index, verdict))
-        # 3. 只撤销本来源拥有的关闭决定，不覆盖问题页面或其他发现的后续决策。
-        sync_feedback_issue(db, job_id, origin.source_attempt, origin.comment_index,
-                            verdict, actor, recovery_id=origin.recovery_id)

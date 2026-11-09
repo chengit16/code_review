@@ -72,6 +72,26 @@ for (const [index, width] of [1280, 390, 320].entries()) {
     await effective.getByRole("group", { name: "发现 2 的反馈" }).getByRole("button", { name: "有帮助" }).click();
     await page.reload();
     await expect(effective.getByRole("group", { name: "发现 2 的反馈" }).getByRole("button", { name: "有帮助" })).toHaveAttribute("aria-pressed", "true");
+    // 补审反馈同样只记录价值；替换和撤销不改变共享问题的处置。
+    const beforeFeedback = await (await request.get(`/api/jobs/${jobId}`)).json();
+    const group = effective.getByRole("group", { name: "发现 2 的反馈" });
+    await expect(group.getByRole("button")).toHaveCount(3);
+    await expect(group.getByRole("button", { name: "已修复", exact: true })).toHaveCount(0);
+    await group.getByRole("button", { name: "忽略", exact: true }).click();
+    await expect(group.getByRole("button", { name: "忽略", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(group.getByRole("button", { name: "有帮助", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.reload();
+    await expect(group.getByRole("button", { name: "忽略", exact: true })).toHaveAttribute("aria-pressed", "true");
+    const ignored = await (await request.get(`/api/jobs/${jobId}`)).json();
+    const findingId = ignored.effective_document.findings[1].finding_id;
+    expect(ignored.finding_feedback[findingId]).toBe("ignored");
+    expect(ignored.resolved_finding_issues).toEqual(beforeFeedback.resolved_finding_issues);
+    await group.getByRole("button", { name: "忽略", exact: true }).click();
+    await expect(group.getByRole("button", { pressed: true })).toHaveCount(0);
+    const cleared = await (await request.get(`/api/jobs/${jobId}`)).json();
+    expect(cleared.finding_feedback[findingId]).toBeUndefined();
+    expect(cleared.resolved_finding_issues).toEqual(beforeFeedback.resolved_finding_issues);
     page.once("dialog", (confirmation) => confirmation.accept());
     await panel.getByRole("button", { name: "仅重发补充通知" }).click();
     await expect(panel.getByRole("button", { name: "仅重发补充通知" })).not.toBeVisible();

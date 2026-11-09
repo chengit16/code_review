@@ -46,6 +46,7 @@ class TaskIssueSummary(BaseModel):
     open_count: int
     fixed_count: int
     ignored_count: int
+    false_positive_count: int = 0
     unknown_count: int
     complete: bool
     no_findings: bool

@@ -26,6 +26,7 @@ import { ModelUsage } from "./ModelUsage";
 import { ReviewFailureAnalysis } from "./ReviewFailureAnalysis";
 import { ReviewRecoveryPanel } from "./ReviewRecoveryPanel";
 import { TaskStop } from "./TaskControls";
+import type { FindingFeedbackChoice } from "./FindingActions";
 
 /** 按任务重新挂载详情，防止连续导航时沿用旧任务的发现筛选和操作状态。 */
 export function JobDetailPage({ token, canEdit = true }: {
@@ -54,9 +55,9 @@ function JobDetail({ token, canEdit }: {
   const retry = useMutation({ mutationFn: () => apiRequest<{ job_id: number }>(token, `/api/jobs/${id}/retry`, { method: "POST" }), onSuccess: (result) => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["jobs"] }); void queryClient.invalidateQueries({ queryKey: ["overview"] }); void queryClient.invalidateQueries({ queryKey: ["job-neighbors"] }); if (result.job_id !== Number(id)) navigate(`/jobs/${result.job_id}${back.startsWith("/jobs?") ? back.slice(5) : ""}`, { state: { back } }); } });
   const resend = useMutation({ mutationFn: () => apiRequest<unknown>(token, `/api/jobs/${id}/notification/retry`, { method: "POST" }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", id] }) });
   const feedback = useMutation({
-    mutationFn: ({ index, verdict }: { index: number; verdict: "helpful" | "false_positive" | "fixed" | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
+    mutationFn: ({ index, verdict }: { index: number; verdict: FindingFeedbackChoice | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
     onSuccess: async () => {
-      // 反馈可能关闭跨任务共享的问题，刷新所有详情、问题列表及成效统计。
+      // 反馈不改变问题处置；刷新发现评价及同源统计，避免旧评价留在缓存。
       await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness", "overview"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })));
     },

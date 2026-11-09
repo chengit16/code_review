@@ -20,7 +20,7 @@ import { IssueBatchBar } from "./IssueBatchBar";
 import { IssueDetailDrawer } from "./IssueDetailDrawer";
 import { useIssueBatch } from "./useIssueBatch";
 
-type IssueStatus = "open" | "fixed" | "ignored" | "merged";
+type IssueStatus = "open" | "fixed" | "ignored" | "false_positive" | "merged";
 
 interface ReviewIssue {
   id: number;
@@ -40,7 +40,7 @@ interface ReviewIssue {
 }
 
 const labels: Record<IssueStatus, string> = {
-  open: "待处理", fixed: "已修复", ignored: "已忽略", merged: "已合并",
+  open: "待处理", fixed: "已修复", ignored: "已忽略", false_positive: "误报", merged: "已合并",
 };
 
 /** 筛选保留在地址栏，详情仍能从不同来源直接定位到问题。 */

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from ocr_manager import storage
 from ocr_manager.config import Settings
@@ -13,8 +14,9 @@ ADMIN = {"X-Admin-Token": "test-admin-token"}
 HOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/first"
 
 
+@pytest.mark.parametrize("method", ["PATCH", "POST"])
 def test_shared_target_updates_all_repositories_and_deletes_without_history_loss(
-    client: TestClient, settings: Settings
+    client: TestClient, settings: Settings, method: str
 ) -> None:
     created = client.post(
         "/api/notification-targets",
@@ -48,7 +50,26 @@ def test_shared_target_updates_all_repositories_and_deletes_without_history_loss
     for repository_id in repository_ids:
         assert store.get_repository(repository_id)["feishu_target_id"] == target_id
 
-    changed = client.patch(
+    before = store.get_notification_target(target_id)
+    renamed = client.request(
+        method, f"/api/notification-targets/{target_id}", headers=ADMIN,
+        json={"name": "合成新名称"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["has_signing_secret"] is True
+    after = store.get_notification_target(target_id)
+    assert before is not None and after is not None
+    assert after["webhook_ciphertext"] == before["webhook_ciphertext"]
+    assert after["signing_secret_ciphertext"] == before["signing_secret_ciphertext"]
+    invalid = client.request(
+        method, f"/api/notification-targets/{target_id}", headers=ADMIN,
+        json={"webhook_url": "invalid"},
+    )
+    assert invalid.status_code == 422
+    assert store.get_notification_target(target_id) == after
+
+    changed = client.request(
+        method,
         f"/api/notification-targets/{target_id}",
         headers=ADMIN,
         json={"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/next"},

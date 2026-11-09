@@ -2,7 +2,7 @@
 import { apiRequest } from "./client";
 
 /** 人工可修改的问题状态，不包含已合并的只读来源项。 */
-export type IssueActionStatus = "open" | "fixed" | "ignored";
+export type IssueActionStatus = "open" | "fixed" | "ignored" | "false_positive";
 
 /** 显式目标与勾选时的状态快照，用于服务端并发校验。 */
 export interface IssueBatchTarget {

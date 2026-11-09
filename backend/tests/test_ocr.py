@@ -205,7 +205,10 @@ def test_background_uses_single_file_argument(
     assert len(review_commands) == 1
     assert "--background" not in review_commands[0]
     path = Path(review_commands[0][review_commands[0].index("--background-file") + 1])
-    assert path.read_text(encoding="utf-8") == "合成业务背景"
+    content = path.read_text(encoding="utf-8")
+    assert content.startswith("合成业务背景\n\n")
+    assert "平台发现质量与描述要求" in content
+    assert "同一根因、同一修复" in content
 
 
 def test_range_command_uses_from_to_without_commit(

@@ -45,7 +45,7 @@ export function ReviewFeedbackPanel({ token, repositoryId }: ReviewFeedbackPanel
   });
 
   return <section className="section rule-workspace">
-    <div className="section-head"><h2>发现反馈与通知</h2></div>
+    <div className="section-head"><h2>发现价值反馈与通知</h2></div>
     <QueryState loading={summary.isLoading} error={summary.error} />
     {repositoryId !== null && selected && <div className="feedback-policy">
       <SelectField label="飞书重点发现最低级别" value={severity} onValueChange={(value) => setDraft({ repositoryId, severity: value as Severity })} options={[
@@ -58,11 +58,11 @@ export function ReviewFeedbackPanel({ token, repositoryId }: ReviewFeedbackPanel
     {save.isSuccess && <p className="form-success" role="status">通知级别已保存，后续评审将使用新配置</p>}
     <ListTable rowKey="repository_id" pagination={false} dataSource={repositoryId === null ? summary.data ?? [] : summary.data?.filter((item) => item.repository_id === repositoryId) ?? []} scroll={{ x: 650 }} loading={summary.isFetching} locale={{ emptyText: summary.error ? "无法读取项目反馈" : "暂无项目反馈" }} columns={[
       { title: "项目", dataIndex: "repository_name", key: "name" },
-      { title: "已标记", dataIndex: "total", key: "total" },
+      { title: "已反馈", dataIndex: "total", key: "total" },
       { title: "有帮助", dataIndex: "helpful", key: "helpful" },
       { title: "误报", dataIndex: "false_positive", key: "false_positive" },
-      { title: "已修复", dataIndex: "fixed", key: "fixed" },
-      { title: "误报率", key: "rate", render: (_, item) => item.total ? `${Math.round(item.false_positive / item.total * 100)}%` : "—" },
-    ]} /><p className="form-note">按发现反馈计数，不等于去重问题数；有帮助不代表已处置。</p>
+      { title: "忽略", dataIndex: "ignored", key: "ignored", render: (value?: number) => value ?? "待升级" },
+      { title: "误报率", key: "rate", render: (_, item) => item.helpful + item.false_positive >= 5 ? `${Math.round(item.false_positive / (item.helpful + item.false_positive) * 100)}%` : "数据不足" },
+    ]} /><p className="form-note">只统计有帮助、误报和忽略，不等于去重问题数；旧版修复标记不纳入价值评价。</p>
   </section>;
 }

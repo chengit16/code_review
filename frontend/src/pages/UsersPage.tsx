@@ -1,7 +1,7 @@
 /** @description 管理员准备账号并显式启用多人认证；密码从不进入列表缓存。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card } from "antd";
+import { Button, Card, Checkbox } from "antd";
 import type { TableColumnsType } from "antd";
 import { Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +17,8 @@ import { ReadFeedback } from "../ui/ReadFeedback";
 import { SelectField } from "../ui/SelectField";
 import { Status } from "../ui/Status";
 import { useLocalList } from "../ui/useLocalList";
+
+import "../styles/configuration-lists.css";
 
 interface ManagementUser { id: number; username: string; role: "admin" | "reader"; enabled: number; created_at: string }
 
@@ -39,7 +41,7 @@ export function UsersPage({ token }: { /** 内存中的管理口令或会话。 
     onSuccess: () => { setAdding(false); setUsername(""); setPassword(""); setRole("reader"); setFeedback("账号已创建"); refresh(); },
   });
   const update = useMutation({
-    mutationFn: ({ id, input }: { id: number; input: { role?: string; enabled?: boolean; password?: string } }) => apiRequest(token, `/api/auth/users/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    mutationFn: ({ id, input }: { id: number; input: { role?: string; enabled?: boolean; password?: string } }) => apiRequest(token, `/api/auth/users/${id}`, { method: "POST", body: JSON.stringify(input) }),
     onSuccess: () => { setEditingUser(null); setPassword(""); setFeedback("账号已更新，原有会话已失效"); refresh(); void client.invalidateQueries({ queryKey: ["auth-me"] }); },
   });
   const remove = useMutation({
@@ -63,11 +65,11 @@ export function UsersPage({ token }: { /** 内存中的管理口令或会话。 
     { title: "角色", dataIndex: "role", key: "role", width: 130, render: (value: ManagementUser["role"]) => value === "admin" ? "管理员" : "只读" },
     { title: "状态", dataIndex: "enabled", key: "enabled", width: 120, render: (value: number) => <Status value={value ? "enabled" : "disabled"} /> },
     { title: "创建时间", dataIndex: "created_at", key: "created_at", width: 180, render: (value: string) => <ListTime value={value} /> },
-    { title: "操作", key: "action", width: 72, render: (_: unknown, user) => <Button type="text" title="编辑账号" aria-label={`编辑 ${user.username}`} onClick={() => openEditor(user)}>编辑</Button> },
+    { title: "操作", key: "action", width: 104, render: (_: unknown, user) => <div className="config-row-actions"><Button type="link" size="small" title="编辑账号" aria-label={`编辑 ${user.username}`} onClick={() => openEditor(user)}>编辑</Button></div> },
   ];
-  return <div className="page"><PageHeader title="访问权限" subtitle="管理账号与只读账号" actions={<button className="button button-primary" type="button" onClick={() => { create.reset(); setPassword(""); setAdding(true); }}><Plus size={17} />添加账号</button>} />
+  return <div className="page configuration-list-page"><PageHeader title="访问权限" subtitle="管理账号与只读账号" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { create.reset(); setPassword(""); setAdding(true); }}>添加账号</Button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
-    <Card className="auth-mode-card" size="small"><div className="inline-setting"><h2>认证方式</h2>{mode.isSuccess ? <label className="checkbox-label"><input type="checkbox" checked={mode.data.users_enabled} disabled={mode.isFetching || switchMode.isPending} onChange={(event) => { if (window.confirm(event.target.checked ? "启用账号登录后，现有共享口令立即失效。确定继续？" : "关闭账号登录后恢复原有本机访问方式。确定继续？")) switchMode.mutate(event.target.checked); }} />启用多人账号登录</label> : <span>认证方式待确认</span>}</div><ReadFeedback name="认证方式" loading={mode.isPending} error={mode.error} onRetry={() => void mode.refetch()} /><QueryState loading={false} error={switchMode.error} /></Card>
+    <Card className="auth-mode-card" size="small"><div className="auth-mode-setting"><h2>认证方式</h2>{mode.isSuccess ? <Checkbox checked={mode.data.users_enabled} disabled={mode.isFetching || switchMode.isPending} onChange={(event) => { if (window.confirm(event.target.checked ? "启用账号登录后，现有共享口令立即失效。确定继续？" : "关闭账号登录后恢复原有本机访问方式。确定继续？")) switchMode.mutate(event.target.checked); }}>启用多人账号登录</Checkbox> : <span>认证方式待确认</span>}</div><ReadFeedback name="认证方式" loading={mode.isPending} error={mode.error} onRetry={() => void mode.refetch()} /><QueryState loading={false} error={switchMode.error} /></Card>
     <Card className="users-table-card" size="small" title={<h2 className="users-table-heading">账号</h2>} extra={users.isSuccess ? `${users.data.length} 人` : "人数待确认"}><QueryState loading={users.isLoading} error={users.error} onRetry={() => void users.refetch()} /><p className="issue-table-note">密码不会显示在列表中；修改角色、状态或密码会使账号现有会话失效。</p><div className="list-toolbar"><ListSearch key={list.q} label="搜索账号" value={list.q} onSearch={(value) => list.update("q", value)} /></div><span className="form-note">可按用户名搜索；启用不代表当前在线。</span><Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={users.isFetching} locale={{ emptyText: users.error ? "无法读取账号" : "暂无账号，先添加一名管理员" }} scroll={{ x: 600 }} pagination={list.pagination} /></Card>
     {(adding || editingUser) && <Modal titleId="user-title" onClose={closeEditor}><div className="modal-heading"><h2 id="user-title">{adding ? "添加账号" : `编辑 ${editingUser?.username}`}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div><form className="settings-form hook-form" onSubmit={submit}>
       {adding ? <><label>用户名<input value={username} onChange={(event) => setUsername(event.target.value)} minLength={3} maxLength={64} pattern="[A-Za-z0-9._-]+" required /></label><SelectField label="角色" value={role} onValueChange={(value) => setRole(value === "admin" ? "admin" : "reader")} options={[{ value: "admin", label: "管理员" }, { value: "reader", label: "只读" }]} /></> : <><SelectField label="角色" value={editRole} onValueChange={(value) => setEditRole(value === "admin" ? "admin" : "reader")} options={[{ value: "admin", label: "管理员" }, { value: "reader", label: "只读" }]} /><label className="checkbox-label"><input type="checkbox" checked={editEnabled} onChange={(event) => setEditEnabled(event.target.checked)} />启用账号</label></>}

@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ocr_manager.config import Settings
+from ocr_manager.finding_policy import review_background
 from ocr_manager.newline_filter import (
     VERIFIED_OCR_VERSION,
     prepare_filtered_preview,
@@ -317,10 +318,9 @@ def _review_arguments(settings: Settings, checkout: Path, run_dir: Path, sha: st
         rule_path = run_dir / "managed-rule.json"
         rule_path.write_text(project_rule, encoding="utf-8")
         base.extend(["--rule", str(rule_path)])
-    if background:
-        background_path = run_dir / "background.md"
-        background_path.write_text(background, encoding="utf-8")
-        base.extend(["--background-file", str(background_path)])
+    background_path = run_dir / "background.md"
+    background_path.write_text(review_background(background), encoding="utf-8")
+    base.extend(["--background-file", str(background_path)])
     return base
 
 

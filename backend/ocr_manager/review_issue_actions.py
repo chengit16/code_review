@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
-IssueStatus = Literal["open", "fixed", "ignored"]
+IssueStatus = Literal["open", "fixed", "ignored", "false_positive"]
 
 
 def update_review_issues(
@@ -23,7 +23,7 @@ def update_review_issues(
         # 1. 写锁内读取全部事实，避免校验与更新之间被其他管理员或卡片修改。
         db.execute("BEGIN IMMEDIATE")
         placeholders = ",".join("?" for _ in ids)
-        rows = db.execute(f"SELECT id,status FROM review_issues WHERE id IN ({placeholders})",
+        rows = db.execute(f"SELECT id,status FROM review_issue_states WHERE id IN ({placeholders})",
                           ids).fetchall()
         current = {row["id"]: row["status"] for row in rows}
         if len(current) != len(ids):
@@ -39,9 +39,10 @@ def update_review_issues(
         for issue_id in ids:
             if current[issue_id] == status:
                 continue
-            db.execute("""UPDATE review_issues SET status=?,
+            db.execute("""UPDATE review_issues SET status=?,dismissal_reason=?,
                 closed_at=CASE WHEN ?='open' THEN NULL ELSE CURRENT_TIMESTAMP END WHERE id=?""",
-                (status, status, issue_id))
+                ("ignored" if status == "false_positive" else status,
+                 "false_positive" if status == "false_positive" else None, status, issue_id))
             db.execute("""INSERT INTO review_issue_events
                 (issue_id,old_status,new_status,actor,note) VALUES(?,?,?,?,?)""",
                 (issue_id, current[issue_id], status, actor, note))

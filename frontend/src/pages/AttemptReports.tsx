@@ -7,6 +7,9 @@ import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
 import type { ReviewComment, ReviewJobDetail } from "../api/types";
 import { SelectField } from "../ui/SelectField";
+import { FindingDescription } from "./FindingDescription";
+
+import "../styles/findings.css";
 
 interface Comparison { added: ReviewComment[]; removed: ReviewComment[]; unchanged_count: number; before_status: string; after_status: string }
 
@@ -32,6 +35,6 @@ export function AttemptReports({ token, job }: {
       <button className="button button-secondary" disabled={compare.isPending} onClick={() => compare.mutate()}><GitCompare size={16} />比较结果</button>
     </div>
     {(compare.error || download.error) && <p className="form-error" role="alert">{(compare.error || download.error)?.message}</p>}
-    {compare.data && <div className="attempt-comparison" aria-live="polite"><div className="comparison-summary"><span>新增 <strong>{compare.data.added.length}</strong></span><span>不再出现 <strong>{compare.data.removed.length}</strong></span><span>保留 <strong>{compare.data.unchanged_count}</strong></span></div>{[{ label: "新增", items: compare.data.added }, { label: "不再出现", items: compare.data.removed }].map((group) => group.items.length > 0 && <div className="comparison-group" key={group.label}><h3>{group.label}</h3>{group.items.map((comment, index) => <p key={index}><strong>{comment.path}</strong><span>{comment.content}</span></p>)}</div>)}</div>}
+    {compare.data && <div className="attempt-comparison" aria-live="polite"><div className="comparison-summary"><span>新增 <strong>{compare.data.added.length}</strong></span><span>不再出现 <strong>{compare.data.removed.length}</strong></span><span>保留 <strong>{compare.data.unchanged_count}</strong></span></div>{[{ label: "新增", items: compare.data.added }, { label: "不再出现", items: compare.data.removed }].map((group) => group.items.length > 0 && <div className="comparison-group" key={group.label}><h3>{group.label}</h3>{group.items.map((comment, index) => <div className="comparison-finding" key={index}><strong>{comment.path}</strong><FindingDescription content={comment.content} /></div>)}</div>)}</div>}
   </section>;
 }

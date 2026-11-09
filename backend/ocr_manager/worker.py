@@ -26,6 +26,7 @@ from ocr_manager.checks import run_connection_check
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.execution_guard import worker_fence
 from ocr_manager.feishu import FeishuDeliveryError, send_review
+from ocr_manager.finding_policy import VERSION as FINDING_POLICY_VERSION
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.model_pricing import pricing_snapshot
@@ -163,6 +164,7 @@ def configuration_snapshot(
             "concurrency": model_settings.ocr_concurrency,
             "effort": model_settings.ocr_effort,
             "review_policy": REVIEW_POLICY.copy(),
+            "finding_policy_version": FINDING_POLICY_VERSION,
             "input_policy": input_policy(bool(project_limits["newline_filter_enabled"])),
             "model_profile_id": profile_id,
             "pricing": pricing_snapshot(profile),

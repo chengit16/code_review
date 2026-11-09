@@ -226,3 +226,34 @@ PY
 ## 单 Worker 可配置任务池（schema 49）
 
 48 → 49 将执行槽改为独立槽标识，增加 1～10 调度容量和版本化变更历史；默认 1，迁移不自动调高并发或扩大付费补审授权。必须正常停止共享库的 API/Worker/monitor、完成备份后，以同版后端及前端整体升级，禁止新 API 迁移后仍保留旧 Worker/monitor。旧程序拒绝新版库，回退不能仅替换代码或降低版本号，须恢复备份并核对新增数据补偿。首次启动核对“运行监控”的配置版本、已应用上限和槽心跳；后续由管理员在页面自由设置 1～10，无需重启。完整语义、安全边界、隔离验证和回退约束见[任务并发说明](worker-task-concurrency.md)，实际发布状态以问题台账为准。
+
+## 评审反馈与问题处置分离（schema 50–51）
+
+49 → 50 将可由持久审计精确识别的旧“误报同步忽略”处置投影为独立误报状态；普通忽略仍保持忽略，未依据其他历史反馈猜测问题处置。50 → 51 扩展反馈值以支持“忽略”，迁移保留既有“已修复”反馈和更新时间。当前发现卡片仅提交“有帮助 / 误报 / 忽略”，三者互斥；新 API 不再接受“已修复”作为价值反馈，但历史值保持可读。反馈不会自动修改问题状态；已修复等人工处置只在跟进问题页面操作。API、Worker 与前端需配套升级，不要让旧进程打开新版 SQLite；上线前备份并在副本验证迁移、状态列表与反馈统计，当前代码已修改不代表业务实例已部署。
+
+## 穿透入口的请求方法兼容
+
+部分 HTTP 穿透链路会在转发带 JSON 请求体的 `PATCH` 时断开连接，浏览器可能收到代理生成的 502；本机直连正常不代表穿透入口也支持该方法。当前管理前端统一通过以下 `POST` 更新入口保存原先的部分更新，原 `PATCH` 保留给已有调用方：
+
+- `/api/notification-targets/{target_id}`：飞书配置。
+- `/api/repositories/{repository_id}`：仓库基础接入与启停。
+- `/api/model-profiles/{profile_id}`：模型草稿（既有兼容入口）。
+- `/api/auth/users/{user_id}`：账号角色、状态与密码。
+- `/api/review-issues/{issue_id}`：问题状态与说明。
+
+兼容入口和原接口共用处理函数、鉴权、字段校验、凭据省略语义及事务，不使用客户端方法覆盖头，也不在 502 后自动重试。前后端必须配套发布；只更新静态资源而未重启 API，会出现兼容路由 405。`PUT`、`DELETE` 及 GitLab webhook 不因本次兼容而改写。
+
+代理故障时应先刷新核对持久化事实，不能将 502 视为一定未保存。排查可对比本机与穿透入口对必然无效输入的响应状态、是否带 `X-Request-ID`，禁止用真实配置写入作探针，禁止将凭据或完整响应写入日志。修改代理前应确认其请求体和请求方法支持情况；域名可访问不代表 HTTPS 已启用，公网管理仍需受控 HTTPS 和认证，不能为兼容关闭鉴权。
+
+隔离回归命令（不操作正式库，不发送真实飞书或模型请求）：
+
+```sh
+.venv/bin/pytest -q backend/tests/test_proxy_updates.py backend/tests/test_notification_targets.py backend/tests/test_auth.py backend/tests/test_review_issues.py
+PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-proxy-compat-dist --emptyOutDir
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-proxy-compat-dist npx playwright test e2e/workflows.spec.ts --output /tmp/ocr-proxy-compat-browser
+```
+
+工作流浏览器回归在网络层显式拒绝 `PATCH`，验证页面仍可保存；该测试是隔离证据，不代表真实穿透入口已发布或已完成生产验收。

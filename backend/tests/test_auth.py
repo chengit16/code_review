@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
@@ -64,7 +65,10 @@ def test_users_mode_requires_admin_and_enforces_reader(client: TestClient,
     assert client.get("/api/repositories", headers=reader_headers).status_code == 401
 
 
-def test_last_admin_protected_and_role_change_revokes_session(client: TestClient) -> None:
+@pytest.mark.parametrize("method", ["PATCH", "POST"])
+def test_last_admin_protected_and_role_change_revokes_session(
+    client: TestClient, method: str,
+) -> None:
     """最后管理员不能降权；被修改用户的旧会话立即失效。"""
 
     admin_user = create_user(client, "alice", "admin")
@@ -72,14 +76,14 @@ def test_last_admin_protected_and_role_change_revokes_session(client: TestClient
     enable_users(client)
     admin_session = login(client, "alice")
     admin_headers = {"Authorization": f"Bearer {admin_session['token']}"}
-    assert client.patch(f"/api/auth/users/{admin_user['id']}", headers=admin_headers,
+    assert client.request(method, f"/api/auth/users/{admin_user['id']}", headers=admin_headers,
                         json={"role": "reader"}).status_code == 409
     assert client.delete(f"/api/auth/users/{admin_user['id']}", headers=admin_headers
                          ).status_code == 409
-    assert client.patch(f"/api/auth/users/{reader['id']}", headers=admin_headers,
+    assert client.request(method, f"/api/auth/users/{reader['id']}", headers=admin_headers,
                         json={"role": "admin"}).status_code == 200
     assert client.get("/api/auth/me", headers=admin_headers).json()["username"] == "alice"
-    assert client.patch(f"/api/auth/users/{admin_user['id']}", headers=admin_headers,
+    assert client.request(method, f"/api/auth/users/{admin_user['id']}", headers=admin_headers,
                         json={"role": "reader"}).status_code == 200
     assert client.get("/api/repositories", headers=admin_headers).status_code == 401
     new_session = login(client, "alice")

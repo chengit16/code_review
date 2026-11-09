@@ -103,10 +103,10 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | --- | --- |
 | 评审任务 | 区分排队、运行、完成、部分完成、失败、跳过、取消；完整结论须以覆盖证据为准。 |
 | 飞书投递 | 与评审结果独立；发送失败不代表 OCR 失败，重发不重跑评审。 |
-| 问题 | 待处理、已修复、已忽略、已合并，记录人工决策与操作者。 |
-| 发现反馈 | 有帮助、误报、已修复，与关联问题按服务端事务规则同步。 |
+| 问题 | 待处理、已修复、已忽略、误报、已合并，记录人工决策与操作者。 |
+| 发现反馈 | 有帮助、误报、忽略三种互斥评价；旧修复值保留在存储中但不计入价值统计，反馈不改变问题处置。 |
 
-“有帮助”不是关闭问题；“误报”会把符合条件的待处理问题同步为已忽略；“已修复”表示人工确认。撤销反馈仅在满足最新决策归属等条件时恢复问题，不能覆盖别处的后续处理。详见[就地处理说明](configuration-guide.md#6-评审发现的就地处理)。
+发现卡片的反馈用于收集 review 价值；“忽略”是不采纳，不等于误报。跟进问题的四种当前处置只在问题列表及详情独立更新，并记录审计；反馈不会自动创建、关闭或重开问题。有价值反馈不证明代码已修复，问题的“已修复”也只是人工声明。统计将反馈按发现数、问题按唯一编号拆开，详见[交互说明](configuration-guide.md#6-评审发现的就地处理)。
 
 模型严重级别使用 `critical`、`high`、`medium`、`low`，不等同于任务执行状态。项目应在“系统设置 → 审核规则”说明认定标准，要求发现写明触发条件、代码证据和实际业务后果；不要只凭措辞强烈程度判断级别。
 
@@ -130,7 +130,7 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | `backend/ocr_manager/webhook.py`、`gitlab.py`、`git_repo.py` | 事件校验、GitLab 来源核对与可信 Git 操作。 |
 | `backend/ocr_manager/worker.py`、`tasks.py`、`ocr.py` | 后台消费、任务执行、OCR 输入与结果处理。 |
 | `backend/ocr_manager/premerge.py`、`premerge_context.py` | 合并前版本、上下文与失效处理。 |
-| `backend/ocr_manager/review_issues.py`、`review_issue_actions.py`、`feedback_issues.py` | 问题跟踪、处理动作和发现反馈联动。 |
+| `backend/ocr_manager/review_issues.py`、`review_issue_actions.py`、`review_finding_feedback.py` | 问题跟踪、独立处置与发现价值反馈。 |
 | `backend/ocr_manager/feishu.py`、`publications.py` | 飞书通知与 GitLab 行内评论。 |
 | `backend/ocr_manager/auth.py`、`secrets.py` | 账号会话、角色校验与凭据加密。 |
 | `backend/ocr_manager/alerts.py`、`monitoring.py`、`backup.py`、`launchd.py` | 独立监控、维护、备份恢复及进程清单。 |

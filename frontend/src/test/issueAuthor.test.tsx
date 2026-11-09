@@ -49,12 +49,13 @@ it("出现记录分别显示对应提交人，不把最新作者套用到历史�
   renderIssues(false);
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "查看问题 1" }));
-  const drawer = await screen.findByRole("dialog", { name: "问题 #1" });
-  expect(await within(drawer).findByText("提交人：合成作者乙")).toBeVisible();
-  expect(within(drawer).getByText("提交人：合成作者甲")).toBeVisible();
-  expect(within(drawer).getByText("提交人：未记录")).toBeVisible();
-  expect(within(drawer).getByRole("link", { name: /补审 #7（候选来源）/ })).toHaveAttribute("href", "/jobs/2");
-  expect(within(drawer).getAllByRole("link", { name: /初审/ })).toHaveLength(2);
+  const drawer = await screen.findByText("问题 #1").then((title) => title.closest(".ant-drawer"));
+  expect(drawer).not.toBeNull();
+  expect(await within(drawer as HTMLElement).findByText("提交人：合成作者乙")).toBeVisible();
+  expect(within(drawer as HTMLElement).getByText("提交人：合成作者甲")).toBeVisible();
+  expect(within(drawer as HTMLElement).getByText("提交人：未记录")).toBeVisible();
+  expect(within(drawer as HTMLElement).getByRole("link", { name: /补审 #7（候选来源）/ })).toHaveAttribute("href", "/jobs/2");
+  expect(within(drawer as HTMLElement).getAllByRole("link", { name: /初审/ })).toHaveLength(2);
 });
 
 it.each([true, false])("空列表占满新增列后的表格（可编辑：%s）", async (canEdit) => {

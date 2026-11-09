@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
@@ -40,8 +41,9 @@ def finish_with_finding(store: Store, repository_id: int, mr_iid: int,
     return int(job["id"])
 
 
+@pytest.mark.parametrize("method", ["PATCH", "POST"])
 def test_issue_lifecycle_tracks_occurrences_without_inferred_fix(
-    client: TestClient, settings: Settings,
+    client: TestClient, settings: Settings, method: str,
 ) -> None:
     """相同开放问题跨 MR 复用；认可反馈和后续结果不推断修复。"""
 
@@ -59,9 +61,9 @@ def test_issue_lifecycle_tracks_occurrences_without_inferred_fix(
                       json={"verdict": "helpful"}).status_code == 200
     assert client.get(f"/api/review-issues/{issue_id}", headers=ADMIN).json()[
         "status"] == "open"
-    assert client.patch(f"/api/review-issues/{issue_id}", json={"status": "fixed"}
+    assert client.request(method, f"/api/review-issues/{issue_id}", json={"status": "fixed"}
                         ).status_code == 401
-    changed = client.patch(f"/api/review-issues/{issue_id}", headers=ADMIN,
+    changed = client.request(method, f"/api/review-issues/{issue_id}", headers=ADMIN,
                            json={"status": "fixed", "note": "已核对修复"})
     assert changed.status_code == 200
     detail = client.get(f"/api/review-issues/{issue_id}", headers=ADMIN).json()
@@ -75,7 +77,7 @@ def test_issue_lifecycle_tracks_occurrences_without_inferred_fix(
     new_issue = client.get("/api/review-issues?status=open", headers=ADMIN).json()[
         "items"][0]["id"]
     assert new_issue != issue_id
-    assert client.patch(f"/api/review-issues/{issue_id}", headers=ADMIN,
+    assert client.request(method, f"/api/review-issues/{issue_id}", headers=ADMIN,
                         json={"status": "open"}).status_code == 200
     assert client.post(f"/api/review-issues/{new_issue}/merge", headers=ADMIN,
                        json={"target_id": issue_id}).status_code == 200

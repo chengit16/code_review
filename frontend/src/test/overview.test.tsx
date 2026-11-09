@@ -31,29 +31,30 @@ function setup(canEdit = false, initialFailure = false) {
 it("首次读取不以未知健康和未返回计数伪装零态", async () => {
   setup();
   expect(screen.getByText(/Worker 正在检测/)).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "当前工作" })).not.toBeInTheDocument();
-  await screen.findByRole("heading", { name: "当前工作" });
+  expect(screen.queryByRole("heading", { name: "评审质量与处置" })).not.toBeInTheDocument();
+  await screen.findByRole("heading", { name: "评审质量与处置" });
 });
 
 it("健康首次失败无缓存时明确无检测记录，其他资源正常展示", async () => {
   setup(false, true);
   expect(await screen.findByText(/尚无成功检测记录/)).toBeVisible();
   expect(screen.queryByText(/Worker 未运行，队列可能等待处理/)).not.toBeInTheDocument();
-  expect(await screen.findByRole("heading", { name: "最近评审" })).toBeVisible();
+  expect(await screen.findByRole("heading", { name: "项目概况" })).toBeVisible();
 });
 
 it("概览与效果刷新失败分别保留旧数据，不更新它们的成功读取时间", async () => {
   const control = setup();
-  await screen.findByRole("heading", { name: "当前工作" });
+  await screen.findByRole("heading", { name: "评审质量与处置" });
+  await userEvent.click(screen.getByText("问题变化", { exact: true }));
   await screen.findByRole("button", { name: "查看趋势数据" });
-  const dataRead = document.querySelectorAll(".overview-read")[1]?.textContent;
+  const dataRead = screen.getByText(/运行数据 · 成功读取于/).textContent;
   control.failData();
   await userEvent.click(screen.getByRole("button", { name: "刷新概览" }));
   expect(await screen.findByText(/运行数据刷新失败/)).toBeVisible();
-  expect(await screen.findByText(/效果统计刷新失败/)).toBeVisible();
+  expect(await screen.findByText(/项目统计刷新失败/)).toBeVisible();
   expect(await screen.findByText(/部分读取失败/)).toBeVisible();
-  expect(document.querySelectorAll(".overview-read")[1]?.textContent).toBe(dataRead);
-  expect(screen.getByRole("heading", { name: "最近评审" })).toBeVisible();
+  expect(screen.getByText(/运行数据 · 成功读取于/).textContent).toBe(dataRead);
+  expect(screen.getByRole("heading", { name: "项目概况" })).toBeVisible();
 });
 
 it("健康缓存失败后不再确认停止，独立成功数据保留且读者不显示管理入口", async () => {
@@ -65,8 +66,8 @@ it("健康缓存失败后不再确认停止，独立成功数据保留且读者�
   expect(await screen.findByText(/暂时无法确认 Worker 当前状态/)).toBeVisible();
   expect(screen.queryByText(/Worker 未运行，队列可能等待处理/)).not.toBeInTheDocument();
   expect(await screen.findByText(/部分读取失败/)).toBeVisible();
-  expect(screen.getByRole("heading", { name: "最近评审" })).toBeVisible();
-  expect(screen.getByText("当前服务暂不提供汇总")).toBeVisible();
+  expect(screen.getByRole("heading", { name: "项目概况" })).toBeVisible();
+  expect(screen.getByText("当前服务暂不提供分级汇总")).toBeVisible();
 });
 
 it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读取时间", async () => {
@@ -84,6 +85,8 @@ it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读�
 
 it("趋势表默认折叠，键盘可展开读取与图表同源的精确数据", async () => {
   setup();
+  await screen.findByRole("heading", { name: "评审质量与处置" });
+  await userEvent.click(screen.getByText("问题变化", { exact: true }));
   const button = await screen.findByRole("button", { name: "查看趋势数据" });
   expect(button).toHaveAttribute("aria-expanded", "false");
   button.focus();

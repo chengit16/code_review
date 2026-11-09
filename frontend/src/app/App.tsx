@@ -35,7 +35,7 @@ function WorkspaceRoute() {
 
 const navigation = [
   { heading: "工作台", links: [
-    { to: "/", label: "运行概览", icon: LayoutDashboard, end: true },
+    { to: "/", label: "项目总览", icon: LayoutDashboard, end: true },
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },

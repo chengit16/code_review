@@ -155,7 +155,7 @@ class IssueUpdate(BaseModel):
     """状态须由人确认；发现从后续评审消失不会自动视为已修复。"""
 
     model_config = ConfigDict(extra="forbid")
-    status: Literal["open", "fixed", "ignored"]
+    status: IssueStatus
     note: str | None = Field(default=None, max_length=500)
 
 
@@ -202,7 +202,9 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
 
     @app.get("/api/review-issues", dependencies=[admin])
     def list_issues(repository_id: int | None = Query(None, gt=0),
-                    status: Literal["open", "fixed", "ignored", "merged"] | None = None,
+                    status: Literal[
+                        "open", "fixed", "ignored", "false_positive", "merged"
+                    ] | None = None,
                     severity: str | None = Query(None, max_length=40),
                     q: str | None = Query(None, max_length=200),
                     page: int = Query(1, ge=1),
@@ -232,11 +234,12 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                 OR instr(lower(i.content),lower(?))>0
                 OR instr(lower(i.path),lower(?))>0 OR CAST(i.id AS TEXT)=?)"""
             counts = {row["status"]: row["count"] for row in db.execute(
-                f"SELECT i.status,COUNT(*) AS count FROM review_issues i {facet_where} "
+                f"SELECT i.status,COUNT(*) AS count FROM review_issue_states i {facet_where} "
                 "GROUP BY i.status", facet_params)}
-            counts["all"] = sum(counts.get(key, 0) for key in ("open", "fixed", "ignored"))
+            counts["all"] = sum(counts.get(key, 0) for key in (
+                "open", "fixed", "ignored", "false_positive"))
             total = db.execute(
-                f"SELECT COUNT(*) FROM review_issues i {where}", params
+                f"SELECT COUNT(*) FROM review_issue_states i {where}", params
             ).fetchone()[0]
             # 问题可跨提交复用或人工合并；只展示最近出现对应的作者，不推断责任人。
             # 最近任务缺失作者时保持空值，不能回退到更早记录造成错误归属。
@@ -245,7 +248,7 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                  JOIN review_jobs j ON j.id=o.job_id WHERE o.issue_id=i.id
                  ORDER BY o.id DESC LIMIT 1) AS commit_author,
                 (SELECT COUNT(*) FROM review_issue_occurrences o WHERE o.issue_id=i.id)
-                AS occurrence_count FROM review_issues i JOIN repositories r
+                AS occurrence_count FROM review_issue_states i JOIN repositories r
                 ON r.id=i.repository_id {where} ORDER BY i.id DESC LIMIT ? OFFSET ?""",
                 (*params, page_size, (page - 1) * page_size)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total,
@@ -273,7 +276,7 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
         """返回原始出现位置和人工决策历史，便于跨 MR 核查。"""
 
         with store.connection() as db:
-            issue = db.execute("""SELECT i.*,r.name AS repository_name FROM review_issues i
+            issue = db.execute("""SELECT i.*,r.name AS repository_name FROM review_issue_states i
                 JOIN repositories r ON r.id=i.repository_id WHERE i.id=?""",
                 (issue_id,)).fetchone()
             if issue is None:
@@ -285,9 +288,10 @@ def register_review_issues(app: FastAPI, store: Store, admin: Any) -> None:
                 WHERE issue_id=? ORDER BY id DESC""", (issue_id,))]
         return {**dict(issue), "occurrences": occurrences, "events": events}
 
+    @app.post("/api/review-issues/{issue_id}", dependencies=[admin])
     @app.patch("/api/review-issues/{issue_id}", dependencies=[admin])
     def update_issue(issue_id: int, payload: IssueUpdate, request: Request) -> dict[str, str]:
-        """记录状态变化和操作者；重复保存不生成无意义事件。"""
+        """POST 兼容隧道；记录状态与操作者，重复保存不生成无意义事件。"""
 
         try:
             update_review_issues(store, [(issue_id, None)], payload.status,

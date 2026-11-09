@@ -73,13 +73,13 @@ export interface FindingFeedbackVersion {
 
 /** 新反馈入口要求最新版本，不能用聚合数组下标调用旧接口。 */
 export interface FindingFeedbackWrite extends FindingFeedbackVersion {
-  verdict: "helpful" | "false_positive" | "fixed";
+  verdict: "helpful" | "false_positive" | "ignored";
 }
 
 /** 根尝试和补审反馈按同一身份读取；历史可读但不接受旧版本写入。 */
 export interface FindingFeedbackRecord {
   finding_id: string;
-  verdict: "helpful" | "false_positive" | "fixed";
+  verdict: "helpful" | "false_positive" | "ignored" | "fixed";
   actor: string;
   updated_at: string;
 }

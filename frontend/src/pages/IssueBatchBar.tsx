@@ -26,7 +26,7 @@ export function IssueBatchBar({ count, allSelected, disabled, pending, note, onN
     </div>
     <div className="issue-batch-actions">
       <label>批量处理说明<Input value={note} maxLength={500} disabled={pending} placeholder="可选，将记录到每条问题" onChange={(event) => onNote(event.target.value)} /></label>
-      {(["fixed", "ignored", "open"] as const).map((value) => <Button key={value} disabled={disabled || pending || !count} onClick={() => onSubmit(value)}>{pending ? "处理中…" : `批量${issueActionLabels[value]}`}</Button>)}
+      {(["fixed", "ignored", "false_positive", "open"] as const).map((value) => <Button key={value} disabled={disabled || pending || !count} onClick={() => onSubmit(value)}>{pending ? "处理中…" : `批量${issueActionLabels[value]}`}</Button>)}
     </div>
   </section>;
 }

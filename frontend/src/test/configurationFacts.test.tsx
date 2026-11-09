@@ -38,6 +38,42 @@ it("认证方式失败时不展示可切换的默认关闭控件，恢复后才�
   expect(writes).toEqual([]);
 });
 
+it("取消认证切换不写入，受控复选框保持服务端状态", async () => {
+  const { writes } = mount(<UsersPage token="" />, {
+    "/api/auth/mode": { users_enabled: false }, "/api/auth/users": [],
+  });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const checkbox = await screen.findByRole("checkbox", { name: "启用多人账号登录" });
+  await userEvent.click(checkbox);
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining("现有共享口令立即失效"));
+  expect(checkbox).not.toBeChecked();
+  expect(writes).toEqual([]);
+});
+
+it("认证切换响应未返回时锁定控件，失败后保留原状态且不自动重试", async () => {
+  let finish: (response: Response) => void = () => {};
+  const writes: string[] = [];
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if (init?.method === "PUT") {
+      writes.push(String(init.body));
+      return new Promise<Response>((resolve) => { finish = resolve; });
+    }
+    return new Response(JSON.stringify(String(input) === "/api/auth/mode" ? { users_enabled: false } : []));
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<DesignProvider><QueryClientProvider client={client}><MemoryRouter><UsersPage token="" /></MemoryRouter></QueryClientProvider></DesignProvider>);
+  const checkbox = await screen.findByRole("checkbox", { name: "启用多人账号登录" });
+  await userEvent.click(checkbox);
+  await waitFor(() => expect(checkbox).toBeDisabled());
+  expect(writes).toEqual([JSON.stringify({ users_enabled: true })]);
+  await act(async () => { finish(new Response(JSON.stringify({ detail: "合成切换冲突" }), { status: 409 })); });
+  expect(await screen.findByText("合成切换冲突")).toBeVisible();
+  expect(checkbox).not.toBeChecked();
+  expect(checkbox).not.toBeDisabled();
+  expect(writes).toHaveLength(1);
+});
+
 it("仓库辅助查询失败不显示待重新测试或未配置，独立重试不改变仓库", async () => {
   const responses: Record<string, object | Error> = {
     "/api/repositories": [{ id: 1, name: "合成仓库", feishu_target_id: 8, enabled: 1 }],

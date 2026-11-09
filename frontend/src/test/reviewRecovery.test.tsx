@@ -8,6 +8,8 @@ import { expect, it, vi } from "vitest";
 import * as recovery from "../api/reviewRecovery";
 import * as commandId from "../api/commandId";
 import * as conclusions from "../api/reviewConclusions";
+import * as issues from "../api/reviewIssues";
+import { DesignProvider } from "../app/DesignProvider";
 import { ApiError } from "../api/client";
 import type { ReviewJobDetail } from "../api/types";
 import { EffectiveReview } from "../pages/EffectiveReview";
@@ -188,11 +190,12 @@ it("保存额度成功后仍需单独确认补审", async () => {
   expect(create).not.toHaveBeenCalled();
 });
 
-it("有效发现反馈使用稳定来源 ID 和固定版本，绝不提交聚合下标", async () => {
+it("有效发现反馈使用稳定身份，独立忽略使用已解析问题而非聚合下标", async () => {
   const write = vi.spyOn(conclusions, "setFindingFeedback").mockResolvedValue({ verdict: "helpful" });
+  const ignore = vi.spyOn(issues, "updateReviewIssues").mockResolvedValue({ status: "ignored", updated: 1, unchanged: 0 });
   const version = { source_attempt: 1, revision: 2, recovery_id: 7, terminal_state: "complete", finding_count: 1,
     coverage: { selected: 2, completed: 2, reused: 0, failed: 0, waived: 0 } };
-  const current: ReviewJobDetail = { ...job, effective_document: {
+  const current: ReviewJobDetail = { ...job, resolved_finding_issues: { "j1:a1:r7:c0": { id: 99, status: "open" } }, effective_document: {
     schema_version: "platform.review-conclusion/v1", consumer_integration_ready: true, job_id: 1,
     version, role: "effective", is_current_source: true, input_filter_excluded_count: 0,
     usage_through_recovery_id: 7, execution_usage: { known_usage_attempts: 0, total_attempts: 1,
@@ -201,8 +204,11 @@ it("有效发现反馈使用稳定来源 ID 和固定版本，绝不提交聚合
       also_seen_in: [], path: "file.py", content: "合成补审发现", start_line: null, end_line: null, severity: "high", category: null }],
   } };
   const client = new QueryClient();
-  render(<MemoryRouter><QueryClientProvider client={client}><EffectiveReview token="" job={current} canEdit /></QueryClientProvider></MemoryRouter>);
+  render(<MemoryRouter><QueryClientProvider client={client}><DesignProvider><EffectiveReview token="" job={current} canEdit /></DesignProvider></QueryClientProvider></MemoryRouter>);
   await userEvent.click(screen.getByRole("button", { name: "有帮助" }));
   await waitFor(() => expect(write).toHaveBeenCalledWith("", 1, "j1:a1:r7:c0", { source_attempt: 1, revision: 2 }, "helpful"));
   expect(screen.getByText(/补审 #7 · 原始发现 1/)).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "忽略" }));
+  await waitFor(() => expect(write).toHaveBeenLastCalledWith("", 1, "j1:a1:r7:c0", { source_attempt: 1, revision: 2 }, "ignored"));
+  expect(ignore).not.toHaveBeenCalled();
 });

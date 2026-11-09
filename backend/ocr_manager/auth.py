@@ -243,9 +243,10 @@ def register_auth(app: FastAPI, store: Store,
                               (cursor.lastrowid,)).fetchone()
         return public_user(dict(user))
 
+    @app.post("/api/auth/users/{user_id}")
     @app.patch("/api/auth/users/{user_id}")
     def update_user(request: Request, user_id: int, payload: UserUpdate) -> dict[str, Any]:
-        """最后一名启用管理员不可降权或停用，且变更会撤销目标会话。"""
+        """POST 兼容隧道；保留最后管理员保护，变更仍撤销目标会话。"""
 
         require_role(request)
         with store.connection() as db:
