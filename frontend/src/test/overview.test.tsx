@@ -86,7 +86,8 @@ it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读�
 it("趋势表默认折叠，键盘可展开读取与图表同源的精确数据", async () => {
   setup();
   await screen.findByRole("heading", { name: "评审反馈" });
-  await userEvent.click(await screen.findByRole("button", { name: "展开反馈趋势" }));
+  expect(await screen.findByRole("region", { name: "反馈趋势图，可横向滚动" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: /展开反馈趋势|收起反馈趋势/ })).not.toBeInTheDocument();
   const button = await screen.findByRole("button", { name: "查看反馈数据" });
   expect(button).toHaveAttribute("aria-expanded", "false");
   button.focus();

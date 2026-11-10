@@ -3315,3 +3315,31 @@
 - 关联文件或证据：docs/usability-simplification-implementation.md；受保护备份目录 `.local-data/backups/usability-20261110-124910` 中最终成对快照、final-recovery-check 和 rollout.json；/tmp/ocr-usability-live/checks.json。更新后同源只读浏览器检查桌面 12 页及 390/320 各四页，主导航 8 项、整体溢出 0、项目摘要内部溢出 0、JavaScript 错误 0、业务写请求 0，外部字体等资源被拦截。
 - 遗留与下一步：本次范围无待实施项；没有真实调用模型、GitLab 资料或向飞书群发测试消息，真实端到端试运行须明确授权。应用机器人动态卡片仍为 PI-20261110-002 独立后续；大包拆分及真实用户用时指标未在本次宣称完成。按 monitor 正常周期等待本条同步后，执行本编号 minimum-entries 7 只读核验，不强制导入、不扩展聊天绑定、不声称语义零遗漏。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261110-003｜追加：受理反馈趋势直接展示，不再折叠
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：同一易用性事项的体验调整，已受理、处理中；关联本编号前七条。
+- 现象或目标：用户明确要求反馈趋势直接展示，不需要展开或收起操作。
+- 原因或分析：此前收纳趋势增加了一次不必要的点击，与用户日常查看反馈变化的习惯不符。
+- 处理与改进：准备移除反馈趋势外层折叠控件，保留图表、精确表格、筛选及统计口径原有行为，并补自动化验证。
+- 代码修改：本条受理时尚未修改业务代码；仅追加受理记录。
+- 本地验证：实际运行 git status --short 并检索趋势组件和现有测试；工作区开始时干净，尚未运行本轮测试。
+- 部署生效：尚未发布本轮调整，当前页面仍是前次折叠版本。
+- 关联文件或证据：用户本轮反馈；frontend/src/pages/overview/QualityOverview.tsx。
+- 遗留与下一步：完成最小改动、测试和隔离浏览器检查后更新静态页面；沿用本编号追加实际结果并核对累计九条同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：反馈趋势改为直接展示，本机静态页面已更新
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：本轮体验调整完成；关联本编号前八条，纠正前次首页趋势收纳方案。
+- 现象或目标：反馈趋势进入页面即展示，不再要求展开或收起。
+- 原因或分析：趋势属于日常直接查看的信息，外层折叠增加无必要操作；精确数据表和统计口径仍可按需查看，不改变反馈含义或筛选范围。
+- 处理与改进：移除趋势外层 Collapse，直接渲染 QualityTrend；更新组件断言、桌面及手机浏览器回归和操作说明。
+- 代码修改：已修改前端组件、测试及两份说明文档；未修改后端、数据库结构、真实配置或反馈数据，未提交 Git commit。
+- 本地验证：实际在 frontend 运行 `npm test -- --reporter=dot`，41 个文件、261 项通过；`npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-trend-visible-dist` 通过。使用本机 Chrome 执行 `OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-trend-visible-dist PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npx playwright test e2e/overview.spec.ts --grep '反馈趋势直接展示' --reporter=line`，1440、390、320px 三项通过，覆盖直接展示、无折叠开关、刷新保留展示及数据表独立开合。实际 `git diff --check` 通过；已查看合成及本机 320px 截图。Vite 大包提示仍存在；本轮未重跑后端或全量浏览器测试，源码模式扫描不等同完整无障碍审计。
+- 部署生效：将原 frontend/dist 完整备份到受保护的 `.local-data/backups/trend-visible-20261110-134932/frontend-dist-before`，保留原静态资源并最后原子替换入口文件；未重启 API、Worker 或 monitor。本机 8781 页面只读浏览器验证在 1440、390、320px 均直接显示趋势、折叠开关数为 0、页面整体横向溢出为 false，JavaScript 错误 0、业务写请求 0，外部请求被拦截；仅确认本机生效。
+- 关联文件或证据：frontend/src/pages/overview/QualityOverview.tsx；frontend/e2e/overview.spec.ts；/tmp/ocr-trend-visible-tests.log；/tmp/ocr-trend-visible-browser.log；/tmp/ocr-trend-visible-live-320.png。
+- 遗留与下一步：本轮调整无待实施项，用户刷新页面即可使用；等待独立 monitor 正常同步周期并执行本编号 minimum-entries 9 只读核验，不强制导入、不扩大采集范围，不宣称语义零遗漏。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

@@ -19,6 +19,28 @@ const snapshot = {
 };
 const runtime = { summary: { repositories: 2, queued: 1, running: 1, complete: 20, attention: 3, historical_failed: 9, notification_failed: 2, total: 32 }, todo: { events_attention: 1, premerge_failed: 2, premerge_partial: 1 }, issue_todo: { open_count: 18, severity_counts: snapshot.current_issues.severity_counts }, activity: { queued: 1, running: 1, total: 2 }, recent: [] };
 
+for (const width of [1440, 390, 320]) {
+  test(`反馈趋势直接展示且没有折叠开关 ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.route("**/api/overview", (route) => route.fulfill({ json: runtime }));
+    await page.route("**/api/review-effectiveness**", (route) => route.fulfill({ json: snapshot }));
+    await page.goto("/?days=30");
+    const quality = page.getByRole("region", { name: "评审反馈", exact: true });
+    const chart = quality.getByRole("region", { name: "反馈趋势图，可横向滚动" });
+    await expect(chart).toBeVisible();
+    await expect(quality.getByRole("button", { name: /展开反馈趋势|收起反馈趋势/ })).toHaveCount(0);
+    await expect(quality.getByRole("img", { name: /四类反馈按日期并排/ })).toBeVisible();
+    await quality.getByRole("button", { name: "查看反馈数据" }).click();
+    await expect(quality.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
+    await quality.getByRole("button", { name: "收起反馈数据" }).click();
+    await expect(chart).toBeVisible();
+    await page.reload();
+    await expect(chart).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`trend-visible-${width}.png`), fullPage: true, animations: "disabled" });
+  });
+}
+
 for (const width of [1440, 1280, 768, 390, 320]) {
   test(`项目总览 ${width}px 优先展示项目数据并保持窄屏可读`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
