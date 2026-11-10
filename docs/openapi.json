@@ -771,6 +771,30 @@
             "title": "Kind",
             "type": "string"
           },
+          "model_profile_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Id"
+          },
+          "notification_target_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Target Id"
+          },
           "repository_id": {
             "anyOf": [
               {
@@ -869,6 +893,30 @@
           "count"
         ],
         "title": "DiagnosticSignal",
+        "type": "object"
+      },
+      "DiscoveryInput": {
+        "additionalProperties": false,
+        "description": "令牌只供本次主机读取，服务端加密暂存并在完成、中断或过期后清除。",
+        "properties": {
+          "gitlab_token": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Gitlab Token",
+            "type": "string"
+          },
+          "remote_url": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Remote Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote_url",
+          "gitlab_token"
+        ],
+        "title": "DiscoveryInput",
         "type": "object"
       },
       "FailureAnalysis": {
@@ -6459,6 +6507,27 @@
         "summary": "Enqueue Connection Check"
       }
     },
+    "/api/deployment-summary": {
+      "get": {
+        "description": "白名单投影进程值；不回显私有文件路径、命令参数或密钥。",
+        "operationId": "deployment_api_deployment_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deployment Api Deployment Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deployment"
+      }
+    },
     "/api/diagnostics/export": {
       "get": {
         "description": "下载脱敏运行元数据；不包含凭据、原始代码、评审发现或模型推理。",
@@ -9260,6 +9329,29 @@
         "summary": "Get Model Catalog"
       }
     },
+    "/api/model-profile-usage": {
+      "get": {
+        "description": "只计显式项目引用，不把非默认模型误称未使用。",
+        "operationId": "model_usage_api_model_profile_usage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Model Usage Api Model Profile Usage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Model Usage"
+      }
+    },
     "/api/model-profiles": {
       "get": {
         "operationId": "list_model_profiles_api_model_profiles_get",
@@ -10444,6 +10536,48 @@
         "summary": "Update Repository"
       }
     },
+    "/api/repositories/{repository_id}/effective-configuration": {
+      "get": {
+        "description": "读取当前配置；在途及历史任务仍以自己的执行快照为准。",
+        "operationId": "effective_api_repositories__repository_id__effective_configuration_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Effective Api Repositories  Repository Id  Effective Configuration Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Effective"
+      }
+    },
     "/api/repositories/{repository_id}/feishu-hook": {
       "delete": {
         "description": "删除单个项目的飞书 Hook，项目配置和评审历史保持不变。",
@@ -11196,6 +11330,140 @@
           }
         },
         "summary": "Rotate Webhook Token"
+      }
+    },
+    "/api/repository-discoveries": {
+      "post": {
+        "description": "持久化显式查询；队列上限防止堆积临时凭据。",
+        "operationId": "create_api_repository_discoveries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Create Api Repository Discoveries Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/repository-discoveries/{discovery_id}": {
+      "delete": {
+        "description": "放弃尚未完成的请求并清除凭据；已发出的只读网络请求可能仍会完成。",
+        "operationId": "cancel_api_repository_discoveries__discovery_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discovery_id",
+            "required": true,
+            "schema": {
+              "title": "Discovery Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Api Repository Discoveries  Discovery Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel"
+      },
+      "get": {
+        "description": "仅返回安全投影，不能读取令牌密文或其他请求体。",
+        "operationId": "read_api_repository_discoveries__discovery_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discovery_id",
+            "required": true,
+            "schema": {
+              "title": "Discovery Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Api Repository Discoveries  Discovery Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read"
       }
     },
     "/api/repository-readiness": {

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from ocr_manager.config import Settings
+from ocr_manager.connection_targets import check_is_current
 from ocr_manager.feishu import FeishuDeliveryError, send_connection_test
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient
@@ -43,10 +44,26 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
     """诊断只读访问或测试消息；不创建业务事件、评审任务和正式通知。"""
 
     kind = str(check["kind"])
-    repository = store.get_repository(check["repository_id"]) if check["repository_id"] else None
     try:
+        # 同一读取快照内核对目标并冻结外部调用参数，完成事务再次核对变化。
+        with store.connection() as db:
+            db.execute("BEGIN")
+            current = check_is_current(db, check)
+            repo_row = db.execute("SELECT * FROM repositories WHERE id=?",
+                                  (check["repository_id"],)).fetchone()
+            repository = dict(repo_row) if repo_row else None
+            model_row = db.execute("SELECT * FROM model_profiles WHERE id=?",
+                                   (check.get("model_profile_id"),)).fetchone()
+            profile = dict(model_row) if model_row else None
+            target_id = check.get("notification_target_id") or (
+                repository["feishu_target_id"] if repository else None)
+            target_row = db.execute("SELECT * FROM notification_targets WHERE id=?",
+                                    (target_id,)).fetchone()
+            target = dict(target_row) if target_row else None
+        if not current:
+            store.finish_connection_check(check["id"], "配置已更改或无版本证据，请重新测试")
+            return
         if kind == "model":
-            profile = store.get_model_profile()
             model_settings = settings
             if profile is not None:
                 model_settings = replace(
@@ -59,6 +76,17 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                     ) if profile["api_key_ciphertext"] else "",
                 )
             check_model_connection(model_settings, settings.data_dir / "checks" / str(check["id"]))
+        elif kind == "feishu" and check.get("notification_target_id"):
+            if target is None:
+                raise ValueError("通知通道不存在")
+            box = SecretBox(settings.master_key)
+            webhook = box.decrypt(target["webhook_ciphertext"])
+            signing_secret = (box.decrypt(target["signing_secret_ciphertext"])
+                              if target["signing_secret_ciphertext"] else "")
+            if signing_secret:
+                send_connection_test(webhook, signing_secret)
+            else:
+                send_connection_test(webhook)
         elif repository is None:
             raise ValueError("仓库不存在")
         elif kind == "git":
@@ -79,11 +107,6 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                 repository["remote_url"],
             )
         elif kind == "feishu":
-            target = (
-                store.get_notification_target(repository["feishu_target_id"])
-                if repository["feishu_target_id"]
-                else None
-            )
             webhook_ciphertext = (
                 target["webhook_ciphertext"] if target else repository["feishu_webhook"]
             )

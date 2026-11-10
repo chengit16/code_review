@@ -8,9 +8,14 @@ export function confirmDiscard(dirty: boolean) {
   return !dirty || window.confirm("有未保存的更改，离开会丢失这些内容。确定放弃并离开？");
 }
 
-function RouterGuard({ dirty }: { dirty: boolean }) {
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty &&
-    (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search));
+function RouterGuard({ dirty, preserveSearchKeys }: { dirty: boolean; preserveSearchKeys: string[] }) {
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!dirty) return false;
+    if (currentLocation.pathname !== nextLocation.pathname) return true;
+    const current = new URLSearchParams(currentLocation.search), next = new URLSearchParams(nextLocation.search);
+    preserveSearchKeys.forEach((key) => { current.delete(key); next.delete(key); });
+    return current.toString() !== next.toString();
+  });
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     if (confirmDiscard(true)) blocker.proceed(); else blocker.reset();
@@ -19,8 +24,9 @@ function RouterGuard({ dirty }: { dirty: boolean }) {
 }
 
 /** 覆盖标签、侧栏、浏览器前后退和关闭刷新；独立组件测试不要求数据路由上下文。 */
-export function UnsavedChangesGuard({ dirty }: {
+export function UnsavedChangesGuard({ dirty, preserveSearchKeys = [] }: {
   /** 只表示当前表单与已保存基线不同，不代表后台状态。 */ dirty: boolean;
+  /** 仅忽略不会丢弃当前草稿的分区定位参数；项目身份不得忽略。 */ preserveSearchKeys?: string[];
 }) {
   const router = useContext(UNSAFE_DataRouterContext);
   useEffect(() => {
@@ -31,5 +37,5 @@ export function UnsavedChangesGuard({ dirty }: {
     window.addEventListener("workspace-before-logout", beforeLogout);
     return () => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("workspace-before-logout", beforeLogout); };
   }, [dirty]);
-  return <>{router && <RouterGuard dirty={dirty} />}{dirty && <p className="unsaved-note" role="status">有未保存的更改，离开前请先保存。</p>}</>;
+  return <>{router && <RouterGuard dirty={dirty} preserveSearchKeys={preserveSearchKeys} />}{dirty && <p className="unsaved-note" role="status">有未保存的更改，离开前请先保存。</p>}</>;
 }

@@ -40,6 +40,7 @@ from ocr_manager.premerge import (
 )
 from ocr_manager.project_limits_api import register_project_limits
 from ocr_manager.publications import register_publications
+from ocr_manager.repository_discovery import register_discovery
 from ocr_manager.review_contracts import TaskExecutionResponse
 from ocr_manager.review_effectiveness import register_effectiveness
 from ocr_manager.review_finding_api import register_finding_api
@@ -48,6 +49,7 @@ from ocr_manager.review_issues import register_review_issues
 from ocr_manager.review_recovery_api import register_recovery_api
 from ocr_manager.scheduler_api import register_scheduler_api
 from ocr_manager.secrets import SecretBox
+from ocr_manager.setup_api import register_setup
 from ocr_manager.storage import Store
 from ocr_manager.task_control import register_task_control
 from ocr_manager.webhook import parse_merge_event, verify_webhook
@@ -208,6 +210,8 @@ class ConnectionCheckInput(BaseModel):
 
     kind: Literal["git", "gitlab", "model", "feishu"]
     repository_id: int | None = Field(default=None, gt=0)
+    model_profile_id: int | None = Field(default=None, gt=0)
+    notification_target_id: int | None = Field(default=None, gt=0)
 
     model_config = {"extra": "forbid"}
 
@@ -385,6 +389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "notification-targets": "notification_target",
                     "model-profiles": "model_profile",
                     "connection-checks": "connection_check",
+                    "repository-discoveries": "repository_discovery",
                     "events": "merge_event",
                     "jobs": "review_job",
                     "review-recoveries": "review_recovery",
@@ -399,7 +404,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         for name in (
                             "repository_id", "target_id", "event_id", "job_id",
                             "profile_id", "object_id", "record_id", "theme_id", "recovery_id",
-                            "delivery_id",
+                            "delivery_id", "discovery_id",
                         )
                         if name in params
                     ),
@@ -455,6 +460,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_finding_api(app, store, config, admin)
     register_alerts(app, store, admin)
     register_project_limits(app, store, admin)
+    register_discovery(app, store, config, admin)
+    register_setup(app, store, config, admin)
     register_event_search(app, store, admin)
     register_publications(app, store, admin)
     register_review_issues(app, store, admin)
@@ -1035,15 +1042,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def enqueue_connection_check(payload: ConnectionCheckInput) -> dict[str, int | str]:
         """快速持久化连接测试，耗时的 Git、网络和 OCR 调用由 Worker 完成。"""
 
+        model_id: int | None = None
         if payload.kind == "model":
-            if payload.repository_id is not None:
+            if payload.repository_id is not None or payload.notification_target_id is not None:
                 raise HTTPException(status_code=422, detail="模型测试不需要仓库 ID")
-            profile = store.get_model_profile()
+            profile = (next((item for item in store.list_model_profiles()
+                             if item["id"] == payload.model_profile_id), None)
+                       if payload.model_profile_id else store.get_model_profile())
             if profile is None:
                 raise HTTPException(status_code=409, detail="请先配置模型与 API key")
+            if not profile["model"] or not profile["api_key_ciphertext"]:
+                raise HTTPException(status_code=409, detail="请先补全模型标识和 API Key")
+            model_id = int(profile["id"])
+        elif payload.model_profile_id is not None:
+            raise HTTPException(status_code=422, detail="只有模型测试可指定模型配置")
+        elif payload.kind == "feishu" and payload.notification_target_id is not None:
+            if payload.repository_id is not None:
+                raise HTTPException(status_code=422, detail="通知测试只能指定一个目标")
+            if store.get_notification_target(payload.notification_target_id) is None:
+                raise HTTPException(status_code=404, detail="通知通道不存在")
+        elif payload.notification_target_id is not None:
+            raise HTTPException(status_code=422, detail="只有通知测试可指定通知通道")
         elif payload.repository_id is None or store.get_repository(payload.repository_id) is None:
             raise HTTPException(status_code=404, detail="仓库不存在")
-        check_id = store.enqueue_connection_check(payload.kind, payload.repository_id)
+        check_id = store.enqueue_connection_check(
+            payload.kind, payload.repository_id,
+            model_id, payload.notification_target_id,
+        )
         if check_id is None:
             raise HTTPException(status_code=409, detail="同一目标的连接测试正在执行")
         return {"id": check_id, "status": "queued"}

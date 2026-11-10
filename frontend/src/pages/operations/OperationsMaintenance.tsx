@@ -10,6 +10,7 @@ import { AuditLogPanel } from "../AuditLogPanel";
 import { ReconciliationPanel } from "../ReconciliationPanel";
 import { ServiceAddresses } from "../ServiceAddresses";
 import type { OperationsSnapshot } from "./types";
+import { DeploymentSummary } from "./DeploymentSummary";
 
 /** 保留已访问维护工具的状态，隐藏后停用查询和轮询，不自动清理。 */
 export function OperationsMaintenance({ token, data, active }: {
@@ -48,6 +49,7 @@ export function OperationsMaintenance({ token, data, active }: {
       {message && <p role="status">{message}</p>}<QueryState loading={preview.isFetching} error={preview.error || prune.error || orphan.error} />
     </Card>
     <ServiceAddresses token={token} active={active} />
+    <DeploymentSummary token={token} active={active} />
     <Collapse activeKey={expanded} onChange={(keys) => setExpanded(Array.isArray(keys) ? keys : [keys])} items={[
       { key: "reconciliation", label: "数据对账与诊断包", children: <ReconciliationPanel token={token} active={active && expanded.includes("reconciliation")} /> },
       { key: "audit", label: "管理操作审计", children: <AuditLogPanel token={token} active={active && expanded.includes("audit")} /> },

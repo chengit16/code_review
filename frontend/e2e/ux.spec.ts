@@ -10,17 +10,17 @@ async function confirmAction(page: Page, action: () => Promise<unknown>, accept:
 
 test("规则草稿支持取消离开，确认放弃后才能切换", async ({ page }) => {
   await page.goto("/settings?tab=model");
-  await page.getByRole("tab", { name: "审核规则" }).click();
+  await page.getByRole("tab", { name: "评审规则" }).click();
   const include = page.getByLabel("额外纳入的路径");
   await include.fill("**/ux-draft.ts");
-  await confirmAction(page, () => page.getByRole("tab", { name: "Agent 模型" }).click(), false);
+  await confirmAction(page, () => page.getByRole("tab", { name: "评审模型" }).click(), false);
   await expect(include).toHaveValue("**/ux-draft.ts");
   await expect(page).toHaveURL("/settings?tab=rules");
   await confirmAction(page, () => page.goBack(), false);
   await expect(page).toHaveURL("/settings?tab=rules");
   await confirmAction(page, () => page.getByRole("link", { name: "评审任务", exact: true }).click(), false);
   await expect(include).toHaveValue("**/ux-draft.ts");
-  await confirmAction(page, () => page.getByRole("tab", { name: "Agent 模型" }).click(), true);
+  await confirmAction(page, () => page.getByRole("tab", { name: "评审模型" }).click(), true);
   await expect(page).toHaveURL("/settings?tab=model");
   await page.getByRole("button", { name: "新增模型" }).click();
   await page.getByLabel("配置名称").fill("不会保存的草稿");
@@ -41,7 +41,7 @@ test("规则保存后清除离开提醒且不保存浏览器草稿", async ({ pa
   await expect(page.getByText("有未保存的更改，离开前请先保存。")).toHaveCount(0);
   let dialogs = 0;
   page.on("dialog", async (dialog) => { dialogs += 1; await dialog.dismiss(); });
-  await page.getByRole("tab", { name: "Agent 模型" }).click();
+  await page.getByRole("tab", { name: "评审模型" }).click();
   await expect(page).toHaveURL("/settings?tab=model");
   expect(dialogs).toBe(0);
   expect(await page.evaluate(() => Object.values(localStorage).some((value) => value.includes("**/*.ux.ts")))).toBe(false);

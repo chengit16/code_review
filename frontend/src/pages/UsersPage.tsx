@@ -23,7 +23,7 @@ import "../styles/configuration-lists.css";
 interface ManagementUser { id: number; username: string; role: "admin" | "reader"; enabled: number; created_at: string }
 
 /** 账号模式启用前至少需要一名管理员；切换后重新加载登录状态。 */
-export function UsersPage({ token }: { /** 内存中的管理口令或会话。 */ token: string }) {
+export function UsersPage({ token, embedded = false }: { /** 内存中的管理口令或会话。 */ token: string; /** 系统设置内省略页面留白并使用二级标题。 */ embedded?: boolean }) {
   const client = useQueryClient();
   const users = useQuery({ queryKey: ["management-users"], queryFn: () => apiRequest<ManagementUser[]>(token, "/api/auth/users") });
   const mode = useQuery({ queryKey: ["management-auth-mode"], queryFn: () => apiRequest<{ users_enabled: boolean }>(token, "/api/auth/mode") });
@@ -67,7 +67,7 @@ export function UsersPage({ token }: { /** 内存中的管理口令或会话。 
     { title: "创建时间", dataIndex: "created_at", key: "created_at", width: 180, render: (value: string) => <ListTime value={value} /> },
     { title: "操作", key: "action", width: 104, render: (_: unknown, user) => <div className="config-row-actions"><Button type="link" size="small" title="编辑账号" aria-label={`编辑 ${user.username}`} onClick={() => openEditor(user)}>编辑</Button></div> },
   ];
-  return <div className="page configuration-list-page"><PageHeader title="访问权限" subtitle="管理账号与只读账号" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { create.reset(); setPassword(""); setAdding(true); }}>添加账号</Button>} />
+  return <div className={`configuration-list-page ${embedded ? "settings-content" : "page"}`}><PageHeader headingLevel={embedded ? 2 : 1} title="访问权限" subtitle="管理账号与只读账号" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { create.reset(); setPassword(""); setAdding(true); }}>添加账号</Button>} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     <Card className="auth-mode-card" size="small"><div className="auth-mode-setting"><h2>认证方式</h2>{mode.isSuccess ? <Checkbox checked={mode.data.users_enabled} disabled={mode.isFetching || switchMode.isPending} onChange={(event) => { if (window.confirm(event.target.checked ? "启用账号登录后，现有共享口令立即失效。确定继续？" : "关闭账号登录后恢复原有本机访问方式。确定继续？")) switchMode.mutate(event.target.checked); }}>启用多人账号登录</Checkbox> : <span>认证方式待确认</span>}</div><ReadFeedback name="认证方式" loading={mode.isPending} error={mode.error} onRetry={() => void mode.refetch()} /><QueryState loading={false} error={switchMode.error} /></Card>
     <Card className="users-table-card" size="small" title={<h2 className="users-table-heading">账号</h2>} extra={users.isSuccess ? `${users.data.length} 人` : "人数待确认"}><QueryState loading={users.isLoading} error={users.error} onRetry={() => void users.refetch()} /><p className="issue-table-note">密码不会显示在列表中；修改角色、状态或密码会使账号现有会话失效。</p><div className="list-toolbar"><ListSearch key={list.q} label="搜索账号" value={list.q} onSearch={(value) => list.update("q", value)} /></div><span className="form-note">可按用户名搜索；启用不代表当前在线。</span><Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={users.isFetching} locale={{ emptyText: users.error ? "无法读取账号" : "暂无账号，先添加一名管理员" }} scroll={{ x: 600 }} pagination={list.pagination} /></Card>

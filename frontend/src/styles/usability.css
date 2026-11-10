@@ -1,0 +1,10 @@
+/* 保存操作保持可达，不改变存量表单的焦点及草稿机制。 */
+.configuration-save-bar { position: sticky; bottom: 0; padding: 12px 0; background: var(--surface, #fff); z-index: 2; }
+.finding-summary-clamped.ant-btn > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; white-space: normal; text-align: start; }
+.setup-project-select { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: 100%; max-width: 440px; margin: 24px 0; }
+.setup-migration > *, .setup-steps > li { min-width: 0; }
+.setup-migration > .row-actions { flex-wrap: wrap; }
+.setup-migration .setup-steps > li:last-child { grid-column: auto; }
+.repository-editor-panel .ant-descriptions table { width: 100%; table-layout: fixed; }
+.repository-editor-panel .ant-descriptions td, .repository-editor-panel .ant-descriptions th { white-space: normal; overflow-wrap: anywhere; }
+.jobs-mobile-summary details > span { display: block; margin-block: 6px; }

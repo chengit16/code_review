@@ -39,8 +39,7 @@ export function JobsTable({ items, canEdit, selectable, targets, disabled, onSel
   const mobile: TableColumnsType<ReviewJob> = [{ title: "任务与评审摘要", key: "summary", render: (_, job) => <div className="task-mobile-summary jobs-mobile-summary">
     <div className="jobs-mobile-heading"><Link aria-label={`查看任务 ${job.id}`} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><ReviewState job={job} /></div>
     <small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · {shortSha(job.commit_sha)}</small>
-    <span>提交人：{job.commit_author?.trim() || "未记录"}</span><IssueSummary job={job} /><JobTimeFacts job={job} compact />
-    <span>创建：{formatTime(job.created_at)}</span><Notification job={job} />
+    <IssueSummary job={job} /><details><summary>提交、耗时与通知</summary><span>提交人：{job.commit_author?.trim() || "未记录"}</span><JobTimeFacts job={job} compact /><span>创建：{formatTime(job.created_at)}</span><Notification job={job} /></details>
   </div> }];
   const selection: TableColumnsType<ReviewJob> = canEdit ? [{ key: "selection", width: compact ? 40 : 48,
     title: <Checkbox aria-label="全选本页可重审任务" checked={targets.length > 0 && targets.length === selectable.length} indeterminate={targets.length > 0 && targets.length < selectable.length} disabled={disabled || !selectable.length} onChange={(event) => onSelect(event.target.checked ? selectable : [])} />,

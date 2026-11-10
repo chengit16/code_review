@@ -1,71 +1,69 @@
-/** @description 接入引导保护未知状态、按目标最新记录和接收证据；全部接口合成，不执行外部测试。 */
+/** @description 项目连接清单保护未知、版本失效及通知跳过；全为合成响应，不触发外部测试。 */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
 import { DesignProvider } from "../app/DesignProvider";
 import { OnboardingPage } from "../pages/OnboardingPage";
 
-function mount(responses: Record<string, object | Error | Promise<Response>> = {}) {
+const effective = { model: { id: 7, complete: true, name: "合成模型", source: "global" }, latest_job: null };
+function mount(responses: Record<string, object | Error> = {}) {
   const calls: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     calls.push(`${init?.method ?? "GET"} ${input}`);
     const key = String(input).split("/").pop() ?? "";
     const value = responses[key] ?? [];
-    if (value instanceof Promise) return value;
-    if (value instanceof Error) return new Response(JSON.stringify({ detail: value.message }), { status: 503 });
-    return new Response(JSON.stringify(value));
+    return new Response(JSON.stringify(value instanceof Error ? { detail: value.message } : value), { status: value instanceof Error ? 503 : 200 });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<DesignProvider><QueryClientProvider client={client}><MemoryRouter initialEntries={["/onboarding"]}><Routes>
-    <Route path="/onboarding" element={<OnboardingPage token="" />} /><Route path="/settings" element={<p>内部设置路由</p>} />
-  </Routes></MemoryRouter></QueryClientProvider></DesignProvider>);
-  return { client, calls, responses };
+  render(<DesignProvider><QueryClientProvider client={client}><MemoryRouter><OnboardingPage token="" /></MemoryRouter></QueryClientProvider></DesignProvider>);
+  return { client, calls };
 }
 
-it("显示已保存配置进度，Ant Design 链接保持内部导航", async () => {
-  mount({ "model-profiles": [{ id: 1, enabled: 1 }], "notification-targets": [{ id: 1 }] });
-  expect(await screen.findByText("2 / 5")).toBeVisible();
-  expect(screen.getByRole("link", { name: "稍后再做" })).toHaveAttribute("href", "/");
-  await userEvent.click(screen.getByRole("link", { name: "前往模型设置" }));
-  expect(await screen.findByText("内部设置路由")).toBeVisible();
-});
-
-it("首次加载不显示假零进度，失败可按查询恢复且只发送 GET", async () => {
-  let release: (response: Response) => void = () => {};
-  const held = new Promise<Response>((resolve) => { release = resolve; });
-  const { responses, calls } = mount({ "model-profiles": held });
-  expect(screen.getByText(/接入进度待确认/)).toBeVisible();
-  expect(screen.queryByText("0 / 5")).toBeNull();
-  await act(async () => { release(new Response(JSON.stringify({ detail: "合成读取失败" }), { status: 503 })); });
-  expect(await screen.findByText("模型读取失败，状态未知")).toBeVisible();
-  expect(screen.queryByText("0 / 5")).toBeNull();
-  responses["model-profiles"] = [{ enabled: 1 }];
-  await userEvent.click(screen.getByRole("button", { name: "重新读取模型" }));
-  expect(await screen.findByText("1 / 5")).toBeVisible();
+it("独立项目可走完准备清单，未选择通知允许跳过；历史记录不冒充真实验收", async () => {
+  const { calls } = mount({ "model-profiles": [{ id: 7 }], repositories: [{ id: 1, name: "甲", enabled: 1 }, { id: 2, name: "未接通的乙" }],
+    "effective-configuration": effective, "connection-checks": [
+      { id: 1, kind: "git", repository_id: 1, status: "passed", config_current: true },
+      { id: 2, kind: "gitlab", repository_id: 1, status: "passed", config_current: true },
+      { id: 3, kind: "model", model_profile_id: 7, status: "passed", config_current: true },
+    ] });
+  expect(await screen.findByText("4 / 4")).toBeVisible();
+  expect(screen.getByText(/此项目未选择通知，允许跳过/)).toBeVisible();
+  expect(screen.getByText(/连接准备已完成，请继续核对真实试运行/)).toBeVisible();
+  expect(screen.getByRole("link", { name: "测试项目连接" })).toHaveAttribute("href", "/repositories?repository=1&section=connection");
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
 });
 
-it("生成回调地址和历史通过不冒充接入完成；按目标取最新测试", async () => {
-  const checks = [
-    { id: 10, kind: "git", repository_id: 1, status: "failed" },
-    { id: 1, kind: "git", repository_id: 1, status: "passed" },
-    { id: 2, kind: "gitlab", repository_id: 1, status: "passed" },
-    { id: 3, kind: "feishu", repository_id: 1, status: "passed" },
-    { id: 4, kind: "model", repository_id: null, status: "passed" },
-  ];
-  const { client } = mount({ "model-profiles": [{ enabled: 1 }], "notification-targets": [{ id: 1 }],
-    repositories: [{ id: 1, enabled: 1, webhook_url: "/callback", last_webhook_at: null }], "connection-checks": checks });
-  expect(await screen.findByText("3 / 5")).toBeVisible();
-  expect(screen.getByText(/只有地址不能确认已接通/)).toBeVisible();
-  expect(screen.queryByText(/各目标最近测试记录通过/)).toBeNull();
-  act(() => client.setQueryData(["connection-checks"], checks.filter((check) => check.id !== 10)));
-  expect(await screen.findByText(/各目标最近测试记录通过/)).toBeVisible();
-  expect(screen.getByText(/未绑定当前配置版本/)).toBeVisible();
-  expect(screen.queryByText(/接入清单已完成/)).toBeNull();
-  act(() => client.setQueryData(["repositories"], [{ id: 1, enabled: 1, last_webhook_at: "2026-11-08 01:00:00" }]));
-  expect(await screen.findByText("4 / 5")).toBeVisible();
-  expect(screen.getByText("有接收记录")).toBeVisible();
+it("读取失败显示待确认并可恢复，不把缺失配置当作零进度", async () => {
+  const responses = { "model-profiles": new Error("合成读取失败") as object, repositories: [{ id: 1 }], "effective-configuration": effective };
+  mount(responses);
+  expect(await screen.findByText("待确认", { selector: "strong" })).toBeVisible();
+  expect(screen.queryByText("0 / 4")).toBeNull();
+  expect(await screen.findByText(/合成读取失败/)).toBeVisible();
+  responses["model-profiles"] = [{ id: 7 }];
+  await userEvent.click(screen.getByRole("button", { name: "重新读取模型" }));
+  expect(await screen.findByText("2 / 4")).toBeVisible();
+});
+
+it("最新失败及配置变动使准备失效，不能使用旧通过或其他模型目标", async () => {
+  const { client } = mount({ "model-profiles": [{ id: 7 }], repositories: [{ id: 1, has_feishu_webhook: true, feishu_target_id: 8 }], "effective-configuration": effective,
+    "connection-checks": [
+      { id: 1, kind: "git", repository_id: 1, status: "passed", config_current: true },
+      { id: 2, kind: "gitlab", repository_id: 1, status: "passed", config_current: true },
+      { id: 9, kind: "git", repository_id: 1, status: "failed", config_current: true },
+      { id: 3, kind: "model", model_profile_id: 6, status: "passed", config_current: true },
+      { id: 4, kind: "feishu", notification_target_id: 8, status: "passed", config_current: false },
+    ] });
+  expect(await screen.findByText("1 / 4")).toBeVisible();
+  act(() => client.setQueryData(["connection-checks"], [
+    { id: 10, kind: "git", repository_id: 1, status: "passed", config_current: true },
+    { id: 11, kind: "gitlab", repository_id: 1, status: "passed", config_current: true },
+    { id: 12, kind: "model", model_profile_id: 7, status: "passed", config_current: true },
+    { id: 13, kind: "feishu", notification_target_id: 8, status: "passed", config_current: true },
+  ]));
+  expect(await screen.findByText("4 / 4")).toBeVisible();
+  act(() => client.setQueryData(["effective-configuration", 1], { ...effective, model: { ...effective.model, id: 99 } }));
+  expect(await screen.findByText("3 / 4")).toBeVisible();
 });

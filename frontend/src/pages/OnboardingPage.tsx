@@ -1,53 +1,50 @@
-/** @description 根据已保存配置与接收事实展示接入清单；不自动测试外部连接、不推断当前配置已验证。 */
+/** @description 按项目展示可完成的连接准备清单；仅轮询已保存事实，不自动调用模型或发送消息。 */
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Card, Progress, Tag } from "antd";
+import { Alert, Progress, Select, Tag } from "antd";
+import { useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
-import type { ConnectionCheck, ModelConfiguration, NotificationTarget, Repository } from "../api/types";
+import { getEffectiveConfiguration } from "../api/services/setup";
+import type { ConnectionCheck, ModelConfiguration, Repository } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
 import { ReadFeedback } from "../ui/ReadFeedback";
 import { RouteButton } from "../ui/RouteButton";
+import { formatTime } from "../ui/format";
 
-/** 首次接入可随时离开，未知状态不计作未配置或已完成；密钥仍由各管理页维护。 */
-export function OnboardingPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
-  const models = useQuery({ queryKey: ["model-profiles"], queryFn: ({ signal }) => apiRequest<ModelConfiguration[]>(token, "/api/model-profiles", { signal }) });
-  const targets = useQuery({ queryKey: ["notification-targets"], queryFn: ({ signal }) => apiRequest<NotificationTarget[]>(token, "/api/notification-targets", { signal }) });
+/** 平台准备与项目连接分开；历史任务不冒充当前版本的端到端验收。 */
+export function OnboardingPage({ token }: { /** 内存管理会话。 */ token: string }) {
+  const [params, setParams] = useSearchParams();
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: ({ signal }) => apiRequest<Repository[]>(token, "/api/repositories", { signal }) });
-  // 只读轮询观察 Worker 测试结果，打开引导不发起外部调用。
+  const models = useQuery({ queryKey: ["model-profiles"], queryFn: ({ signal }) => apiRequest<ModelConfiguration[]>(token, "/api/model-profiles", { signal }) });
   const checks = useQuery({ queryKey: ["connection-checks"], queryFn: ({ signal }) => apiRequest<ConnectionCheck[]>(token, "/api/connection-checks", { signal }), refetchInterval: 5000 });
-  const queries = [{ name: "模型", query: models }, { name: "通知通道", query: targets }, { name: "仓库", query: repositories }, { name: "连接测试", query: checks }];
-  const repos = repositories.data ?? [];
-  const activeRepos = repos.filter((repo) => repo.enabled);
-  const modelReady = models.isSuccess && Boolean(models.data.some((model) => model.enabled));
-  const targetReady = targets.isSuccess && targets.data.length > 0;
-  const repositoryReady = repositories.isSuccess && repos.length > 0;
-  // 地址生成不是外部配置证据；接收记录也不代表当前版本已完成端到端验证。
-  const received = repositories.isSuccess && activeRepos.length > 0 && activeRepos.every((repo) => Boolean(repo.last_webhook_at));
-  const latest = (kind: ConnectionCheck["kind"], repositoryId: number | null) => checks.data
-    ?.filter((check) => check.kind === kind && check.repository_id === repositoryId).sort((a, b) => b.id - a.id)[0];
-  const latestChecks = [latest("model", null), ...activeRepos.flatMap((repo) => [latest("git", repo.id), latest("gitlab", repo.id), latest("feishu", repo.id)])];
-  const recentPassed = checks.isSuccess && activeRepos.length > 0 && latestChecks.every((check) => check?.status === "passed");
-  const known = queries.every(({ query }) => query.isSuccess);
-  const complete = [modelReady, targetReady, repositoryReady, received].filter(Boolean).length;
+  const requested = Number(params.get("repository"));
+  const repo = repositories.data?.find((item) => item.id === requested) ?? repositories.data?.[0];
+  const effective = useQuery({ queryKey: ["effective-configuration", repo?.id], queryFn: ({ signal }) => getEffectiveConfiguration(token, repo?.id ?? 0, signal), enabled: Boolean(repo) });
+  const passed = (kind: ConnectionCheck["kind"], match: (check: ConnectionCheck) => boolean) => {
+    const latest = checks.data?.filter((check) => check.kind === kind && match(check)).sort((a, b) => b.id - a.id).find((check) => check.kind === kind && match(check));
+    return latest?.status === "passed" && latest.config_current === true;
+  };
+  const model = effective.data?.model;
+  const notificationReady = repo && (!repo.has_feishu_webhook || passed("feishu", (check) => check.repository_id === repo.id || (repo.feishu_target_id != null && check.notification_target_id === repo.feishu_target_id)));
+  const connection = (section: string) => repo ? `/repositories?repository=${repo.id}&section=${section}` : "/repositories";
   const steps = [
-    { title: "配置评审模型", description: "保存并启用评审模型。配置存在不代表调用成功。", to: "/settings?tab=model", label: "前往模型设置", query: models, done: modelReady },
-    { title: "配置飞书通知", description: "保存通知通道；发送测试需要在配置页明确操作。", to: "/settings?tab=feishu", label: "前往飞书设置", query: targets, done: targetReady },
-    { title: "接入 GitLab 仓库", description: "维护访问凭据、目标分支和通知通道。", to: "/repositories", label: "前往项目配置", query: repositories, done: repositoryReady },
-    { title: "配置 GitLab Webhook", description: received ? "启用仓库均有历史接收记录；不代表当前配置或评审链路已验证。" : "复制地址并在 GitLab 配置事件与 Secret；只有地址不能确认已接通。", to: "/repositories", label: "查看 Webhook 配置", query: repositories, done: received },
-    { title: "验证连接", description: recentPassed ? "各目标最近测试记录通过；模型和飞书测试未绑定当前配置版本，仍需核实并完成一次端到端验证。" : "按目标查看最新测试。历史通过不能覆盖后续失败、排队或运行记录。", to: "/repositories", label: "查看连接测试", query: checks, done: false },
+    { title: "保存项目接入", done: Boolean(repo), description: repo ? `${repo.name} · ${repo.target_branch}${repo.enabled ? " · 接收已启用" : " · 接收已暂停，启用后才会自动处理事件"}` : "添加仓库，可从 HTTPS 地址获取项目资料，也可手动填写。", to: connection("connection"), action: repo ? "核对基础接入与 Webhook" : "添加仓库" },
+    { title: "验证当前评审模型", done: Boolean(model?.complete && passed("model", (check) => check.model_profile_id === model.id)), description: model ? `${model.source === "project" ? "项目指定" : "继承全局默认"}：${model.name ?? "未配置"}。测试可能产生费用，保存和默认切换不会自动测试。` : "选择全局默认或项目指定模型，保存后测试该目标。", to: model?.complete ? "/settings?tab=model" : connection("review"), action: "配置或测试模型" },
+    { title: "验证 Git 与 GitLab API", done: Boolean(repo && passed("git", (check) => check.repository_id === repo.id) && passed("gitlab", (check) => check.repository_id === repo.id)), description: "只认可当前连接字段的最近测试；修改地址、分支或令牌后需重新验证。", to: connection("connection"), action: "测试项目连接" },
+    { title: "通知按需配置", done: Boolean(notificationReady), description: repo?.has_feishu_webhook ? "此项目选择了通知，请明确测试已保存目标；会向真实群发送消息。" : "此项目未选择通知，允许跳过；以后可在基础接入中关联通道。", to: repo?.feishu_target_id != null ? "/settings?tab=feishu" : connection("diagnosis"), action: repo?.has_feishu_webhook ? "测试通知通道" : "按需关联通知" },
   ];
+  const known = repositories.isSuccess && models.isSuccess && checks.isSuccess && (!repo || effective.isSuccess);
+  const complete = steps.filter((step) => step.done).length;
   return <div className="page setup-migration">
-    <PageHeader title="首次接入引导" subtitle="先完成配置，再核对连接与实际评审；未知不等于未配置。" actions={<RouteButton to="/">稍后再做</RouteButton>} />
-    <Card size="small" className="setup-progress" aria-label="接入进度">
-      {known ? <><strong>{complete} / 5</strong><span> 项已有配置或接收证据，最终连接仍需核实</span><Progress percent={complete * 20} showInfo={false} aria-label="接入完成进度" /></>
-        : <p role="status">接入进度待确认：部分状态仍在读取或读取失败。</p>}
-    </Card>
-    <div className="setup-feedback">{queries.map(({ name, query }) => <ReadFeedback key={name} name={name} loading={query.isPending} error={query.error} onRetry={() => void query.refetch()} />)}</div>
-    <ol className="setup-steps">{steps.map((step, index) => <li key={step.title}><Card size="small">
-      <div className="setup-step-heading"><h2><span>{String(index + 1).padStart(2, "0")}</span>{step.title}</h2>
-        <Tag color={step.query.isSuccess && step.done ? "success" : "default"}>{!step.query.isSuccess ? "状态待确认" : step.done ? index === 3 ? "有接收记录" : "已配置" : index === 4 ? "待核实" : "待完成"}</Tag></div>
-      <p>{step.description}</p><RouteButton to={step.to}>{step.label}</RouteButton>
-    </Card></li>)}</ol>
-    <Alert type="info" showIcon title="配置、连接测试与真实评审是三类证据" description="这里不会自动调用模型、GitLab 或飞书；测试记录不证明所有当前配置已验证，也不代替端到端验收。" />
+    <PageHeader title="项目接入清单" subtitle="平台配置可复用，每个项目独立验证；新项目不会清零其他项目进度。" actions={<RouteButton to="/repositories">返回项目配置</RouteButton>} />
+    <div className="setup-feedback"><ReadFeedback name="项目" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} /><ReadFeedback name="模型" loading={models.isPending} error={models.error} onRetry={() => void models.refetch()} /><ReadFeedback name="连接测试" loading={checks.isPending} error={checks.error} onRetry={() => void checks.refetch()} />{repo && <ReadFeedback name="生效配置" loading={effective.isPending} error={effective.error} onRetry={() => void effective.refetch()} />}</div>
+    <div className="row-actions"><RouteButton to="/settings?tab=model">平台模型准备{models.isSuccess ? `（${models.data.length} 个已保存）` : ""}</RouteButton><RouteButton to="/settings?tab=feishu">可选通知通道</RouteButton><RouteButton to="/settings?tab=rules">共用评审规则</RouteButton></div>
+    <label className="setup-project-select">当前项目<Select virtual={false} aria-label="当前项目" value={repo?.id} placeholder="请先添加仓库" options={repositories.data?.map((item) => ({ value: item.id, label: item.name }))} onChange={(value) => { const next = new URLSearchParams(params); next.set("repository", String(value)); setParams(next); }} /></label>
+    <section className="setup-progress" aria-label="连接准备进度"><strong>{known ? `${complete} / ${steps.length}` : "待确认"}</strong><span> 当前项目连接准备；不代表真实评审已经完成</span><Progress percent={known ? complete / steps.length * 100 : 0} showInfo={false} /></section>
+    <ol className="setup-steps">{steps.map((step) => <li key={step.title}><section className="section"><div className="setup-step-heading"><h2>{step.title}</h2><Tag color={known && step.done ? "success" : "default"}>{!known ? "待确认" : step.done ? "已具备" : "待完成"}</Tag></div><p>{step.description}</p><RouteButton to={step.to}>{step.action}</RouteButton></section></li>)}</ol>
+    <section className="section"><h2>最后：真实试运行与验收</h2><p>在 GitLab 配置 Webhook 地址、事件和 Secret，然后明确提交一次符合条件的合并或提交；会触发模型费用及已选择的通知。这里只展示保存的事实，不自动执行试评审。</p>
+      <p>历史接收：{repo?.last_webhook_at ? formatTime(repo.last_webhook_at) : "尚无记录"}。最近任务：{effective.data?.latest_job ? <RouteButton to={`/jobs/${effective.data.latest_job.id}`}>查看 #{effective.data.latest_job.id} · {effective.data.latest_job.status}</RouteButton> : "尚无记录"}。</p>
+      <Alert type="info" showIcon title={known && complete === steps.length ? "连接准备已完成，请继续核对真实试运行" : "配置、测试和实际评审是不同证据"} description="历史接收或历史任务不证明当前配置已完成端到端验收；请在任务详情核对对应提交、执行快照、覆盖范围与独立通知状态。" />
+    </section>
   </div>;
 }

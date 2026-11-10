@@ -27,7 +27,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     await page.goto("/settings?tab=model");
     const modelRow = page.getByRole("row").filter({ hasText: "合成备用模型" });
     await expect(modelRow).toBeVisible();
-    await expect(modelRow).toContainText("未启用");
+    await expect(modelRow).toContainText("非默认");
     const actions = modelRow.locator(".config-row-actions");
     const buttons = actions.getByRole("button");
     await expect(buttons).toHaveCount(3);
@@ -43,7 +43,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     // 手机沿用带标签的纵向资料卡，只有桌面表格行高应保持紧凑。
     if (width > 600) expect(await modelRow.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(110);
     const active = page.getByRole("row").filter({ hasText: "合成启用模型" });
-    await expect(active.locator(".status")).toHaveText("已启用");
+    await expect(active.locator(".ant-tag")).toHaveText("全局默认");
     await expect(active.getByRole("button", { name: "删除 合成启用模型", exact: true })).toBeDisabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath(`models-${width}.png`), fullPage: true });

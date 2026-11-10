@@ -364,6 +364,12 @@ export interface ConnectionCheck {
   id: number;
   kind: "git" | "gitlab" | "model" | "feishu";
   repository_id: number | null;
+  /** 保存的目标模型；旧记录可能没有目标身份。 */
+  model_profile_id?: number | null;
+  /** 独立通知通道；仓库测试保持兼容。 */
+  notification_target_id?: number | null;
+  /** 后端核对连接字段指纹；未知历史结果不得当作当前验证。 */
+  config_current?: boolean;
   status: "queued" | "running" | "passed" | "failed";
   error: string | null;
   created_at: string;

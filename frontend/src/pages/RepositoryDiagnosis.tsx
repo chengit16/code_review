@@ -38,6 +38,8 @@ export function RepositoryDiagnosis({ token, repository, targets }: {
       <div><dt>飞书通知</dt><dd>{target?.name ?? (repository.has_feishu_webhook ? "使用项目独立通知配置" : "未关联通知配置")}<small>通知独立重试，失败时无需重新调用模型评审。</small><Link to="/settings?tab=feishu">管理通知 →</Link></dd></div>
     </dl>
     <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={repository.id} />
+    {model && <ConnectionChecks token={token} kinds={["model"]} modelProfileId={model.id} enabled={Boolean(model.model && model.has_api_key)} />}
+    {repository.has_feishu_webhook && <ConnectionChecks token={token} kinds={["feishu"]} {...(repository.feishu_target_id != null ? { notificationTargetId: repository.feishu_target_id } : { repositoryId: repository.id })} />}
     <section className="section diagnosis-events"><div className="section-head"><h3>最近接收事件</h3><Link to={`/jobs?repository_id=${repository.id}`}>查看项目任务 →</Link></div>
       {events.data?.items.map((event) => <article key={event.id}><strong>#{event.id} · {event.mr_iid > 0 ? `MR !${event.mr_iid}` : "默认分支 Push"}</strong><span>{eventLabels[event.status] ?? event.status} · {formatTime(event.created_at)}</span>{event.error && <p className="form-error">{event.error}</p>}{event.latest_job_id ? <Link to={`/jobs/${event.latest_job_id}`}>已生成 {event.job_count} 个任务，查看最新任务 →</Link> : <p>尚未生成任务。{event.status === "queued" || event.status === "processing" ? "请检查 Worker 是否运行并等待处理。" : "请核对事件处理原因、目标分支及重复提交；不要反复触发相同事件。"}</p>}</article>)}
       {!events.isLoading && !events.error && events.data?.total === 0 && <p className="empty-inline">尚无已入库事件。请在 GitLab 核对回调地址、Secret、事件勾选与目标分支；未收到回调和收到但被忽略是两种情况。</p>}

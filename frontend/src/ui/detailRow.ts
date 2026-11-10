@@ -1,7 +1,7 @@
 /** @description 只读详情行的鼠标和键盘入口；隔离内部控件，不接管业务授权、URL 或写操作。 */
 import type { HTMLAttributes } from "react";
 
-const interactive = "a,button,input,label,select,textarea,summary,[role='button'],[role='checkbox'],[role='link'],[role='combobox'],[contenteditable='true']";
+const interactive = "a,button,input,label,select,textarea,details,summary,[role='button'],[role='checkbox'],[role='link'],[role='combobox'],[contenteditable='true']";
 
 /** 保留表格行语义；Enter 打开详情，控件、文本选择和修饰键不触发整行导航。 */
 export function detailRowProps(

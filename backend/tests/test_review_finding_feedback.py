@@ -364,10 +364,13 @@ def test_schema51_adds_ignore_feedback_and_preserves_legacy_repair(
             db.execute(f"INSERT INTO {backup} SELECT * FROM {table}")
             db.execute(f"DROP TABLE {table}")
             db.execute(f"ALTER TABLE {backup} RENAME TO {table}")
+        from schema_fixtures import remove_onboarding_schema
+
+        remove_onboarding_schema(db)
         db.execute("PRAGMA user_version=50")
     store.migrate()
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 51
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 52
         verdict = db.execute(
             "SELECT verdict FROM review_finding_feedback WHERE finding_id='j1:a1:c0'").fetchone()[0]
         assert verdict == "fixed"

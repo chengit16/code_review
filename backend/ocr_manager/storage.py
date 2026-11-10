@@ -17,6 +17,7 @@ from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
 from ocr_manager.auth import AUTH_MIGRATION
 from ocr_manager.chat_capture_migration import CHAT_CAPTURE_MIGRATION
 from ocr_manager.config_history import history_migration
+from ocr_manager.connection_targets import check_is_current, connection_fingerprint
 from ocr_manager.event_search import EVENT_SEARCH_MIGRATION
 from ocr_manager.feedback_value_migration import MIGRATION as FEEDBACK_VALUE_MIGRATION
 from ocr_manager.improvement_archive_migration import IMPROVEMENT_ARCHIVE_MIGRATION
@@ -27,6 +28,7 @@ from ocr_manager.issue_disposition_migration import MIGRATION as ISSUE_DISPOSITI
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
 from ocr_manager.newline_filter_migration import NEWLINE_FILTER_MIGRATION
+from ocr_manager.onboarding_migration import MIGRATION as ONBOARDING_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
 from ocr_manager.premerge import PREMERGE_CONTEXT_MIGRATION, PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
@@ -48,7 +50,7 @@ from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
 
-SCHEMA_VERSION = 51
+SCHEMA_VERSION = 52
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -370,6 +372,7 @@ class Store:
                 (49, CONCURRENCY_MIGRATION),
                 (50, ISSUE_DISPOSITION_MIGRATION),
                 (51, FEEDBACK_VALUE_MIGRATION),
+                (52, ONBOARDING_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -382,16 +385,28 @@ class Store:
             # 升级后的旧结果只补建一次；标记和出现记录同事务提交，重启可安全重试。
             backfill_existing_issues(db)
 
-    def enqueue_connection_check(self, kind: str, repository_id: int | None) -> int | None:
+    def enqueue_connection_check(
+        self, kind: str, repository_id: int | None,
+        model_profile_id: int | None = None, notification_target_id: int | None = None,
+    ) -> int | None:
         """诊断请求先持久化；同一目标只允许一个未完成检查。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if kind == "model" and model_profile_id is None:
+                active = db.execute("SELECT id FROM model_profiles WHERE enabled=1").fetchone()
+                model_profile_id = active["id"] if active else None
+            fingerprint = connection_fingerprint(
+                db, kind, repository_id, model_profile_id, notification_target_id,
+            )
             cursor = db.execute(
                 """INSERT OR IGNORE INTO connection_checks
-                (kind, repository_id, config_revision_id)
-                VALUES (?, ?, (SELECT MAX(id) FROM config_revisions
+                (kind, repository_id, model_profile_id, notification_target_id,
+                 config_fingerprint, config_revision_id)
+                VALUES (?, ?, ?, ?, ?, (SELECT MAX(id) FROM config_revisions
                   WHERE object_type='repository' AND object_id=?))""",
-                (kind, repository_id, repository_id),
+                (kind, repository_id, model_profile_id, notification_target_id,
+                 fingerprint, repository_id),
             )
             return cursor.lastrowid if cursor.rowcount else None
 
@@ -399,10 +414,15 @@ class Store:
         """仅返回诊断状态和脱敏错误，不向管理页传输凭据。"""
 
         with self.connection() as db:
-            return [
-                dict(row)
-                for row in db.execute("SELECT * FROM connection_checks ORDER BY id DESC LIMIT 100")
-            ]
+            result = []
+            for row in db.execute("""SELECT * FROM connection_checks WHERE id IN (
+                SELECT MAX(id) FROM connection_checks GROUP BY kind,repository_id,
+                model_profile_id,notification_target_id) ORDER BY id DESC"""):
+                check = dict(row)
+                check["config_current"] = check_is_current(db, check)
+                check.pop("config_fingerprint")
+                result.append(check)
+            return result
 
     def next_connection_check(self, kinds: tuple[str, ...] | None = None) -> dict[str, Any] | None:
         """领取一个诊断任务；外部调用在事务结束后执行。"""
@@ -424,6 +444,11 @@ class Store:
         """只保存可展示的错误摘要；诊断不自动重试以免重复发测试消息。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM connection_checks WHERE id=?", (check_id,)).fetchone()
+            if error is None and row and row["config_fingerprint"]:
+                if not check_is_current(db, dict(row)):
+                    error = "配置已更改或目标已删除，请重新测试"
             db.execute(
                 """UPDATE connection_checks SET status=?, error=?,
                 finished_at=CURRENT_TIMESTAMP WHERE id=? AND status='running'""",
@@ -1661,6 +1686,10 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            db.execute("""UPDATE repository_discoveries SET status='failed',token_ciphertext='',
+                error='Worker 中断，请重新获取',finished_at=CURRENT_TIMESTAMP
+                WHERE status='running' OR (status='queued'
+                AND created_at<datetime('now','-15 minutes'))""")
             # 发送中断可能已在外部成功；不盲目自动重发，保留人工核对与显式通知重试。
             db.execute("""UPDATE review_recovery_deliveries SET status='failed',
                 error='发送中断，外部结果未知，请核对后重试' WHERE status='sending'""")

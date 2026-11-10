@@ -30,7 +30,7 @@ test("项目页签保留草稿，关闭及路由离开支持取消", async ({ pa
   await cancelDiscard(page, () => page.getByRole("button", { name: "关闭", exact: true }).click());
   await expect(page.getByRole("dialog")).toBeVisible();
   await cancelDiscard(page, () => page.goBack());
-  await expect(page).toHaveURL("/repositories");
+  await expect(page).toHaveURL(/\/repositories\?repository=1&section=publication$/);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -73,7 +73,7 @@ test("保存基础接入不关闭窗口或丢失评审参数草稿", async ({ pa
   await page.getByRole("tab", { name: "基础接入" }).click();
   await page.getByLabel("仓库名称").fill("合成保存名称");
   await page.getByLabel("仓库路径", { exact: true }).fill("team/fixture");
-  await page.getByRole("button", { name: "保存设置" }).click();
+  await page.getByRole("button", { name: "保存基础接入" }).click();
   await expect(page.getByText("基础接入配置已保存", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "评审参数" }).click();
   await expect(page.getByLabel("超时（秒）")).toHaveValue("777");
@@ -123,7 +123,7 @@ test("批量重审只取消成功项勾选，请求中锁定选择和筛选", as
   await expect(page.getByRole("dialog", { name: "确认重新评审" })).toContainText("可能再次产生模型费用");
   await page.getByRole("button", { name: "确认重审", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "选择任务 902", exact: true })).toBeDisabled();
-  await expect(page.getByRole("combobox", { name: "问题处理", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "发现反馈", exact: true })).toBeDisabled();
   await expect(page.getByRole("combobox", { name: "每页条数" })).toBeDisabled();
   finish();
   await expect(page.getByText(/已入队 1 条，未接受 1 条/)).toBeVisible();

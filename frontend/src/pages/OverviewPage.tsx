@@ -71,6 +71,7 @@ export function OverviewPage({ token, canEdit = false }: {
       <Button icon={<RefreshCw size={16} />} loading={refreshing} disabled={refreshing} onClick={() => void handleRefresh()}>刷新概览</Button>
     </div>
   } />
+    {canEdit && repositories.isSuccess && repositories.data.length === 0 && <p className="coverage-note">先接入第一个项目，再查看评审与反馈。<Link to="/onboarding">开始项目接入</Link></p>}
     <section className="overview-toolbar" aria-label="总览筛选">
       <ListSelect label="项目" value={repositoryId || "all"} disabled={refreshing} onValueChange={(value) => updateFilter("repository_id", value === "all" ? "" : value)} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
       <ReadStatus label="项目统计" updatedAt={metrics.dataUpdatedAt} fetching={metrics.isFetching} />

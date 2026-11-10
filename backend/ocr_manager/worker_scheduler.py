@@ -59,6 +59,7 @@ class WorkerScheduler:
         from ocr_manager import worker
         from ocr_manager.checks import run_connection_check
         from ocr_manager.publications import next_publication
+        from ocr_manager.repository_discovery import claim_discovery, execute_discovery
         from ocr_manager.review_recovery_notifications import claim_delivery
         from ocr_manager.review_recovery_worker import execute_recovery
 
@@ -84,7 +85,9 @@ class WorkerScheduler:
                       action("premerge", self._claim_premerge, worker.review_premerge),
                       action("model_check", lambda: store.next_connection_check(("model",)),
                              run_connection_check)],
-            "ingress": [action("event", self._claim_event, worker.expand_event),
+            "ingress": [action("repository_discovery", lambda: claim_discovery(store),
+                               execute_discovery),
+                        action("event", self._claim_event, worker.expand_event),
                         action("backfill", lambda: worker.claim_backfill(store),
                                worker.execute_backfill),
                         action("git_check", lambda: store.next_connection_check(("git", "gitlab")),

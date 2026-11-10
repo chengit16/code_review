@@ -17,9 +17,11 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await page.getByLabel("仓库名称").fill("验收仓库");
   await page.getByLabel("项目数字 ID").fill("42");
   await page.getByLabel("仓库路径").fill("team/demo");
-  await page.getByLabel("Clone URL").fill("https://gitlab.example.test/team/demo.git");
+  await page.getByLabel("GitLab 项目或 Clone 地址").fill("https://gitlab.example.test/team/demo.git");
   await page.getByLabel("GitLab Token", { exact: true }).fill("synthetic-gitlab-token");
   await page.getByRole("button", { name: "保存仓库" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("button", { name: "编辑 验收仓库" })).toBeVisible();
   await page.getByRole("button", { name: "编辑 验收仓库" }).click();
   await expect(page.getByRole("tab", { name: "基础接入" })).toHaveAttribute("aria-selected", "true");
@@ -30,7 +32,7 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await page.getByRole("tab", { name: "基础接入" }).click();
   await expect(page.getByLabel("仓库路径")).toHaveValue("team/demo");
   await page.getByLabel("仓库名称").fill("修改后仓库");
-  await page.getByRole("button", { name: "保存设置" }).click();
+  await page.getByRole("button", { name: "保存基础接入" }).click();
   await expect(page.getByText("基础接入配置已保存", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("button", { name: "编辑 修改后仓库" })).toBeVisible();
@@ -50,12 +52,12 @@ test("飞书兼容编辑保留凭据，删除立即更新列表", async ({ page 
   await page.getByRole("button", { name: "新增飞书配置" }).click();
   await page.getByLabel("配置名称").fill("验收飞书");
   await page.getByLabel("Webhook URL").fill("https://open.feishu.cn/open-apis/bot/v2/hook/synthetic");
-  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await page.getByRole("button", { name: "保存通知通道", exact: true }).click();
   await page.getByRole("button", { name: "编辑 验收飞书" }).click();
   await page.getByLabel("配置名称").fill("修改后飞书");
   const saved = page.waitForResponse((response) => response.request().method() === "POST"
     && /\/api\/notification-targets\/\d+$/.test(response.url()));
-  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await page.getByRole("button", { name: "保存通知通道", exact: true }).click();
   expect((await saved).ok()).toBe(true);
   await page.getByRole("button", { name: "删除 修改后飞书" }).click();
   await expect(page.getByRole("status")).toContainText("飞书配置已删除");
@@ -68,12 +70,14 @@ test("百练模型单价配置与评审详情用量", async ({ page }) => {
   await page.getByLabel("配置名称").fill("百练验收模型");
   await page.getByLabel("模型标识").fill("qwen-test");
   await page.getByLabel("API Key").fill("synthetic-key");
+  await page.getByRole("button", { name: "可选：费用估算单价" }).click();
   await page.getByLabel("输入单价（每百万 Token）").fill("2");
   await page.getByLabel("输出单价（每百万 Token）").fill("8");
   await page.getByRole("button", { name: "保存模型" }).click();
   const row = page.getByRole("row").filter({ hasText: "百练验收模型" });
   await expect(row).toContainText("百练 / DashScope");
-  await expect(row).toContainText("¥2 输入 / 8 输出");
+  await row.getByRole("button", { name: /展开|expand/i }).click();
+  await expect(page.getByText(/计价：2 输入 \/ 8 输出/)).toBeVisible();
   await page.goto("/jobs/1");
   await expect(page.getByRole("heading", { name: "模型用量" })).toBeVisible();
   await expect(page.getByText("500,000")).toBeVisible();

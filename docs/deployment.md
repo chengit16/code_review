@@ -278,3 +278,9 @@ OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-proxy-compat-dist npx playwright test e2e/wor
 ```
 
 本次实施与实际实例生效结论见[问题与改进台账](problem-improvement-log.md) PI-20261109-001，不能仅凭本节说明推断清理已经完成。
+
+## 接入易用性升级：schema 52
+
+本次 51 → 52 重建连接测试表，增加模型与通知目标、内部配置指纹及临时仓库资料队列。历史记录保留，无指纹的旧通过仅作历史，不能自动认定当前连接已验证。资料获取由 Worker 执行，HTTP 不调用 GitLab；连接检查与资料获取不代表真实评审验收。
+
+发布须协调共享同一数据库的全部 API 实例（含备用端口）、Worker 和 monitor，先确认队列空闲，成对备份数据库与原私有配置，隔离演练迁移、完整性和凭据解密，再停止旧进程并整体切换同版前端后端。不得重新生成主密钥，不得让旧进程混写 52 版库。恢复旧版必须使用配对备份并核对升级后新增数据，不能仅回退前端、替换旧代码或降低 user_version。检查与功能边界见[易用性实施说明](usability-simplification-implementation.md)，具体本机发布状态以 PI-20261110-003 最新记录为准。

@@ -28,11 +28,12 @@ export function ReviewEffectivenessSection({ data, days, repositoryId }: {
       <div><span>已处理发现</span><strong>{counts ? counts.total - counts.unmarked : "—"}</strong><small>已有帮助、误报或忽略反馈</small></div>
     </section>
     <QualityOverview data={data} days={days} repositoryId={repositoryId} />
-    <section className="overview-diagnostics" aria-labelledby="overview-diagnosis-title">
+    <Collapse items={[{ key: "diagnostics", label: "展开问题诊断", children: <>     <section className="overview-diagnostics" aria-labelledby="overview-diagnosis-title">
       <div className="overview-diagnosis-heading"><h2 id="overview-diagnosis-title">问题诊断</h2><p>查看同一窗口内待反馈发现与反馈构成。</p></div>
       <div className="overview-diagnosis-grid"><ProblemDistributions kind="severity" data={data} repositoryId={repositoryId} />
         <QualityBreakdown quality={data.quality} /></div>
     </section>
+</> }]} />
     <ProjectSummary quality={quality} />
     <Collapse className="overview-analysis" items={[{ key: "details", label: "更多效果分析与统计口径", children: <>
       <dl className="overview-extra-facts"><div><dt>生成 / 发布</dt><dd>{summary.generated} / {summary.published}</dd><small>发布仅指 GitLab 行内评论成功</small></div>

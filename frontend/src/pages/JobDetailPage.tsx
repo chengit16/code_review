@@ -3,6 +3,7 @@
 import { Button } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, RotateCcw, Send } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { setFindingFeedback } from "../api/reviewConclusions";
@@ -17,16 +18,13 @@ import { Status } from "../ui/Status";
 import { formatTime } from "../ui/format";
 
 import { AttemptReports } from "./AttemptReports";
-import { CoverageReasons } from "./CoverageReasons";
 import { EffectiveReview } from "./EffectiveReview";
 import { FindingsPanel } from "./FindingsPanel";
 import { GitLabPublications } from "./GitLabPublications";
-import { AttemptTimeline, JobExecution } from "./JobExecution";
+import { JobDiagnosticSections } from "./JobDiagnosticSections";
+import { AttemptTimeline } from "./JobExecution";
 import { JobFiles } from "./JobFiles";
 import { JobNavigation } from "./JobNavigation";
-import { ModelUsage } from "./ModelUsage";
-import { ReviewFailureAnalysis } from "./ReviewFailureAnalysis";
-import { ReviewRecoveryPanel } from "./ReviewRecoveryPanel";
 import { TaskStop } from "./TaskControls";
 import type { FindingFeedbackChoice } from "./FindingActions";
 
@@ -45,7 +43,9 @@ function JobDetail({ token, canEdit }: {
 }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [expanded, setExpanded] = useState<string[]>(() => window.location.hash === "#job-cost" ? ["cost"] : window.location.hash === "#job-execution" ? ["execution"] : []);
   const location = useLocation();
+  function openDiagnostic(key: string, anchor: string) { setExpanded((value) => [...new Set([...value, key])]); requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" })); }
   // 来源保存在 URL 中，刷新和分享仍保留筛选；兼容旧版列表的路由 state。
   const listParams = new URLSearchParams(location.search);
   const openFindings = listParams.get("finding_state") === "open";
@@ -54,6 +54,11 @@ function JobDetail({ token, canEdit }: {
   const download = useMutation({ mutationFn: () => downloadTaskReport(token, Number(id)) });
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["job", id], queryFn: ({ signal }) => apiRequest<ReviewJobDetail>(token, `/api/jobs/${id}`, { signal }), refetchInterval: (current) => (["queued", "running"].includes(current.state.data?.status ?? "") || current.state.data?.active_recovery_id) ? 5000 : 30000, enabled: Boolean(id) });
+  useEffect(() => {
+    const key = location.hash === "#job-execution" ? "execution" : location.hash === "#job-cost" ? "cost" : null;
+    if (!key) return;
+    setExpanded((value) => value.includes(key) ? value : [...value, key]);
+  }, [location.hash]);
   const retry = useMutation({ mutationFn: () => apiRequest<{ job_id: number }>(token, `/api/jobs/${id}/retry`, { method: "POST" }), onSuccess: (result) => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["jobs"] }); void queryClient.invalidateQueries({ queryKey: ["overview"] }); void queryClient.invalidateQueries({ queryKey: ["job-neighbors"] }); if (result.job_id !== Number(id)) navigate(`/jobs/${result.job_id}${back.startsWith("/jobs?") ? back.slice(5) : ""}`, { state: { back } }); } });
   const resend = useMutation({ mutationFn: () => apiRequest<unknown>(token, `/api/jobs/${id}/notification/retry`, { method: "POST" }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", id] }) });
   const feedback = useMutation({
@@ -102,27 +107,14 @@ function JobDetail({ token, canEdit }: {
         {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
       </div>
       <nav className="job-detail-jump" aria-label="任务详情分区">
-        <a href="#job-result">结论与发现</a><a href="#job-execution">失败与补审</a><a href="#job-cost">覆盖与费用</a><a href="#job-history">文件与历史</a><a href="#job-notifications">通知与尝试</a>
+        <a href="#job-result">结论与发现</a><a href="#job-execution" onClick={() => openDiagnostic("execution", "job-execution")}>执行与恢复</a><a href="#job-cost" onClick={() => openDiagnostic("cost", "job-cost")}>覆盖与费用</a><a href="#job-history" onClick={() => { const detail = document.getElementById("job-history"); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>文件与历史</a><a href="#job-notifications">通知与尝试</a>
       </nav>
       {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
       {job.error && <div className="detail-error" role="alert">{job.error}<p>{["configuration", "ocr_configuration"].includes(job.failure_stage ?? "") ? <Link to="/settings?tab=model">检查模型配置 →</Link> : <Link to="/repositories">打开项目配置，查看接入诊断 →</Link>}</p></div>}
       <section id="job-result" className="job-detail-region" aria-label="评审结论与发现">
         {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} initialIssueState={openFindings ? "open" : "all"} /> : <FindingsPanel initialIssueState={openFindings ? "open" : "all"} comments={comments} feedback={job.feedback} issueIds={issueIds} issueStatuses={issueStatuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending || Boolean(feedback.error)} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict, sourceAttempt: job.attempts })} />}
       </section>
-      <section id="job-execution" className="job-detail-region" aria-label="失败与补审">
-        <JobExecution job={job} />
-        {["partial", "failed"].includes(job.status) && <section aria-label="保留的初审故障诊断">{job.effective_document && <p className="coverage-note">以下为初审故障证据，不代表当前有效覆盖仍有这些失败；补审结论见后续独立版本。</p>}<ReviewFailureAnalysis analysis={job.failure_analysis} importedAt={job.failure_analysis_imported_at} /></section>}
-        <CoverageReasons job={job} />
-        <ReviewRecoveryPanel token={token} job={job} canEdit={canEdit} />
-      </section>
-      <div id="job-cost" className="job-insight-grid job-detail-region">
-        <div>{job.effective_document && <p className="coverage-note">下方为初审单次用量，补审和全部历史用量见累计费用及独立批次。</p>}<ModelUsage result={job.result} /></div>
-        <section className="section detail-insight-card coverage-section">
-          <div className="section-head"><h2>{job.effective_document ? "初审覆盖情况（保留原记录）" : "覆盖情况"}</h2></div>
-          {coverage ? <div className="coverage-grid"><div><strong>{coverage.selected.length}</strong><span>选中文件</span></div><div><strong>{coverage.completed.length + coverage.reused.length}</strong><span>完成 / 复用</span></div><div><strong>{coverage.failed.length}</strong><span>失败</span></div><div><strong>{coverage.waived.length}</strong><span>豁免</span></div></div> : <p className="empty-inline">尚无 OCR 覆盖结果</p>}
-          {job.result?.preview && <p className="coverage-note">范围预览：{job.result.preview.reviewable_count} 个可审查文件，{excluded.length ? `排除 ${excluded.length} 个文件` : "没有排除文件"}</p>}
-        </section>
-      </div>
+      <JobDiagnosticSections token={token} job={job} canEdit={canEdit} expanded={expanded} onExpanded={setExpanded} />
       {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
       {canEdit && !job.effective_document && <GitLabPublications token={token} job={job} />}
       <details id="job-history" className="advanced-panel"><summary>变更文件与排除范围</summary><JobFiles job={job} />      {job.result?.preview && excluded.length > 0 && <section className="section scope-preview-section"><div className="section-head"><h2>排除文件</h2><span>{excluded.length} 个文件未进入评审</span></div><ListTable rowKey="path" dataSource={excluded} pagination={false} scroll={{ x: 650 }} columns={[

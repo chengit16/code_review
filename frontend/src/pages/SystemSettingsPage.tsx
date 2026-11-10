@@ -5,13 +5,16 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { FeishuHooksPage } from "./FeishuHooksPage";
 import { ReviewRulesPage } from "./ReviewRulesPage";
+import { UsersPage } from "./UsersPage";
+import { RouteButton } from "../ui/RouteButton";
 import { SettingsPage } from "./SettingsPage";
 import { PageHeader } from "../ui/PageHeader";
 
 const tabs = [
-  { id: "model", label: "Agent 模型" },
+  { id: "model", label: "评审模型" },
   { id: "feishu", label: "飞书通知" },
-  { id: "rules", label: "审核规则" },
+  { id: "rules", label: "评审规则" },
+  { id: "users", label: "访问权限" },
 ];
 
 /** 配置切换采用自动激活，方向键和首尾键同时移动焦点与当前标签。 */
@@ -39,7 +42,7 @@ export function SystemSettingsPage({ token }: {
   const tab = tabs.find((item) => item.id === params.get("tab"))?.id ?? "model";
 
   return <div className="page system-settings-page">
-    <PageHeader title="系统设置" subtitle="集中管理评审模型、飞书通知与审核规则" />
+    <PageHeader title="系统设置" subtitle="集中管理共用模型、通知、规则与访问权限" actions={<RouteButton to="/onboarding">接入帮助</RouteButton>} />
     <div className="settings-tabs" role="tablist" aria-label="系统设置分类">
       {tabs.map((item) => {
         const target = new URLSearchParams(params);
@@ -56,6 +59,7 @@ export function SystemSettingsPage({ token }: {
       {tab === "model" && <SettingsPage token={token} embedded />}
       {tab === "feishu" && <FeishuHooksPage token={token} embedded />}
       {tab === "rules" && <ReviewRulesPage token={token} embedded />}
+      {tab === "users" && <UsersPage token={token} embedded />}
     </div>
   </div>;
 }

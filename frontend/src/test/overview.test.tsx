@@ -66,7 +66,8 @@ it("健康缓存失败后不再确认停止，独立成功数据保留且读者�
   expect(screen.queryByText(/Worker 未运行，队列可能等待处理/)).not.toBeInTheDocument();
   expect(await screen.findByText(/部分读取失败/)).toBeVisible();
   expect(screen.getByRole("heading", { name: "项目概况" })).toBeVisible();
-  expect(screen.getByText("当前服务暂不提供分级汇总")).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "展开问题诊断" }));
+  await waitFor(() => expect(screen.getByText("当前服务暂不提供分级汇总")).toBeVisible());
 });
 
 it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读取时间", async () => {
@@ -85,12 +86,13 @@ it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读�
 it("趋势表默认折叠，键盘可展开读取与图表同源的精确数据", async () => {
   setup();
   await screen.findByRole("heading", { name: "评审反馈" });
+  await userEvent.click(await screen.findByRole("button", { name: "展开反馈趋势" }));
   const button = await screen.findByRole("button", { name: "查看反馈数据" });
   expect(button).toHaveAttribute("aria-expanded", "false");
   button.focus();
   await userEvent.keyboard("{Enter}");
   expect(button).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
+  await waitFor(() => expect(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible());
   expect(screen.getByRole("cell", { name: "2026-11-08" })).toBeVisible();
 });
 

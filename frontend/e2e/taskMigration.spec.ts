@@ -14,7 +14,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `/tmp/ocr-task-migration/jobs-${width}.png`, fullPage: true, animations: "disabled" });
     await page.goto("/onboarding");
-    await expect(page.getByRole("link", { name: "前往模型设置" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /平台模型准备/ })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `/tmp/ocr-task-migration/onboarding-${width}.png`, fullPage: true, animations: "disabled" });
     expect(errors).toEqual([]);
@@ -23,7 +23,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
 
 test("任务筛选键盘提交和时间 UTC URL 可刷新、回退，勾选不跨条件恢复", async ({ page }) => {
   await page.goto("/jobs?page_size=50");
-  const state = page.getByRole("combobox", { name: "问题处理", exact: true });
+  const state = page.getByRole("combobox", { name: "发现反馈", exact: true });
   await state.focus();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
@@ -34,7 +34,7 @@ test("任务筛选键盘提交和时间 UTC URL 可刷新、回退，勾选不�
   const expected = await page.evaluate(() => new Date("2026-01-01T08:00").toISOString());
   await page.getByRole("button", { name: "查询", exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("since")).toBe(expected);
-  expect(new URL(page.url()).searchParams.get("issue_state")).toBe("open");
+  expect(new URL(page.url()).searchParams.get("feedback_state")).toBe("pending");
   await page.reload();
   await expect(page.getByLabel("起始时间", { exact: true })).toHaveValue("2026-01-01T08:00");
   await page.getByRole("button", { name: "清空筛选" }).click();
@@ -66,7 +66,7 @@ test("批量确认冻结编号，取消不写入、焦点返回，请求中不�
   const trigger = page.getByRole("button", { name: "重审所选任务" });
   await trigger.click();
   await expect(page.getByRole("dialog")).toContainText("#901");
-  await expect(page.getByRole("combobox", { name: "问题处理", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "发现反馈", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(trigger).toBeFocused();
@@ -113,7 +113,7 @@ test("接入失败可单独恢复，认证失败没有默认关闭开关，打�
   });
   await page.goto("/onboarding");
   await expect(page.getByText("模型读取失败，状态未知")).toBeVisible();
-  await expect(page.getByText(/接入进度待确认/)).toBeVisible();
+  await expect(page.locator(".setup-progress strong")).toHaveText("待确认");
   failed = false;
   await page.getByRole("button", { name: "重新读取模型" }).click();
   await expect(page.locator(".setup-progress strong")).toBeVisible();

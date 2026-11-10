@@ -1,7 +1,7 @@
 /** @description 管理 OCR 模型配置与连接测试；密钥只留在编辑草稿，启用约束和写入授权由服务端执行。 */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card } from "antd";
+import { Button, Card, Collapse, Input, Tag } from "antd";
 import type { TableColumnsType } from "antd";
 import { Plus, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
@@ -16,7 +16,6 @@ import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
 import { SelectField } from "../ui/SelectField";
-import { Status } from "../ui/Status";
 import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
 import { useLocalList } from "../ui/useLocalList";
 
@@ -42,6 +41,7 @@ export function SettingsPage({ token, embedded = false }: {
 }) {
   const queryClient = useQueryClient();
   const profiles = useQuery({ queryKey: ["model-profiles"], queryFn: () => apiRequest<ModelConfiguration[]>(token, "/api/model-profiles") });
+  const usage = useQuery({ queryKey: ["model-usage"], queryFn: () => apiRequest<Record<string, number>>(token, "/api/model-profile-usage") });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ModelConfiguration | null>(null);
   const [form, setForm] = useState<ModelForm>(initial);
@@ -54,7 +54,7 @@ export function SettingsPage({ token, embedded = false }: {
   };
   const create = useMutation({
     mutationFn: (input: ModelForm) => apiRequest<ModelConfiguration>(token, "/api/model-profiles", { method: "POST", body: JSON.stringify({ ...input, input_price_per_million: input.input_price_per_million || null, output_price_per_million: input.output_price_per_million || null }) }),
-    onSuccess: () => { setOpen(false); setForm(initial); setFeedback("模型已保存，请在列表中启用"); refresh(); },
+    onSuccess: () => { setOpen(false); setForm(initial); setFeedback("模型已保存；请测试此配置，再按需设为全局默认"); refresh(); },
   });
   const update = useMutation({
     mutationFn: ({ id, input }: { id: number; input: ModelForm }) => {
@@ -79,7 +79,7 @@ export function SettingsPage({ token, embedded = false }: {
   const catalogModels = catalogMatches ? catalog.data?.models ?? [] : [];
   const activate = useMutation({
     mutationFn: (id: number) => apiRequest<ModelConfiguration>(token, `/api/model-profiles/${id}/activate`, { method: "POST" }),
-    onSuccess: () => { setFeedback("模型已启用"); refresh(); },
+    onSuccess: () => { setFeedback("全局默认模型已更新"); refresh(); },
   });
   const remove = useMutation({
     mutationFn: (id: number) => apiRequest<{ status: string }>(token, `/api/model-profiles/${id}`, { method: "DELETE" }),
@@ -100,28 +100,25 @@ export function SettingsPage({ token, embedded = false }: {
     update.reset();
     setOpen(true);
   }
-  const active = profiles.data?.find((profile) => profile.enabled);
   const list = useLocalList(profiles.error ? undefined : profiles.data, (item) => `${item.name} ${item.model} ${item.provider} ${item.base_url}`, (item) => item.enabled ? "enabled" : "disabled", "model_");
   const columns: TableColumnsType<ModelConfiguration> = [
     { title: "配置名称", dataIndex: "name", key: "name", render: (name: string, profile) => <><strong>{name}</strong><span className="list-secondary mono">{profile.model}</span></> },
     { title: "Provider", dataIndex: "provider", key: "provider", width: 150, render: (value: string) => value === "dashscope" ? "百练 / DashScope" : value },
-    { title: "Base URL", dataIndex: "base_url", key: "base_url", width: 220, render: (value: string) => <span className="mono">{value || "内置端点"}</span> },
-    { title: "单价 / 百万 Token", key: "price", width: 210, render: (_: unknown, profile) => profile.input_price_per_million != null || profile.output_price_per_million != null ? `${profile.price_currency === "CNY" ? "¥" : "$"}${profile.input_price_per_million ?? "未配置"} 输入 / ${profile.output_price_per_million ?? "未配置"} 输出` : "未配置" },
-    { title: "状态", dataIndex: "enabled", key: "enabled", width: 110, render: (enabled: number) => enabled ? <Status value="enabled" /> : <span className="status status--disabled">未启用</span> },
-    { title: "操作", key: "actions", width: 200, render: (_: unknown, profile) => <div className="config-row-actions">{!profile.enabled && <Button type="link" size="small" title="启用模型" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>启用</Button>}<Button type="link" size="small" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="link" size="small" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
+    { title: "使用情况", key: "usage", width: 180, render: (_: unknown, profile) => <><Tag>{profile.enabled ? "全局默认" : "非默认"}</Tag><span className="list-secondary">{!profile.model || !profile.has_api_key ? "草稿待补全" : "配置完整"} · {usage.isSuccess ? `${usage.data[String(profile.id)] ?? 0} 个项目指定` : "项目使用情况待确认"}</span></> },
+    { title: "当前连接验证", key: "check", width: 320, render: (_: unknown, profile) => <ConnectionChecks compact token={token} kinds={["model"]} modelProfileId={profile.id} enabled={Boolean(profile.model && profile.has_api_key)} /> },
+    { title: "操作", key: "actions", width: 240, render: (_: unknown, profile) => <div className="config-row-actions">{!profile.enabled && <Button type="link" size="small" title="设为全局默认" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>设为全局默认</Button>}<Button type="link" size="small" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="link" size="small" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
   ];
   return <div className={`configuration-list-page ${embedded ? "settings-content" : "page"}`}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="Agent 模型" subtitle="Open Code Review 评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
+    <PageHeader headingLevel={embedded ? 2 : 1} title="评审模型" subtitle="Open Code Review 评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
     {!profiles.isLoading && !profiles.error && <Card className="model-profile-card" size="small" title={<h2 className="model-profile-heading">模型配置</h2>}>
       <div className="list-toolbar"><ListSearch key={list.q} label="搜索配置" value={list.q} onSearch={(value) => list.update("q", value)} /></div>
-      <ListStatusNav value={list.status} labels={{ all: "全部", enabled: "已启用", disabled: "未启用" }} counts={list.counts} onChange={(value) => list.update("status", value)} />
-      <Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1100 }} pagination={list.pagination} />
-      <p className="form-note">连接测试只测试当前已启用的模型{active ? `“${active.name}”` : ""}，保存配置不会发起模型请求。切换模型后请重新测试，最近结果可能来自之前启用的配置。</p>
-      <ConnectionChecks token={token} kinds={["model"]} enabled={Boolean(active)} />
+      <ListStatusNav value={list.status} labels={{ all: "全部", enabled: "全局默认", disabled: "非默认" }} counts={list.counts} onChange={(value) => list.update("status", value)} />
+      <Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1100 }} pagination={list.pagination} expandable={{ expandedRowRender: (profile) => <p>端点：{profile.base_url || "Provider 内置端点"} · 计价：{profile.input_price_per_million ?? "未知"} 输入 / {profile.output_price_per_million ?? "未知"} 输出（{profile.price_currency} / 百万 Token）；价格未配置不按零计算。</p> }} />
+      <p className="form-note">保存不发起调用；每个模型可独立测试，不改变默认模型。非默认模型仍可由项目指定使用。</p>
     </Card>}
     {open && <Modal titleId="model-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
@@ -130,19 +127,21 @@ export function SettingsPage({ token, embedded = false }: {
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
         <SelectField label="Provider" value={form.provider} onValueChange={(value) => { catalog.reset(); setForm((current) => ({ ...current, provider: value })); }} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
         {form.provider === "dashscope" && <p className="form-note">百练模型使用 DashScope API Key 和模型标识；Base URL 留空即可使用内置端点。</p>}
-        <label>Base URL<input value={form.base_url} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, base_url: event.target.value })); }} placeholder="内置 Provider 可留空" /></label>
+        <Collapse defaultActiveKey={form.base_url ? ["endpoint"] : []} items={[{ key: "endpoint", label: form.base_url ? "自定义端点（已设置）" : "可选：自定义服务端点", children: <>        <label>Base URL<Input value={form.base_url} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, base_url: event.target.value })); }} placeholder="内置 Provider 可留空" /></label>
+<p className="form-note">使用兼容服务时填写其完整端点；保存后请测试此模型配置。</p></> }]} />
         <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, api_key: event.target.value })); }} placeholder={editing ? "留空则保留现有密钥" : "可留空，后续补充"} /></label>
         <div className="form-actions"><button className="button button-secondary" type="button" disabled={(!form.api_key.trim() && !editing?.has_api_key) || catalog.isPending} onClick={() => catalog.mutate({ provider: form.provider, base_url: form.base_url, api_key: form.api_key, profile_id: editing?.id })}><RefreshCw size={16} />{catalog.isPending ? "获取中…" : "自动获取模型"}</button></div>
         <p className="form-note">编辑时可留空 API Key，使用已保存的密钥获取模型；更换 Provider 或 Base URL 后需重新填写密钥。获取列表不代表所有模型均支持代码评审。</p>
         {catalogMatches && catalog.error && <p className="form-error" role="alert">{catalog.error.message}</p>}
         {catalogModels.length > 0 && <><p className="form-success" role="status">已获取 {catalogModels.length} 个模型，请选择</p><SelectField label="选择模型" placeholder="请选择模型" value={catalogModels.includes(form.model) ? form.model : ""} onValueChange={(value) => setForm((current) => ({ ...current, model: value }))} options={catalogModels.map((model) => ({ value: model, label: model }))} /></>}
         <label>模型标识<input value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} /></label>
-        <SelectField label="计费币种" value={form.price_currency} onValueChange={(value) => setForm((current) => ({ ...current, price_currency: value === "USD" ? "USD" : "CNY" }))} options={[{ value: "CNY", label: "人民币 CNY" }, { value: "USD", label: "美元 USD" }]} />
+        <Collapse items={[{ key: "pricing", label: "可选：费用估算单价", children: <div className="form-fields">        <SelectField label="计费币种" value={form.price_currency} onValueChange={(value) => setForm((current) => ({ ...current, price_currency: value === "USD" ? "USD" : "CNY" }))} options={[{ value: "CNY", label: "人民币 CNY" }, { value: "USD", label: "美元 USD" }]} />
         <label>输入单价（每百万 Token）<input type="text" inputMode="decimal" value={form.input_price_per_million} onChange={(event) => setForm((current) => ({ ...current, input_price_per_million: event.target.value }))} placeholder="可选" /></label>
         <label>输出单价（每百万 Token）<input type="text" inputMode="decimal" value={form.output_price_per_million} onChange={(event) => setForm((current) => ({ ...current, output_price_per_million: event.target.value }))} placeholder="可选" /></label>
         <p className="form-note">单价按原文保存；只有输入、输出单价都为有效数字时才估算费用。已有任务的预估费用不会随之后的单价修改变化。</p>
+</div> }]} />
         {(create.error || update.error) && <p className="form-error" role="alert">{(create.error || update.error)?.message}</p>}
-        <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
+        <div className="form-actions configuration-save-bar"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={create.isPending || update.isPending}>保存模型</button></div>
       </fieldset></form>
     </Modal>}
   </div>;

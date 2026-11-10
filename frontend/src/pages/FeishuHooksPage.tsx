@@ -13,6 +13,7 @@ import { ListSearch } from "../ui/ListControls";
 import { ListTable } from "../ui/ListTable";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
+import { RouteButton } from "../ui/RouteButton";
 import { QueryState } from "../ui/QueryState";
 import { ReadFeedback } from "../ui/ReadFeedback";
 import { confirmDiscard, UnsavedChangesGuard } from "../ui/UnsavedChangesGuard";
@@ -51,7 +52,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
       setOpen(false);
       setEditing(null);
       setForm(emptyForm);
-      setFeedback("飞书配置已保存");
+      setFeedback("通知通道已保存，可在列表独立测试，再关联项目。");
       void queryClient.invalidateQueries({ queryKey: ["notification-targets"] });
       void queryClient.invalidateQueries({ queryKey: ["repositories"] });
     },
@@ -96,9 +97,6 @@ export function FeishuHooksPage({ token, embedded = false }: {
   }
 
   const list = useLocalList(targets.error ? undefined : targets.data, (item) => item.name, undefined, "feishu_");
-  const checkRepository = repositories.isSuccess && editing
-    ? repositories.data?.find((repository) => repository.feishu_target_id === editing.id)
-    : undefined;
 
   return <div className={embedded ? "settings-content" : "page"}>
     <PageHeader headingLevel={embedded ? 2 : 1} title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<button className="button button-primary" type="button" onClick={beginAdd}><Plus size={17} />新增飞书配置</button>} />
@@ -115,9 +113,11 @@ export function FeishuHooksPage({ token, embedded = false }: {
           return <><span>{target.repository_count} 个项目</span><span className="list-secondary">{!repositories.isSuccess ? "关联项目待确认" : linked.length ? linked.slice(0, 2).map((item) => item.name).join("、") : "尚未关联项目"}</span>{linked.length > 2 && <details><summary>其余 {linked.length - 2} 个项目</summary>{linked.slice(2).map((item) => <p key={item.id}>{item.name}</p>)}</details>}</>;
         } },
         { title: "签名配置", key: "signing", width: 150, render: (_, target) => target.has_signing_secret ? "签名校验已配置" : "未配置签名校验" },
+        { title: "最近验证", key: "check", width: 320, render: (_, target) => <ConnectionChecks compact token={token} kinds={["feishu"]} notificationTargetId={target.id} /> },
         { title: "操作", key: "actions", width: 150, render: (_, target) => <><Button type="link" aria-label={`编辑 ${target.name}`} onClick={() => beginEdit(target)}>编辑</Button><Button type="link" danger aria-label={`删除 ${target.name}`} disabled={remove.isPending} onClick={() => deleteTarget(target)}>删除</Button></> },
       ]} />
-      <p className="form-note">签名配置不代表通道可用；测试会向真实群发送消息，须在编辑窗口中显式操作。</p>
+      <RouteButton to="/repositories">关联项目</RouteButton>
+      <p className="form-note">签名配置不代表通道可用；测试会向真实群发送消息，须显式确认，不会自动发送。</p>
     </section>
     {open && <Modal titleId="target-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="target-title">{editing ? `编辑 ${editing.name}` : "新增飞书配置"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
@@ -127,9 +127,9 @@ export function FeishuHooksPage({ token, embedded = false }: {
         <label>签名密钥<input type="password" autoComplete="new-password" value={form.signingSecret} onChange={(event) => setForm((current) => ({ ...current, signingSecret: event.target.value, clearSigning: false }))} placeholder={editing?.has_signing_secret ? "留空则保留当前密钥" : "未启用签名校验时留空"} disabled={form.clearSigning} /></label>
         {editing?.has_signing_secret && <label className="checkbox-label"><input type="checkbox" checked={form.clearSigning} onChange={(event) => setForm((current) => ({ ...current, clearSigning: event.target.checked, signingSecret: "" }))} />移除签名密钥</label>}
         {save.error && <p className="form-error" role="alert">{save.error.message}</p>}
-        <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存</button></div>
+        <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeEditor}>取消</button><button className="button button-primary" type="submit" disabled={save.isPending}><Save size={16} />保存通知通道</button></div>
       </fieldset></form>
-      {checkRepository && <div className="hook-form"><ConnectionChecks token={token} kinds={["feishu"]} repositoryId={checkRepository.id} /></div>}
+      {editing && <div className="hook-form"><ConnectionChecks token={token} kinds={["feishu"]} notificationTargetId={editing.id} enabled={!dirty} /></div>}
     </Modal>}
   </div>;
 }

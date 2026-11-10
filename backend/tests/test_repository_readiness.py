@@ -27,7 +27,7 @@ def test_preflight_does_not_save_and_checks_source(client: TestClient, settings:
 
 
 def test_readiness_invalidates_after_config_change(client: TestClient, settings: Settings) -> None:
-    """配置更新后同一秒内旧连接测试也不得误判为已验证。"""
+    """连接字段更新后同一秒内旧测试不得误判；仅改显示名称不影响连接身份。"""
 
     headers = {"X-Admin-Token": settings.admin_token}
     repository = client.post("/api/repositories", headers=headers, json={
@@ -45,5 +45,9 @@ def test_readiness_invalidates_after_config_change(client: TestClient, settings:
     assert readiness["status"] == "ready"
     assert client.patch(f"/api/repositories/{repository['id']}", headers=headers,
                         json={"name": "改名"}).status_code == 200
+    readiness = client.get("/api/repository-readiness", headers=headers).json()[0]
+    assert readiness["status"] == "ready"
+    assert client.patch(f"/api/repositories/{repository['id']}", headers=headers,
+                        json={"target_branch": "release"}).status_code == 200
     readiness = client.get("/api/repository-readiness", headers=headers).json()[0]
     assert readiness["status"] == "needs_check"

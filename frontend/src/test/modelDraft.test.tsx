@@ -26,10 +26,12 @@ it("空字段、未完成地址和任意单价均可新增与编辑保存", asyn
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "新增模型" }));
+  await user.click(screen.getByRole("button", { name: "可选：自定义服务端点" }));
   await user.type(screen.getByLabelText("Base URL"), "尚未完成");
+  await user.click(screen.getByRole("button", { name: "可选：费用估算单价" }));
   await user.type(screen.getByLabelText("输入单价（每百万 Token）"), "待确认");
   await user.click(screen.getByRole("button", { name: "保存模型" }));
-  expect(await screen.findByText("模型已保存，请在列表中启用")).toBeVisible();
+  expect(await screen.findByText("模型已保存；请测试此配置，再按需设为全局默认")).toBeVisible();
   expect(writes[0].body).toMatchObject({ name: "", model: "", api_key: "", base_url: "尚未完成", input_price_per_million: "待确认", output_price_per_million: null });
   await user.click(await screen.findByRole("button", { name: /^编辑$/ }));
   await user.clear(screen.getByLabelText("Base URL"));
@@ -54,6 +56,7 @@ it("保存遇到代理 502 时保留全部草稿，不自动重复创建模型",
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "新增模型" }));
   await user.type(screen.getByLabelText("配置名称"), "合成配置");
+  await user.click(screen.getByRole("button", { name: "可选：自定义服务端点" }));
   await user.type(screen.getByLabelText("Base URL"), "未完成地址");
   await user.type(screen.getByLabelText("API Key"), "synthetic-key");
   await user.click(screen.getByRole("button", { name: "保存模型" }));
@@ -88,7 +91,7 @@ it("自动读取模型目录后允许选择模型标识再保存", async () => {
   fireEvent.click(await screen.findByLabelText("选择模型"));
   fireEvent.click(await screen.findByRole("option", { name: "catalog-model-b" }));
   await user.click(screen.getByRole("button", { name: "保存模型" }));
-  expect(await screen.findByText("模型已保存，请在列表中启用")).toBeVisible();
+  expect(await screen.findByText("模型已保存；请测试此配置，再按需设为全局默认")).toBeVisible();
   expect(writes[0]).toMatchObject({ model: "catalog-model-b", api_key: "synthetic-key" });
 });
 

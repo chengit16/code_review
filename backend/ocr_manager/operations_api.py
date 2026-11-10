@@ -162,7 +162,7 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
             gitlab = next((check for check in relevant if check["kind"] == "gitlab"), None)
             version_id = versions.get(repository["id"])
             tested = all(check and check["status"] == "passed"
-                         and check["config_revision_id"] == version_id for check in (git, gitlab))
+                         and check["config_current"] for check in (git, gitlab))
             result.append({"repository_id": repository["id"],
                            "config_revision_id": version_id,
                            "git": git["status"] if git else "untested",

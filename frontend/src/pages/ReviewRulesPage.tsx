@@ -6,6 +6,8 @@ import { ArrowDown, ArrowUp, History, Plus, RotateCcw, Save, Trash2 } from "luci
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
+import { useSearchParams } from "react-router-dom";
+
 import { apiRequest } from "../api/client";
 import type { Repository, ReviewRuleConfiguration, ReviewRuleDocument, ReviewRuleRevision } from "../api/types";
 import { PageHeader } from "../ui/PageHeader";
@@ -28,7 +30,9 @@ export function ReviewRulesPage({ token, embedded = false }: {
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   // 规则草稿不随窗口聚焦重新加载；只在自身保存、删除或恢复后显式失效。
   const configurations = useQuery({ queryKey: ["review-rules"], queryFn: () => apiRequest<ReviewRuleConfiguration[]>(token, "/api/review-rules"), staleTime: Infinity });
-  const [scope, setScope] = useState("global");
+  const [scopeParams, setScopeParams] = useSearchParams();
+  const scope = /^\d+$/.test(scopeParams.get("repository") ?? "") ? scopeParams.get("repository") ?? "global" : "global";
+  const setScope = (value: string) => { const next = new URLSearchParams(scopeParams); if (value === "global") next.delete("repository"); else next.set("repository", value); setScopeParams(next); };
   const [form, setForm] = useState<ReviewRuleDocument>(emptyRule);
   const [includeText, setIncludeText] = useState("");
   const [excludeText, setExcludeText] = useState("");
@@ -97,7 +101,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
   }
 
   function changeScope(value: string) {
-    if (dirty && !window.confirm("当前审核规则尚未保存，确定切换配置范围？")) return;
+
     save.reset();
     remove.reset();
     setFeedback("");

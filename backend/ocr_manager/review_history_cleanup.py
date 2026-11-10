@@ -37,8 +37,8 @@ def _tables(db: sqlite3.Connection) -> list[str]:
 def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     if datetime.strptime(cutoff, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S") != cutoff:
         raise ValueError("清理边界必须是规范 UTC 时间")
-    if db.execute("PRAGMA user_version").fetchone()[0] != 51:
-        raise ValueError("仅支持已核对的 schema 51，不自动迁移")
+    if db.execute("PRAGMA user_version").fetchone()[0] != 52:
+        raise ValueError("仅支持已核对的 schema 52，不自动迁移")
     if db.execute("PRAGMA foreign_key_check").fetchall():
         raise ValueError("现有外键不完整，拒绝清理")
     active = {
@@ -52,6 +52,7 @@ def _validate(db: sqlite3.Connection, cutoff: str) -> None:
         "premerge_reviews": "status IN ('queued','running')",
         "mr_backfills": "status IN ('queued','running')",
         "rule_previews": "status IN ('queued','running')",
+        "repository_discoveries": "status IN ('queued','running')",
         "connection_checks": "status IN ('queued','running')",
         "alert_deliveries": "status IN ('pending','sending')",
         "worker_execution_slots": "state='running'",

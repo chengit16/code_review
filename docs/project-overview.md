@@ -24,7 +24,7 @@ Open Code Review 管理平台负责把 GitLab 代码变更接入 Alibaba Open Co
 | 后台执行 | 独立 Worker；同一数据目录通过文件锁限制单实例。 |
 | 独立监控 | `ocr_manager.alerts`，由 monitor 进程检测异常、维护告警与清理孤立工件。 |
 | 外部集成 | GitLab API / HTTPS Git、OCR CLI、模型服务、飞书机器人。 |
-| 前端 | React 19、TypeScript、Vite、TanStack Query、React Router、Radix Select。 |
+| 前端 | React 19、TypeScript、Vite、TanStack Query、React Router、Ant Design；未迁移选择器保留 Radix Select。 |
 | 验证 | pytest、Ruff、mypy、Vitest、ESLint、TypeScript 构建与 Playwright。 |
 | 本机部署 | launchd 可分别管理 API、Worker、monitor 和定时备份。 |
 
@@ -57,14 +57,14 @@ API 可用不等于 Worker 已运行。`GET /api/health` 的 `status`、`auth_mo
 | 待跟进问题 | `/issues` | 问题搜索、状态与级别筛选、批量处理、详情侧栏、重复项合并和处理历史。 |
 | 合并前审查 | `/premerge` | 默认每个 MR 的最新接收版本、项目 / MR / 状态过滤、历史版本与覆盖结论。 |
 | 合并事件 | `/events` | 事件分页检索、异常恢复、按合并时间补审及申请状态。 |
-| 项目配置 | `/repositories` | 基础接入、评审参数、发布审查、接入诊断四个页签。 |
-| 系统设置 | `/settings` | `model`、`feishu`、`rules` 三个标签，分别管理模型、通知和规则。 |
+| 项目配置 | `/repositories` | 基础接入、评审参数、发布审查、接入诊断四个页签，支持项目和分区 URL；另有逐项目接入清单、资料辅助填写和生效来源摘要。 |
+| 系统设置 | `/settings` | `model`、`feishu`、`rules`、`users` 四个标签，分别管理模型、通知、规则与访问权限。 |
 | 访问权限 | `/users` | 账号、角色、停用、密码重置和多人登录模式。 |
 | 运维与审计 | `/operations` | 运行监控、近七天项目/状态/规模分组 P50/P95 与样本、告警、工件维护、数据对账、脱敏诊断包、服务地址及管理操作审计。 |
 | 配置历史 | `/config-history` | 项目、飞书与 Agent 模型配置版本查看和恢复。 |
 | 问题与改进 | `/improvements`、`/improvements/:id`、`/improvements/themes/:id` | 管理员记录平台问题、阶段改进和优化主题；按主题组织阶段并关联问题，保留历史和三个交付维度；复盘汇总提供当前累计、独立活动趋势和待跟进清单；问题与主题可主动归档、恢复，历史和关联保留，归档内容仍纳入复盘。 |
 
-事件中心、运行监控与配置历史均可从主导航进入；只读账号可查询事件但不能重试或发起补审。`/webhooks` 转到项目配置，`/feishu` 与 `/review-rules` 转到对应设置标签，`/effectiveness` 转到概览并保留筛选。
+固定导航收拢为八项；事件中心从任务页次级入口进入，配置历史从运行监控进入，平台改进记录保留固定入口；只读账号可查询事件但不能重试或发起补审。`/webhooks` 转到项目配置，`/feishu` 与 `/review-rules` 转到对应设置标签，`/effectiveness` 转到概览并保留筛选。
 
 鉴权模式：
 

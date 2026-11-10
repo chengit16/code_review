@@ -15,7 +15,7 @@ CUTOFF = "2026-11-08 16:00:00"
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[sqlite3.Connection]:
-    """仅建临时 schema 51 库；一条旧任务、一条恰好零点的任务及各自反馈。"""
+    """仅建临时 schema 52 库；一条旧任务、一条恰好零点的任务及各自反馈。"""
 
     path = tmp_path / "app.db"
     Store(path).migrate()
@@ -71,7 +71,7 @@ def test_cleanup_preserves_midnight_jobs_and_all_other_tables(database: sqlite3.
     assert database.execute("SELECT count(*) FROM merge_events").fetchone()[0] == 2
     assert database.execute("SELECT count(*) FROM job_identity").fetchone()[0] == 2
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert database.execute("PRAGMA user_version").fetchone()[0] == 51
+    assert database.execute("PRAGMA user_version").fetchone()[0] == 52
     assert apply_cleanup(database, plan_cleanup(database, CUTOFF))["deleted_jobs"] == 0
 
 
@@ -136,6 +136,6 @@ def test_wrong_schema_rejected_without_migration(database: sqlite3.Connection) -
     """维护不顺带升级或降级业务库。"""
 
     database.execute("PRAGMA user_version=49")
-    with pytest.raises(ValueError, match="schema 51"):
+    with pytest.raises(ValueError, match="schema 52"):
         plan_cleanup(database, CUTOFF)
     assert database.execute("PRAGMA user_version").fetchone()[0] == 49

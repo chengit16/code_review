@@ -23,7 +23,7 @@ describe("配置与状态", () => {
     await user.click(screen.getByRole("button", { name: "新增飞书配置" }));
     await user.type(screen.getByLabelText("配置名称"), "测试通知");
     await user.type(screen.getByLabelText("Webhook URL"), "https://open.feishu.cn/open-apis/bot/v2/hook/test");
-    await user.click(screen.getByRole("button", { name: /^保存$/ }));
+    await user.click(screen.getByRole("button", { name: "保存通知通道" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("配置冲突");
     expect(screen.getByLabelText("配置名称")).toHaveValue("测试通知");
   });

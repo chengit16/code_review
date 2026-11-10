@@ -48,6 +48,7 @@ it("首页只保留反馈与同集合处理进度，入口保留 UTC 窗口和�
   expect(screen.queryByRole("heading", { name: "问题变化" })).not.toBeInTheDocument();
   await userEvent.click(screen.getByText("反馈统计口径"));
   await waitFor(() => expect(screen.getByText(/20%（1\/5）/)).toBeVisible());
+  await userEvent.click(screen.getByRole("button", { name: "展开反馈趋势" }));
   await userEvent.click(screen.getByRole("button", { name: "查看反馈数据" }));
   expect(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
 });

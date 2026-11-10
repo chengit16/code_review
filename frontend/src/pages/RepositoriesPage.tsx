@@ -4,12 +4,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, Drawer, Switch, Tag } from "antd";
 import type { TableColumnsType } from "antd";
 import { Check, Copy, Plus, RotateCcw, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { flushSync } from "react-dom";
+import { UNSAFE_DataRouterContext, useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { NotificationTarget, Repository, RepositoryInput, RepositoryUpdateInput } from "../api/types";
+import { RouteButton } from "../ui/RouteButton";
+import { EffectiveConfiguration } from "./EffectiveConfiguration";
+import { RepositoryCreateForm } from "./RepositoryCreateForm";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
 import { ListSearch, ListStatusNav, ListSelect } from "../ui/ListControls";
 import { ListTable as Table } from "../ui/ListTable";
@@ -42,10 +46,13 @@ const initial: RepositoryInput = {
 /** 保存项目接入配置，密钥提交成功后立即从表单内存清除。 */
 export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */ token: string }) {
   const queryClient = useQueryClient();
+  const hasDataRouter = Boolean(useContext(UNSAFE_DataRouterContext));
   const query = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const targets = useQuery({ queryKey: ["notification-targets"], queryFn: () => apiRequest<NotificationTarget[]>(token, "/api/notification-targets") });
   const readiness = useQuery({ queryKey: ["repository-readiness"], queryFn: () => apiRequest<Readiness[]>(token, "/api/repository-readiness"), refetchInterval: 10000 });
   const [open, setOpen] = useState(false);
+  const [draftVersion, setDraftVersion] = useState(0);
+  const [listParams, setListParams] = useSearchParams();
   const [form, setForm] = useState<RepositoryInput>(initial);
   const [editing, setEditing] = useState<Repository | null>(null);
   const [editForm, setEditForm] = useState<RepositoryUpdateInput>({});
@@ -66,7 +73,12 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       await apiRequest(token, "/api/repositories/preflight", { method: "POST", body: JSON.stringify(input) });
       return apiRequest<Repository>(token, "/api/repositories", { method: "POST", body: JSON.stringify(input) });
     },
-    onSuccess: () => { setForm(initial); setOpen(false); void queryClient.invalidateQueries({ queryKey: ["repositories"] }); },
+    onSuccess: (result) => {
+      // 保存成功先同步清除创建草稿，防止旧离开保护拦截进入已保存项目。
+      flushSync(() => { setForm(initial); setOpen(false); setFeedback("仓库已保存，请继续配置 Webhook 并验证连接。"); });
+      const next = new URLSearchParams(listParams); next.set("repository", String(result.id)); next.set("section", "connection"); setListParams(next);
+      void queryClient.invalidateQueries({ queryKey: ["repositories"] });
+    },
   });
   const update = useMutation({
     mutationFn: async ({ id, input }: { id: number; input: RepositoryUpdateInput }) => {
@@ -93,6 +105,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       setEditing(result); setEditForm(saved); setEditBaseline(JSON.stringify(saved));
       void queryClient.invalidateQueries({ queryKey: ["repositories"] });
       void queryClient.invalidateQueries({ queryKey: ["repository-readiness"] });
+      void queryClient.invalidateQueries({ queryKey: ["effective-configuration"] });
     },
   });
   const rotate = useMutation({
@@ -130,10 +143,12 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   }
 
   function field<K extends keyof RepositoryInput>(key: K, value: RepositoryInput[K]) {
+    setDraftVersion((value) => value + 1);
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function beginEdit(repo: Repository) {
+  const resetUpdate = update.reset, resetRotate = rotate.reset;
+  const loadEditor = useCallback((repo: Repository) => {
     setEditing(repo);
     setEditSection("connection");
     setReviewStatus({ dirty: false, pending: false }); setPremergeStatus({ dirty: false, pending: false });
@@ -150,13 +165,24 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       enable_default_branch_pushes: Boolean(repo.enable_default_branch_pushes),
     };
     setEditForm(next); setEditBaseline(JSON.stringify(next));
-    update.reset();
-    rotate.reset();
-  }
+    resetUpdate();
+    resetRotate();
+  }, [resetUpdate, resetRotate]);
+
+  function beginEdit(repo: Repository) { const next = new URLSearchParams(listParams); next.set("repository", String(repo.id)); next.set("section", "connection"); setListParams(next); }
+  const targetId = Number(listParams.get("repository"));
+  const targetSection = listParams.get("section");
+  useEffect(() => {
+    const repo = query.data?.find((item) => item.id === targetId);
+    if (repo && editing?.id !== repo.id) loadEditor(repo);
+    if (!targetId && editing) { setEditing(null); setEditForm({}); }
+    if (["connection", "review", "publication", "diagnosis"].includes(targetSection ?? "")) setEditSection(targetSection as RepositoryEditSection);
+  }, [targetId, targetSection, query.data, editing, loadEditor]);
+  function selectSection(section: RepositoryEditSection) { const next = new URLSearchParams(listParams); next.set("section", section); setListParams(next, { replace: true }); }
 
   const editPending = update.isPending || reviewStatus.pending || premergeStatus.pending || publicationStatus.pending;
   function closeAdd() { if (!mutation.isPending && confirmDiscard(JSON.stringify(form) !== JSON.stringify(initial))) { setOpen(false); setForm(initial); } }
-  function closeEditor() { if (!editPending && confirmDiscard(editDirty)) { setEditing(null); setEditForm({}); } }
+  function closeEditor() { if (editPending || (!hasDataRouter && !confirmDiscard(editDirty))) return; const next = new URLSearchParams(listParams); next.delete("repository"); next.delete("section"); setListParams(next); }
 
   function submitEdit(event: FormEvent) {
     event.preventDefault();
@@ -185,7 +211,6 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     remove.mutate(repo.id);
   }
 
-  const [listParams] = useSearchParams();
   const readinessFilter = listParams.get("repo_readiness") ?? "all";
   const targetFilter = listParams.get("repo_target") ?? "all";
   const getReadiness = (id: number) => !readiness.isSuccess || readiness.error ? "unknown" : readiness.data.find((item) => item.repository_id === id)?.status ?? "unknown";
@@ -201,11 +226,12 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     { title: "操作", key: "actions", width: 240, render: (_: unknown, repo) => <div className="row-actions"><Button type="link" onClick={() => setInfo(repo)}>接入信息</Button><Button type="text" title="编辑仓库设置" aria-label={`编辑 ${repo.name}`} onClick={() => beginEdit(repo)}>编辑</Button><Button danger type="text" title="删除项目配置" aria-label={`删除 ${repo.name}`} onClick={() => deleteRepository(repo)} disabled={remove.isPending}>删除</Button></div> },
   ];
 
-  return <div className="page"><UnsavedChangesGuard dirty={editDirty || (open && JSON.stringify(form) !== JSON.stringify(initial))} /><PageHeader title="项目配置" subtitle="GitLab 仓库、Webhook 与评审开关" actions={
-    <button className="button button-primary" type="button" onClick={() => setOpen(true)}><Plus size={17} />添加仓库</button>
+  return <div className="page"><UnsavedChangesGuard preserveSearchKeys={["section"]} dirty={editDirty || (open && JSON.stringify(form) !== JSON.stringify(initial))} /><PageHeader title="项目配置" subtitle="GitLab 仓库、Webhook 与评审开关" actions={
+    <div className="row-actions"><RouteButton to="/onboarding">项目接入清单</RouteButton><Button type="primary" icon={<Plus size={17} />} onClick={() => setOpen(true)}>添加仓库</Button></div>
   } /><QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     <ReadFeedback name="接入状态" loading={readiness.isPending} error={readiness.error} onRetry={() => void readiness.refetch()} />
     <ReadFeedback name="飞书配置" loading={targets.isPending} error={targets.error} onRetry={() => void targets.refetch()} />{!query.isLoading && !query.error && <>
+    {query.data?.some((repo) => getReadiness(repo.id) === "needs_check") && <p className="coverage-note">有项目尚未验证当前连接配置。<RouteButton to="/onboarding">继续接入清单</RouteButton></p>}
     {callbackUrl && <div className="webhook-callback"><span>GitLab 回调地址</span><input className="mono" aria-label="GitLab 回调地址" value={callbackUrl} readOnly onFocus={(event) => event.target.select()} /><button className="button button-secondary" type="button" onClick={() => void copyCallback(callbackUrl)}>{callbackCopied ? <Check size={16} /> : <Copy size={16} />}{callbackCopied ? "已复制" : "复制地址"}</button></div>}
     {copyError && <p className="form-error" role="alert">{copyError}</p>}
     <Card className="repository-table-card" size="small" title={<h2 className="repository-table-heading">已接入仓库</h2>} extra={query.data ? `${query.data.length} 个` : "数量待确认"}>
@@ -220,26 +246,14 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     {info && <><p>Webhook Token 默认遮罩，仅在主动查看时读取；请勿写入 URL 或日志。</p><WebhookTokenCell key={`${info.id}-${tokenRevision}`} token={token} repositoryId={info.id} repositoryName={info.name} /><p>最近 Token 验证：{formatTime(info.last_webhook_at)}</p><p className="form-note">接入验证与接收开关独立，测试通过不代表后续任务一定成功。</p></>}
   </Drawer>
   {open && <Modal titleId="add-repo-title" onClose={closeAdd}><div className="modal-heading"><h2 id="add-repo-title">添加 GitLab 仓库</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={closeAdd}><X size={19} /></button></div>
-    <form onSubmit={submit} className="form-grid">
-      <label>仓库名称<input value={form.name} onChange={(e) => field("name", e.target.value)} required /></label>
-      <label>项目数字 ID<input type="number" min="1" value={form.project_id || ""} onChange={(e) => field("project_id", Number(e.target.value))} required /></label>
-      <label>仓库路径<input placeholder="team/repo" value={form.path_with_namespace} onChange={(e) => field("path_with_namespace", e.target.value)} required /></label>
-      <label>目标分支<input value={form.target_branch} onChange={(e) => field("target_branch", e.target.value)} required /></label>
-      <label className="wide">Clone URL<input type="url" placeholder="https://gitlab.example.com/team/repo.git" value={form.remote_url} onChange={(e) => field("remote_url", e.target.value)} required /></label>
-      <label>GitLab Token<input type="password" autoComplete="new-password" value={form.gitlab_token} onChange={(e) => field("gitlab_token", e.target.value)} required /></label>
-      <SelectField label="飞书配置" value={form.feishu_target_id == null ? "none" : String(form.feishu_target_id)} onValueChange={(value) => field("feishu_target_id", value === "none" ? null : Number(value))} options={[{ value: "none", label: "暂不关联" }, ...(targets.data ?? []).map((target) => ({ value: String(target.id), label: target.name }))]} />
-      <label className="checkbox-label"><input type="checkbox" checked={form.enable_merge_requests} onChange={(e) => field("enable_merge_requests", e.target.checked)} />Merge Request 审核</label>
-      <label className="checkbox-label"><input type="checkbox" checked={form.enable_default_branch_pushes} onChange={(e) => field("enable_default_branch_pushes", e.target.checked)} />默认分支 Push 审核</label>
-      {mutation.error && <p className="form-error wide" role="alert">{mutation.error.message}</p>}
-      <div className="form-actions wide"><button type="button" className="button button-secondary" onClick={closeAdd}>取消</button><button type="submit" className="button button-primary" disabled={mutation.isPending}>保存仓库</button></div>
-    </form>
+    <RepositoryCreateForm token={token} form={form} draftVersion={draftVersion} targets={targets.data ?? []} pending={mutation.isPending} error={mutation.error} onField={field} onMetadata={(metadata) => setForm((current) => ({ ...current, ...metadata }))} onSubmit={submit} onCancel={closeAdd} />
   </Modal>}
   {editing && <Modal titleId="edit-repo-title" className="modal-wide repository-editor-modal" onClose={closeEditor}><div className="modal-heading"><h2 id="edit-repo-title">编辑 {editing.name}</h2><button className="icon-button" type="button" aria-label="关闭" title="关闭" onClick={closeEditor} disabled={editPending}><X size={19} /></button></div>
     <div className="repository-editor-tabs" role="tablist" aria-label="仓库设置">
-      <button className={`repository-editor-tab${editSection === "connection" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "connection"} onClick={() => setEditSection("connection")}>基础接入</button>
-      <button className={`repository-editor-tab${editSection === "review" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "review"} onClick={() => setEditSection("review")}>评审参数</button>
-      <button className={`repository-editor-tab${editSection === "publication" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "publication"} onClick={() => setEditSection("publication")}>发布审查</button>
-      <button className={`repository-editor-tab${editSection === "diagnosis" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "diagnosis"} onClick={() => setEditSection("diagnosis")}>接入诊断</button>
+      <button className={`repository-editor-tab${editSection === "connection" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "connection"} onClick={() => selectSection("connection")}>基础接入</button>
+      <button className={`repository-editor-tab${editSection === "review" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "review"} onClick={() => selectSection("review")}>评审参数</button>
+      <button className={`repository-editor-tab${editSection === "publication" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "publication"} onClick={() => selectSection("publication")}>发布审查</button>
+      <button className={`repository-editor-tab${editSection === "diagnosis" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "diagnosis"} onClick={() => selectSection("diagnosis")}>接入诊断</button>
     </div>
     <div className="repository-editor-body">
     <form hidden={editSection !== "connection"} onSubmit={submitEdit} className="form-grid repository-main-form"><fieldset className="configuration-fields form-grid wide" disabled={update.isPending}>
@@ -251,21 +265,21 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       <label className="wide">Clone URL<input value={editForm.remote_url ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, remote_url: event.target.value }))} required /></label>
       <label>新 GitLab Token<input type="password" autoComplete="new-password" value={editForm.gitlab_token ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, gitlab_token: event.target.value }))} placeholder="留空则保留" /></label>
       <SelectField label="飞书配置" value={editForm.feishu_target_id == null ? "none" : String(editForm.feishu_target_id)} onValueChange={(value) => setEditForm((current) => ({ ...current, feishu_target_id: value === "none" ? null : Number(value) }))} options={[{ value: "none", label: "暂不关联" }, ...(targets.data ?? []).map((target) => ({ value: String(target.id), label: target.name }))]} />
-      <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_merge_requests ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_merge_requests: event.target.checked }))} />Merge Request 审核</label>
-      <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_default_branch_pushes ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_default_branch_pushes: event.target.checked }))} />默认分支 Push 审核</label>
+      <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_merge_requests ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_merge_requests: event.target.checked }))} />合并后评审（Merge Request）</label>
+      <label className="checkbox-label"><input type="checkbox" checked={editForm.enable_default_branch_pushes ?? false} onChange={(event) => setEditForm((current) => ({ ...current, enable_default_branch_pushes: event.target.checked }))} />默认分支提交评审（Push）</label>
       <h3 className="form-section-title wide">GitLab Webhook</h3>
       <SelectField label="鉴权方式" value={editForm.auth_kind ?? editing.auth_kind} onValueChange={(value) => setEditForm((current) => ({ ...current, auth_kind: value === "signing" ? "signing" : "secret" }))} options={[{ value: "secret", label: "Secret token" }, { value: "signing", label: "Signing token" }]} />
       <label>新 Webhook Token<input type="password" autoComplete="new-password" value={editForm.webhook_token ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, webhook_token: event.target.value }))} placeholder="留空则保留" required={editForm.auth_kind === "signing" && editing.auth_kind !== "signing"} /></label>
       <div className="webhook-editor wide"><div className="webhook-editor-callback"><span>回调地址</span><code>{editing.webhook_url}</code></div><div><span>当前 Token</span><WebhookTokenCell key={`${editing.id}-${tokenRevision}`} token={token} repositoryId={editing.id} repositoryName={editing.name} /></div><button className="button button-secondary" type="button" disabled={rotate.isPending || editing.auth_kind !== "secret"} onClick={() => rotateToken(editing)}><RotateCcw size={16} />重新生成 Secret</button></div>
       {rotate.error && <p className="form-error wide" role="alert">{rotate.error.message}</p>}
       {rotate.isSuccess && <p className="form-success wide" role="status">Secret 已更新，请同步修改 GitLab Webhook</p>}
-      <div className="repository-form-checks wide"><ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} /></div>
+      <div className="repository-form-checks wide"><ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={editing.id} enabled={JSON.stringify(editForm) === editBaseline} /></div>
       {update.error && <p className="form-error wide" role="alert">{update.error.message}</p>}
-      {JSON.stringify(editForm) !== editBaseline && <p className="unsaved-note wide" role="status">基础接入有未保存的更改；保存设置只保存当前页签。</p>}
-      <div className="form-actions repository-form-actions wide"><button type="button" className="button button-secondary" onClick={closeEditor} disabled={editPending}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存设置</button></div>
+      {JSON.stringify(editForm) !== editBaseline && <p className="unsaved-note wide" role="status">基础接入有未保存的更改；保存基础接入只影响本分区。</p>}
+      <div className="form-actions repository-form-actions wide"><button type="button" className="button button-secondary" onClick={closeEditor} disabled={editPending}>取消</button><button type="submit" className="button button-primary" disabled={update.isPending}>保存基础接入</button></div>
       {update.isSuccess && JSON.stringify(editForm) === editBaseline && <p className="form-success wide" role="status">基础接入配置已保存</p>}
     </fieldset></form>
-    <div hidden={editSection !== "review"} className="repository-editor-panel"><ProjectReviewLimits token={token} repositoryId={editing.id} onStatusChange={setReviewStatus} /></div>
+    <div hidden={editSection !== "review"} className="repository-editor-panel"><EffectiveConfiguration token={token} repositoryId={editing.id} /><ProjectReviewLimits token={token} repositoryId={editing.id} onStatusChange={setReviewStatus} /></div>
     <div hidden={editSection !== "publication"} className="repository-editor-panel repository-editor-stack"><GitLabPublicationSetting token={token} repositoryId={editing.id} onStatusChange={setPublicationStatus} /><PremergeSetting token={token} repositoryId={editing.id} onStatusChange={setPremergeStatus} /></div>
     <div hidden={editSection !== "diagnosis"} className="repository-editor-panel"><RepositoryDiagnosis token={token} repository={editing} targets={targets.data ?? []} /></div>
     </div>

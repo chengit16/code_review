@@ -3125,3 +3125,193 @@
 - 关联文件或证据：用户本轮截图；frontend/src/pages/JobsPage.tsx、frontend/src/pages/TaskFilters.tsx。
 - 遗留与下一步：实现、验证后追加事实；收尾执行本编号至少两条的只读来源与页面同步核验。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-001｜追加：反馈状态快捷筛选实现及本地验收完成
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：阶段改进；代码及本地验证完成，尚未部署。
+- 关联记录：本编号受理；PI-20261109-007、PI-20261109-008。
+- 现象或目标：在截图顶部状态栏直接查看待反馈和已反馈任务数量，并点击筛选待处理发现所在任务。
+- 原因或分析：评审执行完成与发现反馈完成是独立维度；部分反馈仍属于待反馈，数量应统计完整匹配集合中的任务，不能取当前页发现数或任务数。
+- 处理与改进：在更多状态后增加“反馈状态：待反馈 N / 已反馈 N”，点击立即应用，再点取消；切换重置页码和选择，保留项目、分支、评审状态等条件，URL 支持刷新和返回。已反馈仅包含有发现且当前发现全部已反馈的任务；零发现不列为已反馈。服务端在同一读事务提供 feedback_counts，忽略反馈自身条件和分页，保留其他条件；沿用有效发现及历史修复仍按未评价的口径。手机下反馈组单独换行。
+- 代码修改：修改 JobsPage.tsx、task-migration.css、tasks.py、review_contracts.py、前端 TaskPage 类型及 OpenAPI 快照，补充后端反馈分面与浏览器快捷筛选验证；保留所有既有工作区变更。无数据库迁移、历史回填或反馈写入行为变更。
+- 本地验证：实际 `npm --prefix frontend test` 为 40 文件 / 258 passed；frontend 中 `npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-feedback-shortcut-dist --emptyOutDir` 通过。`.venv/bin/pytest -q backend/tests/test_task_feedback_summary.py backend/tests/test_task_issue_summary.py backend/tests/test_task_operations.py backend/tests/test_review_findings_api.py` 最终 23 passed，覆盖部分反馈、零发现、缺失文档、反馈撤销、分页及状态条件。首次 22 passed / 1 failed 原因为新增测试种子遗漏 finished_at，被共享有效集合排除；补齐合成完成时间后复验通过，未修改生产筛选口径。`.venv/bin/ruff check backend/ocr_manager/tasks.py backend/ocr_manager/review_contracts.py backend/tests/test_task_feedback_summary.py`、`.venv/bin/mypy backend/ocr_manager`（132 模块）、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 与 `git diff --check` 通过。实际使用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-shortcut-dist npx playwright test e2e/taskList.spec.ts --output /tmp/ocr-feedback-shortcut-browser`，8 passed；覆盖 1440/768/390/320px 现有反馈操作及 1440/390/320px 快捷切换、取消、刷新、返回、保留范围、清空及无横向溢出。已目视 1440px 和 320px 新入口截图。Impeccable 机械检查两个修改 UI 文件输出 []。未重跑后端全量、补审浏览器、真实读屏或 200% 放大；保留既有大包与 Starlette 弃用提示。
+- 部署生效：未部署。仅使用 /tmp 隔离构建、临时 SQLite 与 8791 浏览器服务；未覆盖 frontend/dist、未重启真实 API/Worker/monitor、未修改真实任务或反馈。运行实例需要配套更新后端与前端后才能显示新入口及数量。
+- 关联文件或证据：/tmp/ocr-feedback-shortcut-dist、/tmp/ocr-feedback-shortcut-browser；backend/tests/test_task_feedback_summary.py、frontend/e2e/taskList.spec.ts 及本轮实际终端输出。受理来源已实际通过一次只读核验（page 36 / version 1）。
+- 遗留与下一步：本地实现交付；发布及真实运行入口核验尚未执行。等待独立 monitor 正常周期后运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261110-001 --minimum-entries 2` 核对本轮两条来源与页面；不强制同步、不扩大聊天采集范围，按实际输出报告。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261110-002｜受理：调研任务处理状态与飞书原卡片反馈同步
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：阶段改进；已受理，调研中，本轮不实施业务修改。
+- 关联记录：PI-20261110-001、PI-20261109-008。
+- 现象或目标：用户希望外层能看到是否处理完成，网页反馈后同步到截图中的飞书卡片，先确认可实现性。
+- 原因或分析：需区分评审状态、发现反馈处理与代码修复；现有 webhook 发送方式是否支持原消息更新、是否保存消息标识及所需飞书权限尚待核对。
+- 处理与改进：只读检查任务反馈、卡片构造和投递持久化，核对官方接口能力，形成可选方案、限制及推荐路径。
+- 代码修改：未修改业务代码；仅追加受理，保留台账既有变更。
+- 本地验证：实际运行 `git status --short`、读取本轮历史台账；外部工具搜索未匹配网页工具，后续尝试读取官方公开资料。尚未运行业务测试或飞书实发。
+- 部署生效：未部署、未重启、未更改真实反馈、飞书消息或配置。
+- 关联文件或证据：用户本轮飞书卡片截图及调研请求。
+- 遗留与下一步：核实当前发送链路、官方限制及历史消息兼容边界，追加调研结论并核验本编号至少两条同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-002｜追加：确认外层状态可复用，原卡同步需应用机器人与更新窗口兜底
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：调研与方案完成，待用户确认实施；未修改业务实现。
+- 关联记录：本编号受理；PI-20261110-001、PI-20261109-008。
+- 现象或目标：外层呈现是否处理完成，网页反馈保存后让飞书卡片同步处理进度。
+- 原因或分析：源码确认现有“需处理”是评审结论而非反馈进度；当前群自定义机器人 webhook 发送后不返回本链路可用的消息 ID，程序只记录投递成功，卡片未显式配置 update_multi。官方主动更新接口要求应用机器人、与发送相同的身份、消息 ID、更新前后共享卡片配置，且仅支持发送后 14 天内未撤回消息；现有历史 webhook 卡片不能承诺原地更新。
+- 处理与改进：新增 docs/feishu-feedback-sync-research.md，建议外层和飞书统一“待处理/处理中/已处理（反馈完成）”，复用当前有效发现三类反馈，不推断代码已修复、不把部分覆盖变完整。推荐应用机器人发送新共享卡片并保存消息映射；反馈及撤销同事务登记同步意图，由独立 Worker 聚合、版本校验、有限重试和追平，网页反馈保存与飞书同步结果分开。保留 webhook 时只能发送静态快照或追加新的进度通知，不冒充原卡更新。历史、超 14 天、撤回及权限变更需明确兜底；本轮未验证其他 CardKit 更新路径，不承诺永久可更新。
+- 代码修改：未修改业务代码；仅新增调研方案和追加本编号台账，保留既有台账变更。未新增应用凭据、消息映射、同步队列或数据库迁移。
+- 本地验证：实际读取 feishu.py、storage.py、worker.py、review_recovery_notifications.py、review_finding_feedback.py、review_findings_api.py、task_feedback_summary.py 及现有列表状态。通过 Python urllib.request 实际读取飞书官方自定义机器人指南、发送消息及更新已发送消息卡片的公开 Markdown 正文；确认 webhook 成功示例 data={}、不支持请求回调、应用发送返回 message_id、同发送身份、update_multi=true、14 天限制及单消息 5 QPS。普通 HTML 返回前端壳，曾尝试 message/patch.md 返回 404，改用 message-card/patch.md 正文成功。实际 `git diff --check` 及调研文档本地源码引用检查通过。仅文档及静态/官方资料核对，未运行本轮业务测试、未联调租户权限、未实发或更新飞书消息，不能视为外部服务验收。
+- 部署生效：未部署、未重启、未更改真实任务反馈、飞书卡片、凭据或群配置；本轮交付是可行性与实施建议，截图中的旧卡片保持原样。
+- 关联文件或证据：docs/feishu-feedback-sync-research.md 中的源码引用与三条官方文档链接；本轮临时 /tmp/ocr-feishu-doc-0.md、ocr-feishu-doc-2.md、ocr-feishu-doc-3.md 为公开资料，不含私有响应或凭据。
+- 遗留与下一步：用户确认路线后才实施；若选择原卡动态更新，需管理员开通应用机器人、目标群及最小权限，通过安全配置入口录入凭据，单独授权测试群联调。等待 monitor 正常周期并执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261110-002 --minimum-entries 2`；失败明确报告，不强制同步、不扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-002｜追加：补充应用机器人权限自查与创建发布步骤
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：同一事项咨询与操作指引完成，未实施接入。
+- 关联记录：本编号前两条；用户询问如何判断个人权限及创建应用机器人。
+- 现象或目标：区分个人创建/配置能力、企业发布审批及群添加权限，提供最小权限的创建路径。
+- 原因或分析：能创建应用不等于能审批发布或管理群；官方允许企业配置免审策略，不能笼统说所有用户必须是企业管理员。应用身份 im:message:send_as_bot 已列于发送与更新接口可选权限；获取群列表才需要额外群信息权限，不应默认申请全量消息或通讯录读取。
+- 处理与改进：调研文档追加第 8 节，说明企业账号登录开发者后台自查、创建企业自建应用、添加机器人能力、申请应用身份权限、版本发布及审核、测试群添加、取得群 ID 与安全凭据的流程，说明创建完成并不等于本项目已接通，旧 webhook 消息及 14 天限制仍保留。建议用户只提供不含凭据的页面截图定位权限卡点。
+- 代码修改：未修改业务代码；仅补充调研指引及追加本条台账，保留已有文档变更。
+- 本地验证：本轮实际通过 urllib.request 读取官方机器人能力、机器人概述、自建应用开发流程、申请 API 权限、发布审核、机器人使用指南与群列表接口 Markdown；确认应用版本待发布与已开通区分、免审策略及电脑端群添加路径。部分猜测的群 ID 指南路径返回 404，未用作证据；旧五分钟教程声明停止更新，未建议照搬其读取单聊消息权限或事件订阅。将运行 git diff --check 及本编号累计三条只读同步核验。不登录用户飞书、不代建应用、不实发消息，未运行本轮业务测试。
+- 部署生效：未部署、未重启、未修改真实应用/群权限、凭据或消息；个人与企业实际权限尚未验证。
+- 关联文件或证据：docs/feishu-feedback-sync-research.md 第 8 节及官方链接；临时 /tmp/ocr-feishu-guide-*.md 仅为公开文档。
+- 遗留与下一步：用户按控制台步骤自查；若受企业策略限制请对应管理员协助。创建后需另行实施安全配置与消息同步并授权测试群联调。只读核验失败须明确未同步，不强制导入或扩大授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-002｜追加：明确项目飞书配置也需适配应用机器人
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：同一事项配置范围咨询完成，仍为方案，未实施。
+- 关联记录：本编号前三条；用户询问取得飞书权限后是否需要修改项目飞书配置。
+- 现象或目标：明确飞书平台授权与本项目配置、发送和更新能力的关系。
+- 原因或分析：实际核对 NotificationTargetCreate/Update、public_notification_target 与前端类型，目前只支持 webhook URL 和签名密钥，项目通过 feishu_target_id 关联通知目标。应用机器人权限开通不会自动改变现有 webhook 链路。
+- 处理与改进：建议通知配置增加接入类型并保留旧 webhook；应用凭据集中安全管理，通知目标选择应用并配置 chat_id，项目继续关联目标，不要求每个项目重复填写 App Secret。新增连接及卡片更新测试、消息 ID 持久化、令牌管理与独立同步队列，区分发送成功和动态更新成功。仅讨论范围，不将用户提问作为实施或变更真实配置的授权。
+- 代码修改：未修改业务代码或真实配置；仅追加本条台账。
+- 本地验证：实际运行 git status --short 并检索 backend/ocr_manager/api.py 与 frontend/src/api/types.ts 的现有通知配置字段；猜测的 NotificationTargetsPage.tsx 路径不存在，未用作证据。未运行业务测试、未调用飞书接口；收尾执行 git diff --check 与本编号累计四条只读同步核验。
+- 部署生效：未部署、未重启，未改变现有 webhook 通知行为或凭据。
+- 关联文件或证据：backend/ocr_manager/api.py、frontend/src/api/types.ts；docs/feishu-feedback-sync-research.md。
+- 遗留与下一步：用户确认实施后再设计迁移及安全配置入口；先验证测试群，逐项目切换，旧 webhook 消息不承诺更新。同步结果以实际核验输出为准。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-002｜追加：核实个人实名认证对外共享与公司内部应用的区别
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：同一事项跨租户咨询完成，未实施。
+- 关联记录：本编号前四条；用户询问能否用个人飞书创建机器人后供企业使用。
+- 现象或目标：明确个人账号在公司租户创建，与个人独立租户应用供公司使用的可行路径及限制。
+- 原因或分析：本轮官方对外共享文档明确允许企业/团队认证或个人实名认证，后者适用于个人版及未认证企业成员且仅中国大陆地区支持；不能沿用企业认证为唯一前提的简写。对外共享面向外部群和外部用户单聊，不等同于在其他企业普通内部群安装，亦不改变应用所属租户。
+- 处理与改进：调研文档追加第 9 节；建议公司正式使用时由公司租户创建并授权个人开发，个人独立租户可做合成数据测试。若公司允许外部群路线，需要完成对应认证、对外共享发布、由所属租户且在可用范围内的成员添加机器人，并核对公司安全策略。密钥交接不等于应用转移，不以外部共享绕过审批或外发敏感代码。
+- 代码修改：未修改业务代码或真实应用配置；仅追加调研说明及本条台账，保留已有文档。
+- 本地验证：实际运行 git status --short，通过 Python urllib.request 读取官方对外共享及企业自建应用开发流程 Markdown 正文，确认认证选择、外部群添加者限制及租户边界；未登录用户账号、未创建或安装应用、未实发消息。收尾运行 git diff --check 与累计五条只读同步核验，未运行业务测试。
+- 部署生效：未部署、未重启、未改变企业权限、凭据、群或消息；具体个人账号及企业策略仍待用户自查。
+- 关联文件或证据：docs/feishu-feedback-sync-research.md 第 9 节；官方机器人支持外部群和外部用户单聊文档；/tmp/ocr-feishu-personal-external.md 为公开正文。
+- 遗留与下一步：优先确认目标是公司内部群还是经批准的外部群，再选择公司租户或个人测试路线；动态卡片能力须后续项目实现及授权联调。同步以实际核验结果为准。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜受理：分析菜单、页面与配置流程的易用性及精简空间
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：阶段改进；已受理，排查中，本轮以分析建议为交付。
+- 关联记录：PI-20261109-008、PI-20261110-002；本事项独立评估全站使用路径，不改变前述事项结论。
+- 现象或目标：用户希望检查项目菜单、页面及配置，找出能降低理解成本、减少操作步骤、让其他人更容易上手的优化空间。
+- 原因或分析：需结合当前路由、实际页面、配置依赖与权限区分首次接入、日常反馈及异常恢复，尚未形成结论。
+- 处理与改进：先登记受理，再只读检查实现和可访问页面，形成有依据的菜单精简、页面优化、配置引导及实施优先级建议。
+- 代码修改：未修改业务代码；仅追加本条受理。保留已有台账修改及飞书调研文档。
+- 本地验证：实际运行 `git status --short` 并读取项目执行约定、前端规范、历史台账及 impeccable 审查说明；本轮未运行业务测试或配置写入验证。用户目录的 comment-standards.md 当前不存在，本轮不新增代码注释。
+- 部署生效：未部署、未重启、未修改真实配置、凭据、任务或反馈。
+- 关联文件或证据：用户本轮菜单、页面和配置分析请求；AGENTS.md、docs/governance/frontend-code-standards.md。
+- 遗留与下一步：完成当前实现与页面核对，追加本编号分析结论；等待 monitor 正常周期后执行本编号 minimum-entries 2 的只读来源与页面核验，按实际结果报告。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：完成菜单、页面及配置易用性分析，形成分批精简建议
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：本轮分析完成，后续改造待确认；关联本编号受理，不表示实现或部署完成。
+- 关联记录：PI-20261109-008、PI-20261110-002；保留反馈统一和飞书调研的既有边界。
+- 现象或目标：降低其他使用者首次接入和日常操作成本，明确哪些入口可收拢、哪些字段可少填、保存后如何验证及继续使用。
+- 原因或分析：管理员侧栏固定 12 个入口；接入进度只累计四项且最终验证固定未完成；仓库创建含重复元数据；模型仅测试全局启用项；飞书测试依赖关联仓库且藏在编辑窗口。当前已有快捷筛选、URL、分区导航、草稿保护与窄屏适配，不应重复建设或误报缺失。
+- 处理与改进：新增 docs/usability-simplification-analysis.md，建议约 7～8 个固定入口、平台准备与逐项目接入分开、仓库元数据辅助填写、配置版本绑定的目标模型及通知测试、准确的分区保存语义和生效来源摘要；分为路径文案、接入闭环、配置管理三批。功能移动保留旧链接及角色可读能力，通知可选、费用与外发需明确操作，已反馈不推断代码修复。
+- 代码修改：未修改业务代码；仅新增分析文档及主动追加本编号两条台账，保留已有变更。未调整菜单、表单、后台契约或配置。
+- 本地验证：实际运行 `curl -fsS http://127.0.0.1:8781/api/health`，返回 ok / dev / running；通过项目已有 Playwright 和本机 Chrome 只读打开全部 12 个菜单入口，并查看系统设置三个分类、新增仓库/模型/通知窗口及一条任务详情。浏览器禁止非 GET/HEAD 和外部请求，写请求尝试 0、页面 JavaScript 错误 0；接入引导、项目、模型、任务及发现五个 390px 页面整体滚动宽度均为 390。实际 `git diff --check` 通过，Python 只读断言检查报告 10 处源码引用有效及检查摘要一致。未运行业务自动化、配置提交、角色切换、读屏或外部连接测试，不把上述静态检查当作业务验收通过。
+- 部署生效：未部署、未重启、未改真实配置、凭据、任务、发现反馈或外部消息；本机只读观察不代表建议已生效，也不代表其他环境验收。
+- 关联文件或证据：docs/usability-simplification-analysis.md；frontend/src/app/App.tsx、OnboardingPage.tsx、RepositoriesPage.tsx、SettingsPage.tsx、FeishuHooksPage.tsx 等现有实现；临时 /tmp/ocr-ux-analysis-20261110/checks.json 及截图不复制到台账或报告。
+- 遗留与下一步：建议优先完成接入路径、目标测试与菜单低频入口收纳，后续实施按凭据、权限、版本和异步边界补相称验证。本轮等待独立 monitor 正常周期，实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261110-003 --minimum-entries 2`，以最终输出报告来源与页面同步；不强制导入、不扩大聊天绑定，不宣称语义零遗漏。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：用户授权完整实施易用性规划，开始分批改造
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：已受理完整实施，排查与开发中；关联本编号前两条分析记录。
+- 现象或目标：用户确认按分析规划全部落实，覆盖菜单、页面信息、接入流程、目标模型和通知测试及生效配置说明。
+- 原因或分析：需要同时补齐配置版本、独立测试、仓库元数据安全获取和项目级接入事实，不能只精简可见字段。
+- 处理与改进：保留当前工作区变更，先核对契约和 Worker，再分批实施前后端、隔离自动化及浏览器验证；具备发布条件后备份并进行本机切换。
+- 代码修改：本条追加时尚未修改业务代码；现有分析、飞书研究和台账变更保留。
+- 本地验证：实际运行 git status --short 并读取本编号分析和后端代码规范；本轮实施测试尚未运行。
+- 部署生效：未部署、未重启、未修改真实配置或任务；外部模型、GitLab 和飞书验证使用替身，不对真实群试发。
+- 关联文件或证据：用户本轮完整实施授权；docs/usability-simplification-analysis.md。
+- 遗留与下一步：完成前后端改造和完整检查，再分别记录代码、本地验证与部署事实；应用机器人动态消息仍按独立研究事项的条件与范围处理。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：完成首轮前后端改造，进入隔离回归
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：开发中；关联本编号前三条，尚未宣称全部完成。
+- 现象或目标：落实菜单收纳、项目定位、可完成清单、独立目标测试、仓库资料辅助填写和生效来源说明。
+- 原因或分析：历史测试无目标版本证据；新的异步元数据读取需要令牌清理、取消、Worker 恢复和白名单响应，不能在 HTTP 接收进程访问外部服务。
+- 处理与改进：新增 schema 52、目标身份与内部配置指纹；完成阶段再次核对当前配置；新增临时加密资料队列及 Worker 调度、管理员读写契约和配置摘要。前端精简固定导航、补次级入口、项目与分区 URL、逐项目连接准备、目标独立测试确认、列表与成功详情折叠，继续保留旧路由和草稿机制。
+- 代码修改：上述改动已写入工作区；尚在整合，保留先前已有文档变更，不修改真实配置或任务。
+- 本地验证：实际运行连接测试现有回归 ` .venv/bin/pytest -q backend/tests/test_connection_checks.py`，5 项通过；前端 `npx tsc -b`、`npm run lint` 首轮通过；Ruff 自动整理两处导入后无错误。首轮 mypy 发现新增模型目标的可空类型问题，已调整待复验。曾指定不存在的 test_operations.py，命令未执行任何测试，不计通过；新增行为、全量测试和浏览器验收尚未完成。
+- 部署生效：未部署、未重启；本机业务服务仍使用原发布产物。无真实模型、GitLab 或飞书测试调用。
+- 关联文件或证据：backend/ocr_manager/{onboarding_migration,connection_targets,repository_discovery,setup_api}.py；frontend/src/pages/OnboardingPage.tsx 等；本会话实际命令输出。
+- 遗留与下一步：补安全和版本竞态测试、完整自动化及桌面窄屏验证，排查回归后再确定本机发布；应用机器人动态卡片仍不属于本事项。收尾运行本编号累计条数只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：后端全量回归完成，修复浏览器交互与窄屏回归
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：实施与验证中；关联本编号前四条，未完成发布。
+- 现象或目标：核对新接入契约、配置版本及菜单收纳是否保持旧功能、草稿和权限行为。
+- 原因或分析：schema 52 需要同步适配历史迁移夹具和离线清理工具；浏览器发现接入选择框窄屏宽度、旧筛选文案断言、分区 URL 历史和分项读取恢复需要调整。JSDOM 中确认窗口动画影响可见性断言，实际浏览器继续单独核对。
+- 处理与改进：新增 16 项隔离后端用例，涵盖独立目标、版本竞态、取消过期、临时凭据清理、受控资料响应及迁移；完成旧版本夹具适配。恢复接入页分项只读重试，项目分区切换替换当前历史位置，补充选择框最小宽度约束。
+- 代码修改：业务代码和测试已修改，仍在回归修复；既有飞书研究与历史台账保留。
+- 本地验证：实际 `.venv/bin/pytest -q backend/tests` 完整回归 799 passed、1 skipped；全后端 Ruff 与 strict mypy（136 个文件）通过。前端首轮完整原有 258 项通过；新增交互测试仍有一项确认窗口断言待修复。隔离构建成功但有大包提示；六组浏览器文件首轮 42 passed、7 failed，已定位并修改后正在复验，不能记为完整通过。所有浏览器写入使用临时库或合成响应，无真实外部调用。
+- 部署生效：未部署、未重启，本机 8781 仍为原发布版本；schema 52 尚未用于业务库。
+- 关联文件或证据：backend/tests/test_setup_workflows.py；/tmp/ocr-usability-backend-tests-2.log；/tmp/ocr-usability-e2e.log；本轮命令输出。
+- 遗留与下一步：完成新增浏览器用例、桌面手机视觉检查及前端完整验证；随后备份和恢复演练，再协调本机切换。真实模型、GitLab 和飞书端到端试运行另需明确授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：完成核心验证及恢复演练，准备同版发布
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：开发完成、发布准备中；关联本编号前五条。
+- 现象或目标：在真实业务数据不变的前提下完成最后验收并安全切换本机实例。
+- 原因或分析：浏览器新增流程捕获创建成功后的旧草稿拦截、同页锚点不展开及 Ant Design 虚拟选项测试差异；已修复并覆盖。实际同一私有配置另有 8000 API，须与 8781、Worker、monitor 一起协调，避免旧进程混写新版库。
+- 处理与改进：完成配置/项目总览文档更新及实施、迁移说明；确认同库队列当前无 queued/running/pending/sending 项。先执行成对在线备份，在隔离副本演练 51 → 52、完整性与已存凭据解密，三项通过；未迁移业务库。
+- 代码修改：前后端改造和用例已写入工作区；项目分区切换不重复叠加浏览器历史，创建成功清除草稿后再定位，折叠明细支持锚点变化；保留已有历史记录。
+- 本地验证：实际 `.venv/bin/pytest -q backend/tests` 为 803 passed、1 skipped；`npm test -- --reporter=dot` 为 261 passed；Ruff、mypy（136 文件）、OpenAPI 契约、ESLint、TypeScript 与隔离 Vite 构建通过。八组浏览器首轮 54 passed、3 failed，后三项为旧主题断言未适配 Ant Design 焦点边框和反馈用语，调整后独立 4 passed；最终统一 57 项复验正在运行。已实际查看 1440/320 接入页截图，补齐四步网格布局；七个新增界面文件的 impeccable 模式扫描无发现，但不含渲染对比度或读屏检查。Vite 大包提示与测试依赖弃用提示仍在，不称无警告。
+- 部署生效：尚未部署；本条记录时业务库仍为 51。备份及隔离恢复通过不能代替本机更新。
+- 关联文件或证据：docs/usability-simplification-implementation.md；/tmp/ocr-usability-backend-final.log；/tmp/ocr-usability-ui-final.log；本机受保护 usability 备份目录的 recovery-check 报告；/tmp/ocr-task-migration 截图。
+- 遗留与下一步：统一浏览器复验通过后，优雅停止已核对同库进程、最终备份、迁移与同版重启；核对历史计数、健康、Worker/monitor 和只读页面。真实外部端到端仍未运行，应用机器人独立事项不在本次范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-003｜追加：易用性规划实施完成，本机同版发布并核对生效
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：本事项规划范围已完成并在本机确认生效；关联本编号前六条。飞书应用机器人独立研究不并入本次验收。
+- 现象或目标：完成菜单、页面、接入与配置简化，并在不丢失历史和既有业务配置的前提下发布。
+- 原因或分析：首次接入需实际目标和配置版本证据，菜单收纳需保留入口、权限与草稿，手机端还需检查内部摘要而非只看页面整体宽度。
+- 处理与改进：固定导航 12 → 8；增加次级入口与系统设置访问权限分区；资料辅助填写、项目分区定位、逐项目四步准备、独立模型/通知测试和明确费用/外发确认；生效来源与部署摘要、成功详情折叠、首页趋势收纳及手机任务精简。最后核对截图，修正新摘要受到旧表格 nowrap 样式影响的文字裁切，保留异常恢复及全部历史。更新操作指南、项目总览、部署与实施说明。
+- 代码修改：前后端、schema 52、测试与文档已修改并完成本机发布；未提交 Git commit，未撤销先前已有研究文档或历史台账。
+- 本地验证：实际 `.venv/bin/pytest -q backend/tests` 为 803 passed、1 skipped；前端 `npm test -- --reporter=dot` 为 261 passed；`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`（136 文件）、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract`、`npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-usability-dist` 通过。八组 Playwright 最终统一 57 passed（/tmp/ocr-usability-e2e-verified.log）；摘要换行后补跑三项布局 3 passed。Vite 超过 500 kB 提示和 Starlette 测试依赖弃用提示存在。源码设计探测无模式发现，不代替完整对比度/读屏验证。实际 `git diff --check` 通过。
+- 部署生效：已核对同项目同私有配置的 8781、8000 两个旧 API、Worker 与 monitor，确认空闲后逐一优雅停止，无强杀；最终数据库与原 private.json 成对备份并隔离恢复演练通过，保留旧前端。业务库从 51 迁移到 52，integrity_check=ok、foreign_key_check=0；十类业务表前后计数一致（4 仓库、3 模型、4 通道、399 事件、33 任务、58 问题、两类反馈各 49、96 连接记录、0 补审记录）。按原配置启动同版进程后，两端口健康均为 ok/dev/Worker running；Worker 与 monitor 单实例锁持有，monitor 成功周期由 05:00:53Z 前进至 05:01:23Z。仅确认本机，不推断其他环境。
+- 关联文件或证据：docs/usability-simplification-implementation.md；受保护备份目录 `.local-data/backups/usability-20261110-124910` 中最终成对快照、final-recovery-check 和 rollout.json；/tmp/ocr-usability-live/checks.json。更新后同源只读浏览器检查桌面 12 页及 390/320 各四页，主导航 8 项、整体溢出 0、项目摘要内部溢出 0、JavaScript 错误 0、业务写请求 0，外部字体等资源被拦截。
+- 遗留与下一步：本次范围无待实施项；没有真实调用模型、GitLab 资料或向飞书群发测试消息，真实端到端试运行须明确授权。应用机器人动态卡片仍为 PI-20261110-002 独立后续；大包拆分及真实用户用时指标未在本次宣称完成。按 monitor 正常周期等待本条同步后，执行本编号 minimum-entries 7 只读核验，不强制导入、不扩展聊天绑定、不声称语义零遗漏。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

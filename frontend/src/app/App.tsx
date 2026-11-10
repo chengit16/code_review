@@ -1,9 +1,11 @@
 /** @description 管理台路由、会话与主导航；凭据只保留在内存中。 */
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, CheckCircle2, ClipboardList, GitPullRequest, History, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Users, Wrench, X } from "lucide-react";
+import { Activity, ClipboardList, GitPullRequest, LayoutDashboard, LogOut, Menu, RefreshCw, Settings2, ShieldCheck, TriangleAlert, Wrench, X } from "lucide-react";
 import { createContext, lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createBrowserRouter, Navigate, NavLink, Route, RouterProvider, Routes, useLocation } from "react-router-dom";
+
+import "../styles/usability.css";
 
 import { AccessScreen } from "./AccessScreen";
 import { OverviewPage } from "../pages/OverviewPage";
@@ -40,18 +42,14 @@ const navigation = [
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/findings", label: "评审发现", icon: TriangleAlert },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
-    { to: "/events", label: "合并事件", icon: ClipboardList },
   ] },
   { heading: "运维与审计", links: [
     { to: "/operations", label: "运行监控", icon: Wrench },
-    { to: "/config-history", label: "配置历史", icon: History },
-    { to: "/improvements", label: "问题与改进", icon: ClipboardList },
+    { to: "/improvements", label: "平台改进记录", icon: ClipboardList },
   ] },
   { heading: "接入配置", links: [
-    { to: "/onboarding", label: "首次接入引导", icon: CheckCircle2 },
     { to: "/repositories", label: "项目配置", icon: GitPullRequest },
     { to: "/settings", label: "系统设置", icon: Settings2 },
-    { to: "/users", label: "访问权限", icon: Users },
   ] },
 ];
 

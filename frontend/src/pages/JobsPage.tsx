@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { apiRequest } from "../api/client";
 import { searchTasks } from "../api/tasks";
 import type { Repository } from "../api/types";
+import { RouteButton } from "../ui/RouteButton";
 import { PageHeader } from "../ui/PageHeader";
 import { ReadFeedback } from "../ui/ReadFeedback";
 
@@ -63,7 +64,7 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
     applyFilters(next);
   }
   return <div className="page jobs-migration"><PageHeader title="评审任务" subtitle="查看评审进度、问题处理与通知状态。" actions={
-    <Button aria-label="刷新任务" icon={<RefreshCw size={18} />} disabled={batchPending} loading={jobs.isFetching} onClick={() => void jobs.refetch()}>刷新</Button>
+    <div className="row-actions"><RouteButton to="/events">合并事件记录</RouteButton><Button aria-label="刷新任务" icon={<RefreshCw size={18} />} disabled={batchPending} loading={jobs.isFetching} onClick={() => void jobs.refetch()}>刷新</Button></div>
   } />
     <Card size="small" className="jobs-search-card">
       <div className="jobs-quick-filters" aria-label="任务快捷筛选">{[["", "全部"], ["queued", "排队中"], ["running", "运行中"], ["complete", "已完成"], ["partial", "部分完成"], ["failed", "失败"]].map(([value, label]) => {

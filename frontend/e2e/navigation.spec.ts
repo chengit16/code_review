@@ -5,22 +5,22 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.goto("/settings");
   const navigation = page.getByRole("navigation", { name: "主导航" });
   await expect(navigation.getByRole("link")).toHaveText([
-    "项目总览", "评审任务", "评审发现", "合并前审查", "合并事件",
-    "运行监控", "配置历史", "问题与改进", "首次接入引导", "项目配置", "系统设置", "访问权限",
+    "项目总览", "评审任务", "评审发现", "合并前审查",
+    "运行监控", "平台改进记录", "项目配置", "系统设置",
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("系统设置");
-  const model = page.getByRole("tab", { name: "Agent 模型" });
+  const model = page.getByRole("tab", { name: "评审模型" });
   await expect(model).toHaveAttribute("aria-selected", "true");
   await model.focus();
   await model.press("ArrowRight");
   await expect(page).toHaveURL("/settings?tab=feishu");
   await expect(page.getByRole("tab", { name: "飞书通知" })).toBeFocused();
   await expect(page.getByRole("heading", { name: "飞书配置", level: 2 })).toBeVisible();
-  await page.getByRole("tab", { name: "飞书通知" }).press("End");
-  await expect(page.getByRole("tab", { name: "审核规则" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "飞书通知" }).press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "评审规则" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "保存规则", exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("tab", { name: "审核规则" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "评审规则" })).toHaveAttribute("aria-selected", "true");
   await page.goBack();
   await expect(page.getByRole("tab", { name: "飞书通知" })).toHaveAttribute("aria-selected", "true");
   await page.goto("/review-rules");
@@ -28,10 +28,10 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.goto("/feishu");
   await expect(page).toHaveURL("/settings?tab=feishu");
   await page.goto("/settings?tab=unknown");
-  await expect(page.getByRole("tab", { name: "Agent 模型" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: "评审模型" })).toHaveAttribute("aria-selected", "true");
   await page.screenshot({ path: "test-results/system-settings-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const name of ["飞书通知", "审核规则", "Agent 模型"]) {
+  for (const name of ["飞书通知", "评审规则", "评审模型"]) {
     await page.getByRole("tab", { name }).click();
     await expect(page.getByRole("tab", { name })).toHaveAttribute("aria-selected", "true");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

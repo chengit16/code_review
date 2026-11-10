@@ -59,28 +59,28 @@ for (const width of [1440, 390, 320]) {
     await expect(name).toHaveCSS("border-top-color", colors.border);
     await expect(name).toHaveCSS("color", colors.ink);
     await name.focus();
-    await expect(name).toHaveCSS("outline-color", colors.accent);
+    await expect(name).toHaveCSS("border-top-color", colors.accent);
     await expectNoOverflow(page);
     await page.screenshot({ path: `test-results/theme-repository-modal-${width}.png` });
     await page.getByRole("button", { name: "取消", exact: true }).click();
     await expect(dialog).toHaveCount(0);
 
     await page.goto("/jobs");
-    const status = page.getByRole("combobox", { name: "问题处理", exact: true });
+    const status = page.getByRole("combobox", { name: "发现反馈", exact: true });
     await status.click();
-    const complete = page.getByRole("option", { name: "全部已处置", exact: true });
+    const complete = page.getByRole("option", { name: "发现全部已处理", exact: true });
     await complete.hover();
     await expect(complete).toHaveCSS("background-color", colors.accentSoft);
     await expect(complete).toHaveCSS("color", colors.ink);
     await complete.click();
     await page.getByRole("button", { name: "查询", exact: true }).click();
-    await expect(page).toHaveURL("/jobs?issue_state=resolved");
-    await expect(page.locator(".jobs-filter-field .ant-select").filter({ has: status })).toContainText("全部已处置");
+    await expect(page).toHaveURL("/jobs?feedback_state=handled");
+    await expect(page.locator(".jobs-filter-field .ant-select").filter({ has: status })).toContainText("发现全部已处理");
     await expectNoOverflow(page);
     await page.screenshot({ path: `test-results/theme-jobs-${width}.png`, fullPage: true });
 
     await page.goto("/settings?tab=rules");
-    await expect(page.getByRole("tab", { name: "审核规则" })).toHaveCSS("color", colors.accentText);
+    await expect(page.getByRole("tab", { name: "评审规则" })).toHaveCSS("color", colors.accentText);
     await expect(page.getByRole("button", { name: "保存规则", exact: true })).toHaveCSS("background-color", colors.accent);
     await expectNoOverflow(page);
     await page.screenshot({ path: `test-results/theme-settings-${width}.png`, fullPage: true });

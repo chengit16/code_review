@@ -510,6 +510,12 @@ def run_once(
 ) -> tuple[bool, int | None]:
     """处理一个工作单元，并记住上次评审的仓库供下次轮转。"""
 
+    from ocr_manager.repository_discovery import claim_discovery, execute_discovery
+
+    discovery = claim_discovery(store)
+    if discovery:
+        execute_discovery(store, settings, discovery)
+        return True, last_repository_id
     if process_backfill(store, settings):
         return True, last_repository_id
     event = store.next_event()

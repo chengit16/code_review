@@ -25,6 +25,8 @@ export function Modal({ titleId, onClose, children, className = "" }: {
 
     // 焦点只在当前弹窗内循环，关闭后还给触发操作的按钮。
     function onKeyDown(event: KeyboardEvent) {
+      // 二次确认由 Ant Design 自己管理焦点与 Escape，不能关闭其下的草稿窗口。
+      if (event.target instanceof Element && event.target.closest(".ant-modal-root")) return;
       if (event.key === "Escape") {
         // 下拉弹层位于 Portal 中，先让它消费 Escape，下一次按键再关闭弹窗。
         if (event.target instanceof Element && event.target.closest("[data-select-popup]")) return;

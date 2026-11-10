@@ -146,7 +146,30 @@ def remove_scheduler_capacity_schema(db: sqlite3.Connection) -> None:
 def remove_issue_disposition_schema(db: sqlite3.Connection) -> None:
     """仅测试库回放第 50 版前移除状态视图与原因列；反馈表按旧版约束重建。"""
 
+    remove_onboarding_schema(db)
     db.execute("DROP VIEW IF EXISTS review_issue_states")
     columns = {row[1] for row in db.execute("PRAGMA table_info(review_issues)")}
     if "dismissal_reason" in columns:
         db.execute("ALTER TABLE review_issues DROP COLUMN dismissal_reason")
+
+
+def remove_onboarding_schema(db: sqlite3.Connection) -> None:
+    """仅合成库退回 51 版连接检查结构，避免旧迁移重放混入新队列。"""
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(connection_checks)")}
+    db.execute("DROP TABLE IF EXISTS repository_discoveries")
+    if "config_fingerprint" not in columns:
+        return
+    from ocr_manager.storage import SCHEMA_V6
+
+    db.execute("ALTER TABLE connection_checks RENAME TO connection_checks_test52")
+    db.execute("DROP INDEX idx_connection_checks_active")
+    db.execute("DROP INDEX idx_connection_checks_queue")
+    for statement in SCHEMA_V6.split(";"):
+        if statement.strip():
+            db.execute(statement)
+    db.execute("ALTER TABLE connection_checks ADD COLUMN config_revision_id INTEGER")
+    fields = "id,kind,repository_id,config_revision_id,status,error,created_at,finished_at"
+    db.execute(f"INSERT INTO connection_checks({fields}) SELECT {fields} "
+               "FROM connection_checks_test52 WHERE notification_target_id IS NULL")
+    db.execute("DROP TABLE connection_checks_test52")

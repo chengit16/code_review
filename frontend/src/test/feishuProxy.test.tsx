@@ -26,10 +26,10 @@ it.each([200, 502])("编辑通过 POST 保存，响应 %s 时不重试、不提�
   await user.click(await screen.findByRole("button", { name: "编辑 合成通道" }));
   await user.clear(screen.getByLabelText("配置名称"));
   await user.type(screen.getByLabelText("配置名称"), "修改后通道");
-  await user.click(screen.getByRole("button", { name: /^保存$/ }));
+  await user.click(screen.getByRole("button", { name: "保存通知通道" }));
   if (status === 502) {
     expect(await screen.findByRole("alert")).toHaveTextContent("无法确认本次操作是否完成");
     expect(screen.getByLabelText("配置名称")).toHaveValue("修改后通道");
-  } else expect(await screen.findByRole("status")).toHaveTextContent("飞书配置已保存");
+  } else expect(await screen.findByRole("status")).toHaveTextContent("通知通道已保存，可在列表独立测试，再关联项目。");
   expect(writes).toEqual([{ path: "/api/notification-targets/1", method: "POST", body: { name: "修改后通道" } }]);
 });
