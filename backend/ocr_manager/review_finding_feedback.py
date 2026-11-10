@@ -90,8 +90,12 @@ def write_feedback(store: Store, job_id: int, finding_id: str,
         # 2. 根发现仍兼容旧接口和旧统计；补审来源永不写入旧的评论索引空间。
         origin = finding.origin
         if verdict is None:
-            if db.execute("DELETE FROM review_finding_feedback WHERE finding_id=?",
-                          (finding_id,)).rowcount == 0:
+            removed = db.execute("DELETE FROM review_finding_feedback WHERE finding_id=?",
+                                 (finding_id,)).rowcount
+            legacy = origin.kind == "attempt" and db.execute(
+                "SELECT 1 FROM review_feedback WHERE job_id=? AND comment_index=?",
+                (job_id, origin.comment_index)).fetchone() is not None
+            if removed == 0 and not legacy:
                 raise LookupError("反馈不存在")
         else:
             db.execute("""INSERT INTO review_finding_feedback(finding_id,verdict,actor)

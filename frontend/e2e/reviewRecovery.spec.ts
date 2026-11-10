@@ -72,6 +72,7 @@ for (const [index, width] of [1280, 390, 320].entries()) {
     await effective.getByRole("group", { name: "发现 2 的反馈" }).getByRole("button", { name: "有帮助" }).click();
     await page.reload();
     await expect(effective.getByRole("group", { name: "发现 2 的反馈" }).getByRole("button", { name: "有帮助" })).toHaveAttribute("aria-pressed", "true");
+    await expect(effective.getByLabel("发现 2 的处理状态", { exact: true })).toHaveText("已处理");
     // 补审反馈同样只记录价值；替换和撤销不改变共享问题的处置。
     const beforeFeedback = await (await request.get(`/api/jobs/${jobId}`)).json();
     const group = effective.getByRole("group", { name: "发现 2 的反馈" });
@@ -92,6 +93,7 @@ for (const [index, width] of [1280, 390, 320].entries()) {
     const cleared = await (await request.get(`/api/jobs/${jobId}`)).json();
     expect(cleared.finding_feedback[findingId]).toBeUndefined();
     expect(cleared.resolved_finding_issues).toEqual(beforeFeedback.resolved_finding_issues);
+    await expect(effective.getByLabel("发现 2 的处理状态", { exact: true })).toHaveText("待处理");
     page.once("dialog", (confirmation) => confirmation.accept());
     await panel.getByRole("button", { name: "仅重发补充通知" }).click();
     await expect(panel.getByRole("button", { name: "仅重发补充通知" })).not.toBeVisible();

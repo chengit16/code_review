@@ -66,6 +66,7 @@ test("问题摘要搜索与侧栏保留筛选，窄屏无横向溢出", async ({
   await expect(page.getByRole("heading", { name: "出现记录" })).toBeVisible();
   await page.screenshot({ path: "test-results/issue-drawer-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await page.getByRole("dialog", { name: "问题 #1" }).boundingBox())?.x).toBe(0);
   const drawer = await page.getByRole("dialog", { name: "问题 #1" }).boundingBox();
   expect(drawer?.x).toBe(0);
   expect(drawer?.width).toBe(390);

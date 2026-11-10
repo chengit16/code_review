@@ -5,7 +5,7 @@ import { Button, Checkbox, Input, Select, Tag } from "antd";
 import type { TableColumnsType } from "antd";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
 import type { Repository } from "../api/types";
@@ -109,17 +109,17 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
       title: <Checkbox aria-label="全选当前页" checked={batch.allSelected} disabled={issues.isFetching || Boolean(issues.error) || batch.mutation.isPending || batch.selectableCount === 0} onChange={(event) => batch.selectAll(event.target.checked)}>选择</Checkbox>, key: "select", width: 64,
       render: (_: unknown, item: ReviewIssue) => <Checkbox className="issue-checkbox" aria-label={`选择问题 ${item.id}`} checked={batch.targets.some((target) => target.id === item.id)} disabled={item.status === "merged" || batch.mutation.isPending || issues.isFetching} onChange={(event) => batch.toggle(item, event.target.checked)} />,
     }] : []),
-    { title: "问题 / 位置", dataIndex: "content", key: "content", render: (content: string, item) => <><button type="button" className="issue-summary-button" onClick={() => selectIssue(item.id)}><span className="mono">#{item.id}</span><strong>{content.slice(0, 90)}{content.length > 90 ? "…" : ""}</strong></button><span className="list-secondary"><ListExcerpt text={item.path} limit={65} /></span></> },
+    { title: "问题 / 位置", dataIndex: "content", key: "content", render: (content: string, item) => <><button type="button" aria-label={`查看问题 ${item.id}`} className="issue-summary-button" onClick={() => selectIssue(item.id)}><span className="mono">#{item.id}</span><strong>{content.slice(0, 90)}{content.length > 90 ? "…" : ""}</strong></button><span className="list-secondary"><ListExcerpt text={item.path} limit={65} /></span></> },
     { title: "项目", dataIndex: "repository_name", key: "repository_name", width: 160 },
     { title: "提交人", dataIndex: "commit_author", key: "commit_author", width: 140, render: (value: string | null) => value?.trim() || "未记录" },
     { title: "级别", dataIndex: "severity", key: "severity", width: 90, render: (value: string | null) => formatSeverity(value) },
     { title: "处置状态", dataIndex: "status", key: "status", width: 96, render: (value: IssueStatus) => <Tag color={value === "open" ? "orange" : "default"}>{labels[value]}</Tag> },
     { title: "出现", dataIndex: "occurrence_count", key: "occurrence_count", width: 84, render: (value: number) => `${value} 次` },
     { title: "最近发现", dataIndex: "last_seen_at", key: "last_seen_at", width: 160, render: (value: string) => <ListTime value={value} /> },
-    { title: "操作", key: "actions", width: 68, render: (_: unknown, item) => <Button type="link" aria-label={`查看问题 ${item.id}`} onClick={() => selectIssue(item.id)}>详情</Button> },
   ];
   return <div className="page">
-    <PageHeader title="待跟进问题" subtitle="跨评审追踪问题与处理记录" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
+    <PageHeader title="历史问题与修复记录" subtitle="保留原问题编号、独立处置及跨任务出现历史" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
+    <p>这里保留原问题处置，不代表发现反馈进度。<Link to={`/findings?handling=all${selectedId ? `&issue_id=${selectedId}` : ""}`}>{selectedId ? `查看问题 #${selectedId} 关联的全部当前发现` : "进入评审发现"}</Link>；一个问题可能关联多条发现，请逐条反馈。</p>
     <section className="list-surface"><ListStatusNav label="问题处置状态" value={status} labels={{ all: "全部（不含已合并）", ...labels }} counts={issues.error ? undefined : issues.data?.status_counts} disabled={batch.mutation.isPending} onChange={(value) => updateFilter("status", value)} />
       <div className="issue-filter-grid">
         <label>项目<Select aria-label="项目" value={repositoryId || "all"} disabled={batch.mutation.isPending} onChange={(value) => updateFilter("repository_id", value === "all" ? "" : value)} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} /></label>
@@ -136,7 +136,7 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
     <ListConditions disabled={batch.mutation.isPending} items={[{ key: "repository_id", label: "项目", value: repositories.data?.find((item) => String(item.id) === repositoryId)?.name ?? repositoryId }, { key: "severity", label: "级别", value: severity }, { key: "q", label: "搜索", value: params.get("q") ?? "" }]} onClear={(key) => updateFilter(key, "")} />
       <p className="issue-table-note">“提交人”是最近一次出现记录中的 Git 作者，不代表问题责任人；标记“已修复”是人工处理状态，不代表系统已验证修复。</p>
       {canEdit && narrow && <div className="list-mobile-selection"><Checkbox aria-label="全选当前页" checked={batch.allSelected} disabled={issues.isFetching || Boolean(issues.error) || batch.mutation.isPending || batch.selectableCount === 0} onChange={(event) => batch.selectAll(event.target.checked)}>全选当前页可处理问题</Checkbox></div>}
-      <ListTable rowKey="id" columns={columns} dataSource={issues.data?.items ?? []} loading={issues.isFetching} locale={{ emptyText: issues.error ? "无法读取问题" : "当前筛选下没有问题" }} scroll={{ x: 1080 }} pagination={false} />
+      <ListTable onOpenRow={(item) => selectIssue(item.id)} rowLabel={(item) => `查看问题 ${item.id}`} rowKey="id" columns={columns} dataSource={issues.data?.items ?? []} loading={issues.isFetching} locale={{ emptyText: issues.error ? "无法读取问题" : "当前筛选下没有问题" }} scroll={{ x: 1080 }} pagination={false} />
       <Pagination label="问题分页" total={issues.error ? undefined : issues.data?.total} page={page} pageSize={issues.data?.page_size ?? 25} disabled={issues.isFetching || batch.mutation.isPending || Boolean(issues.error)} onPage={changePage} onPageSize={(size) => updateFilter("page_size", String(size))} />
     </section>
     {selectedId !== null && <IssueDetailDrawer key={selectedId} token={token} id={selectedId} canEdit={canEdit} batchPending={batch.mutation.isPending} onSelect={selectIssue} />}

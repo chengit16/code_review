@@ -1,10 +1,12 @@
 /** @description 保护发现原文分区、顺序、未知段落与不可信内容的纯文本边界。 */
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { FindingDescription } from "../pages/FindingDescription";
 import { presentFindingContent, splitFindingContent, splitFindingList } from "../pages/findingContent";
 import { splitFindingBlocks } from "../pages/findingLists";
+import * as clipboard from "../ui/clipboard";
 
 describe("发现描述分区", () => {
   it("无换行的旧标签及别名分区，代码和引用标签不拆", () => {
@@ -57,6 +59,69 @@ describe("发现描述分区", () => {
     expect(container.querySelector("code")).toHaveTextContent("confirmDialog()");
     expect(container.querySelector("img")).toBeNull();
     expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeVisible();
+  });
+
+  it("结构化转义换行恢复段落与建议代码块，复制不包含 Markdown 围栏", async () => {
+    const copy = vi.spyOn(clipboard, "copyText").mockResolvedValue();
+    const { container } = render(<FindingDescription content={"触发条件：打开。\\n实际后果：样式缺失。\\n修复建议：保留 styles 定义。\n参考改法：\n```ts\nconst styles = StyleSheet.create({\n  descStyle: { fontSize: 14 },\n});\n```"} />);
+    const code = container.querySelector(".finding-code-block code");
+    expect(screen.getByRole("heading", { name: "修复建议" })).toBeVisible();
+    expect(screen.getByText("ts")).toBeVisible();
+    expect(code).toHaveTextContent("const styles = StyleSheet.create");
+    expect(screen.getByRole("button", { name: "复制代码" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "复制代码" }));
+    expect(copy).toHaveBeenCalledWith("const styles = StyleSheet.create({\n  descStyle: { fontSize: 14 },\n});");
+    expect(screen.getByText("已复制")).toBeVisible();
+    copy.mockRestore();
+  });
+
+  it("只把有结构证据的转义换行当作分隔符，保留普通代码字符串", () => {
+    const { container } = render(<FindingDescription content={'const value = "\\n";'} />);
+    expect(container.querySelector(".finding-code-block")).toBeNull();
+    expect(screen.getByText('const value = "\\n";')).toBeVisible();
+  });
+
+  it("真实与字面换行混用时仅拆标签前分隔符，保留行内代码和引用中的转义", () => {
+    expect(presentFindingContent('触发条件：打开。\\n代码依据：`const s = "\\n修复建议：示例"`；“\\n实际后果：引用”。\n实际后果：失败。\\n修复建议：检查 `value.split("\\n")`。').map((part) => part.label))
+      .toEqual(["触发条件", "代码依据", "实际后果", "修复建议"]);
+    expect(presentFindingContent('触发条件：打开。\\n代码依据：`const s = "\\n修复建议：示例"`。')[1].content)
+      .toContain('"\\n修复建议：示例"');
+  });
+
+  it.each(["```\nconst value = '\\n';\n```", "~~~ts\nconst value = '\\n';\n~~~", "```ts\nconst value = '\\n';", "````ts\n```\nconst value = 1;\n````"])("围栏、长围栏及未闭合代码保留正文：%s", (content) => {
+    const { container } = render(<FindingDescription content={`修复建议：参考实现。\n${content}`} />);
+    expect(container.querySelectorAll(".finding-code-block")).toHaveLength(1);
+    expect(container.querySelector("pre code")?.textContent).toContain("const value");
+    expect(screen.getByRole("button", { name: "复制代码" })).toBeVisible();
+  });
+
+  it("Markdown 段落、加粗和列表可读，危险链接与 HTML 不执行、图片不请求", () => {
+    const { container } = render(<FindingDescription content={'修复建议：**先校验**。\n\n- 检查输入\n- 核对权限\n\n[文档](https://example.com/doc) [危险](javascript:alert%281%29)\n\n<img src=x onerror=alert(1)>\n\n![外部截图](https://example.com/image.png)'} />);
+    expect(container.querySelector("strong")).toHaveTextContent("先校验");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "文档" })).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByRole("link", { name: "危险" })).toBeNull();
+    expect(container.querySelector("img, script")).toBeNull();
+    expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeVisible();
+  });
+
+  it("复制失败后仍保留代码并允许重试，不显示成功", async () => {
+    const copy = vi.spyOn(clipboard, "copyText").mockRejectedValueOnce(new Error("合成拒绝")).mockResolvedValue(undefined);
+    render(<FindingDescription content={'修复建议：\n```ts\nconst value = "\\n";\n```'} />);
+    const button = screen.getByRole("button", { name: "复制代码" });
+    await userEvent.click(button);
+    expect(screen.getByRole("status")).toHaveTextContent("复制失败，请手动选择代码复制。");
+    expect(screen.queryByText("已复制")).toBeNull();
+    await userEvent.click(button);
+    expect(copy).toHaveBeenLastCalledWith('const value = "\\n";');
+    expect(screen.getByRole("status")).toHaveTextContent("代码已复制");
+    copy.mockRestore();
+  });
+
+  it("代码示例与旧中文编号共处同一区时，仍保留逐项布局和代码正文", () => {
+    const { container } = render(<FindingDescription content={'修复建议：先检查：① 核对样式；② 补齐定义。\n\n```ts\nconst label = "修复建议：保留";\n```'} />);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(container.querySelector("pre code")?.textContent).toBe('const label = "修复建议：保留";');
   });
 
   it("无标签历史正文统一问题描述，句尾建议独立显示且原文不变", () => {

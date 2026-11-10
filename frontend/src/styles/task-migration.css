@@ -19,9 +19,13 @@
 .jobs-source > a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .jobs-source > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jobs-compact-cell, .jobs-issue-summary { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+.jobs-completion-tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
+.jobs-completion-tags .ant-tag { margin: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .jobs-compact-cell > small, .jobs-issue-summary > small { color: var(--color-muted); line-height: 1.45; }
 .jobs-issue-summary > small a { color: var(--color-accent); font-weight: 600; }
 .jobs-quick-filters { padding: 8px; border-radius: 8px; background: #f4f6f8; }
+.jobs-feedback-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.jobs-feedback-label { margin-inline: 8px 2px; color: var(--color-muted); font-size: 13px; }
 .jobs-quick-filters .ant-btn { border-color: transparent; box-shadow: none; }
 .jobs-quick-filters .ant-btn:not(.ant-btn-primary) { background: transparent; }
 .jobs-search-card .ant-card-body { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
@@ -127,6 +131,8 @@
   .theme-detail-jump a { flex: 0 0 auto; }
 }
 @media (max-width: 520px) {
+  .jobs-feedback-filters { flex-basis: 100%; }
+  .jobs-feedback-label { margin-inline-start: 7px; }
   .jobs-filter-main, .jobs-filter-advanced { grid-template-columns: minmax(0, 1fr); }
   .jobs-filter-actions .ant-btn-primary { flex: 1; }
   .jobs-pagination-controls { flex-wrap: wrap; }

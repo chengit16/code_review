@@ -9,6 +9,7 @@ from typing import Any
 from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.review_effective import status_sql
 from ocr_manager.review_observability import enrich_jobs
+from ocr_manager.review_quality import QUALITY_CTE
 from ocr_manager.storage import Store
 from ocr_manager.task_issue_summary import TASK_FACTS_CTE, attach_task_facts
 
@@ -50,6 +51,15 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
                      "none": "f.no_findings=1", "unknown": "f.unknown=1"}
     if issue_state in issue_clauses:
         clauses.append(issue_clauses[issue_state])
+    feedback_state = filters.get("feedback_state")
+    if feedback_state in {"pending", "handled"}:
+        # 与首页、发现列表共用有效主身份；任务自身不受首页日期窗口限制。
+        condition = ("SUM(verdict IS NULL)>0" if feedback_state == "pending"
+                     else "SUM(verdict IS NULL)=0")
+        clauses.append(f"j.id IN ({QUALITY_CTE} SELECT job_id FROM scoped "
+                       f"GROUP BY job_id HAVING {condition})")
+        values.extend((None, None, "1970-01-01 00:00:00", "9999-12-31 00:00:00",
+                       "1970-01-01 00:00:00", "9999-12-31 00:00:00"))
     if filters.get("notification_failed"):
         clauses.append(f"({task_view_clause('notification_failed')})")
     if filters.get("sha"):
@@ -110,7 +120,19 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
         attach_task_facts(db, items)
         status_counts = _status_counts(db, filters)
         return {"items": items, "total": total, "page": page, "page_size": page_size,
-                "status_counts": status_counts}
+                "status_counts": status_counts, "feedback_counts": _feedback_counts(db, filters)}
+
+
+def _feedback_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[str, int]:
+    """反馈分面忽略自身条件和分页，保留评审状态等条件；统计任务而非发现条数。"""
+
+    counts: dict[str, int] = {}
+    for state in ("pending", "handled"):
+        clauses, values = _job_filters(filters | {"feedback_state": state})
+        where = " AND ".join(clauses)
+        counts[state] = db.execute(f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
+            JOIN task_facts f ON f.job_id=j.id WHERE {where}""", values).fetchone()[0]
+    return counts
 
 
 def _status_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[str, int]:

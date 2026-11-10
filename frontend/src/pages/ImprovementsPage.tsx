@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Collapse } from "antd";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { listImprovements } from "../api/improvements";
 import { ListSelect as SelectField, ListSearch, ListStatusNav, ListTime, ListToolbar, ListConditions } from "../ui/ListControls";
@@ -30,6 +30,7 @@ export function ImprovementsPage({ token }: { /** 内存管理员会话。 */ to
 }
 
 function ImprovementRecords({ token }: { token: string }) {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [adding, setAdding] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -61,7 +62,7 @@ function ImprovementRecords({ token }: { token: string }) {
       <ListConditions items={[{ key: "q", label: "搜索", value: params.get("q") ?? "" }, { key: "kind", label: "类型", value: kindLabels[params.get("kind") as keyof typeof kindLabels] ?? "" }, { key: "category", label: "分类", value: categoryLabels[params.get("category") as keyof typeof categoryLabels] ?? "" }, { key: "archive", label: "归档范围", value: params.get("archive") === "all" ? "含归档" : params.get("archive") === "archived" ? "已归档" : "" }]} onClear={(key) => filter(key, "")} />
       {feedback && <p className="form-success" role="status">{feedback}</p>}
       <QueryState loading={records.isLoading} error={records.error} onRetry={() => void records.refetch()} />
-      <ListTable rowKey="id" dataSource={records.data?.items ?? []} loading={records.isFetching} pagination={false} scroll={{ x: 1100 }} locale={{ emptyText: records.error ? "无法读取记录" : "当前条件下暂无记录" }} columns={[
+      <ListTable onOpenRow={(record) => navigate(`/improvements/${record.id}${listReturnSearch(params)}`)} rowLabel={(record) => `查看记录 ${record.id}`} rowKey="id" dataSource={records.data?.items ?? []} loading={records.isFetching} pagination={false} scroll={{ x: 1100 }} locale={{ emptyText: records.error ? "无法读取记录" : "当前条件下暂无记录" }} columns={[
         { title: "记录 / 范围", key: "title", width: 260, render: (_, record) => <><Link className="list-primary list-title" to={`/improvements/${record.id}${listReturnSearch(params)}`}>#{record.id} · {record.title}</Link><span className="list-secondary">{record.scope}{record.archived_at ? " · 已归档" : ""}</span></> },
         { title: "类型 / 分类", key: "kind", width: 125, render: (_, record) => <>{kindLabels[record.kind]}<span className="list-secondary">{categoryLabels[record.category]}</span></> },
         { title: "处理进展", key: "status", width: 100, render: (_, record) => progressLabels[record.status] },
@@ -69,7 +70,6 @@ function ImprovementRecords({ token }: { token: string }) {
         { title: "本地验证", key: "verification", width: 135, render: (_, record) => verificationLabels[record.verification_state] },
         { title: "部署生效", key: "deployment", width: 125, render: (_, record) => deploymentLabels[record.deployment_state] },
         { title: "更新时间", key: "time", width: 140, render: (_, record) => <ListTime value={record.updated_at} /> },
-        { title: "操作", key: "action", width: 70, render: (_, record) => <Link to={`/improvements/${record.id}${listReturnSearch(params)}`}>详情</Link> },
       ]} />
       <Pagination label="问题与改进分页" total={records.error ? undefined : records.data?.total} page={page} pageSize={pageSize} disabled={records.isFetching || Boolean(records.error)} onPage={(value) => filter("page", String(value))} onPageSize={(value) => filter("page_size", String(value))} />
     </section>

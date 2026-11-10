@@ -11,8 +11,19 @@ export interface FindingContentSection {
 
 const labels = "问题描述|发现问题|触发条件|代码依据|实际后果|修复建议|修复方案|补充|后果|建议";
 const aliases: Record<string, string> = { 发现问题: "问题描述", 后果: "实际后果", 建议: "修复建议", 修复方案: "修复建议" };
-const labelToken = `(?:【(${labels})】|\\[(${labels})\\]|(?:\\*\\*)?(${labels})(?:\\*\\*)?\\s*[:：](?:\\*\\*)?)\\s*[:：]?\\s*`;
+const labelToken = `(?:【(${labels})】|\\[(${labels})\\]|(?:\\*\\*)?(${labels})(?:\\*\\*)?\\s*[:：](?:\\*\\*(?=\\s|$))?)\\s*[:：]?\\s*`;
 const heading = new RegExp(`^\\s*(?:[-*]\\s+|\\d+[.)、]\\s*)?${labelToken}([\\s\\S]*)$`);
+
+function normalizeFindingNewlines(content: string): string {
+  const masked = maskFindingLiterals(content);
+  const boundary = new RegExp(`(?:\\\\r\\\\n|\\\\n|\\\\r)+(?=[ \\t]*${labelToken})`, "g");
+  // 仅兼容标签前的转义分隔符；代码、引文及普通转义字符串均保持原文，混合真实换行同样适用。
+  let normalized = content;
+  for (const match of [...masked.matchAll(boundary)].reverse()) {
+    if (content[match.index - 1] !== "\\") normalized = `${normalized.slice(0, match.index)}\n${normalized.slice(match.index + match[0].length)}`;
+  }
+  return normalized;
+}
 
 function labelledLines(line: string) {
   const pattern = new RegExp(labelToken, "g");
@@ -94,7 +105,7 @@ function extractSuggestions(content: string): { description: string; suggestions
 
 /** 历史与新描述共用的只读整理；明确建议移入修复建议，无标签正文统一问题描述，不写回原文。 */
 export function presentFindingContent(content: string): FindingContentSection[] {
-  const sections = splitFindingContent(content);
+  const sections = splitFindingContent(normalizeFindingNewlines(content));
   const suggestions: string[] = [];
   const result = sections.map((section) => {
     if (section.label === "修复建议") { suggestions.push(section.content); return null; }

@@ -158,22 +158,23 @@ test("跟进问题当前页批量处理、确认取消与恢复", async ({ page 
 
 test("部分结果、反馈与重审", async ({ page }) => {
   expect((await page.request.post("/api/review-issues/1", { data: { status: "open" } })).ok()).toBe(true);
+  await page.request.delete("/api/jobs/1/feedback/0");
   await page.goto("/jobs/1");
   await expect(page.getByText("部分完成").first()).toBeVisible();
-  const issue = page.getByRole("link", { name: /跟进问题 #\d+/ });
-  await expect(issue).toContainText("待处理");
+  await expect(page.getByRole("link", { name: /跟进问题 #\d+/ })).toBeVisible();
+  await expect(page.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("待处理");
   const helpful = page.getByRole("button", { name: "有帮助", exact: true });
   await helpful.click();
   await expect(helpful).toHaveAttribute("aria-pressed", "true");
-  await expect(issue).toContainText("待处理");
+  await expect(page.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
   const feedback = page.getByRole("button", { name: "误报", exact: true });
   await feedback.click();
   await expect(feedback).toHaveAttribute("aria-pressed", "true");
   await expect(helpful).toHaveAttribute("aria-pressed", "false");
-  await expect(issue).toContainText("待处理");
+  await expect(page.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
   await page.reload();
   await expect(feedback).toHaveAttribute("aria-pressed", "true");
-  await expect(issue).toContainText("待处理");
+  await expect(page.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
   const listing = await page.request.get("/api/review-issues?status=open");
   expect((await listing.json()).total).toBe(1);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -181,7 +182,7 @@ test("部分结果、反馈与重审", async ({ page }) => {
   await page.locator(".findings-section").screenshot({ path: "test-results/finding-handled-mobile.png" });
   await feedback.click();
   await expect(feedback).toHaveAttribute("aria-pressed", "false");
-  await expect(issue).toContainText("待处理");
+  await expect(page.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("待处理");
   await expect(page.getByRole("button", { name: "已修复", exact: true })).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.locator(".findings-section").screenshot({ path: "test-results/finding-handled-desktop.png" });
@@ -194,7 +195,7 @@ test("评审任务与独立事件中心入口", async ({ page }) => {
   await page.goto("/jobs");
   await expect(page.getByRole("heading", { name: "评审任务" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Token 消耗" })).toHaveCount(0);
-  await expect(page.getByRole("columnheader", { name: "问题处理" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "发现 / 价值反馈" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "耗时 / 尝试" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "创建时间" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "预估费用" })).toHaveCount(0);

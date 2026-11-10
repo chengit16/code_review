@@ -54,6 +54,17 @@ class TaskIssueSummary(BaseModel):
     coverage_limited: bool
 
 
+class TaskFeedbackSummary(BaseModel):
+    """当前有效发现的互斥反馈条数；历史修复归未评价，不按跟进问题去重。"""
+
+    available: bool
+    total: int | None
+    helpful: int
+    false_positive: int
+    ignored: int
+    unmarked: int
+
+
 class TaskExecutionResponse(BaseModel):
     """保留已有动态任务字段，新增可观测性字段提供明确 OpenAPI 契约。"""
 
@@ -62,6 +73,7 @@ class TaskExecutionResponse(BaseModel):
     list_status: str | None = Field(None, description="活动补审优先，其次为当前有效评审状态")
     active_recovery_status: str | None = None
     issue_summary: TaskIssueSummary | None = None
+    feedback_summary: TaskFeedbackSummary | None = None
     effective_status: str | None = None
     effective_conclusion: ConclusionVersion | None = None
     effective_document: ConclusionDocument | None = None
@@ -91,3 +103,5 @@ class TaskSearchResponse(BaseModel):
     page: int
     page_size: int
     status_counts: dict[str, int] = Field(default_factory=dict)
+    feedback_counts: dict[str, int] = Field(
+        default_factory=dict, description="反馈状态分面任务数；忽略自身条件和分页，保留其他筛选")

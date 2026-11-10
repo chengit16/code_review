@@ -1,6 +1,6 @@
 /** @description 质量计数、比例、旧接口降级、同源周桶和样本条件回归；使用合成响应。 */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { expect, it, vi } from "vitest";
@@ -33,49 +33,48 @@ it("并排柱纵轴依据单类最大值而非总量，数据表仍展示同源�
   expect(screen.queryByText("历史修复", { exact: true })).not.toBeInTheDocument();
 });
 
-it("默认质量视图有四类计数、明确分母和当前已忽略，样本保留时间与项目", async () => {
+it("首页只保留反馈与同集合处理进度，入口保留 UTC 窗口和项目", async () => {
   show(<QualityOverview data={data} days={7} repositoryId="1" />);
-  expect(screen.getByRole("radio", { name: "反馈价值" })).toBeChecked();
+  expect(screen.queryByRole("radio", { name: "反馈价值" })).not.toBeInTheDocument();
   expect(screen.getByText("50%（5/10）")).toBeVisible();
-  expect(screen.getByText("20%（1/5）")).toBeVisible();
-  const ignored = screen.getByRole("link", { name: "已忽略 3 个" });
-  expect(ignored).toHaveAttribute("href", "/issues?status=ignored&repository_id=1");
+  expect(screen.getByRole("link", { name: "已处理 5 条" })).toHaveAttribute("href", expect.stringContaining("handling=handled"));
+  expect(screen.getByRole("link", { name: "待处理 5 条" })).toHaveAttribute("href", expect.stringContaining("handling=pending"));
   const helpful = screen.getByRole("link", { name: "查看有帮助 4 条发现" });
-  expect(helpful.getAttribute("href")).toContain("sample_feedback=helpful");
-  expect(helpful.getAttribute("href")).toContain("sample_since=2026-11-02");
+  expect(helpful.getAttribute("href")).toContain("/findings?");
+  expect(helpful.getAttribute("href")).toContain("feedback=helpful");
+  expect(helpful.getAttribute("href")).toContain("since=2026-11-02");
+  expect(helpful.getAttribute("href")).toContain("repository_id=1");
+  expect(screen.queryByText("当前问题 · 不限时间")).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "问题变化" })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByText("反馈统计口径"));
+  await waitFor(() => expect(screen.getByText(/20%（1\/5）/)).toBeVisible());
   await userEvent.click(screen.getByRole("button", { name: "查看反馈数据" }));
   expect(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
-  await userEvent.click(screen.getByText("问题变化", { exact: true }));
-  expect(screen.getByRole("region", { name: "问题变化" })).toBeVisible();
-  expect(ignored).toBeVisible();
 });
 
-it("旧接口不补零，当前状态不能被期间 ignored 替代", async () => {
-  show(<QualityOverview data={{ ...data, quality: undefined, current_status_counts: undefined }} days={7} repositoryId="" />);
+it("旧接口明确缺失，不以历史处置补反馈计数", () => {
+  show(<QualityOverview data={{ ...data, quality: undefined }} days={7} repositoryId="" />);
   expect(screen.getByText(/缺失不代表零反馈/)).toBeVisible();
-  expect(screen.getByText(/不能用本期忽略数代替/)).toBeVisible();
   expect(screen.queryByRole("link", { name: /查看有帮助/ })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByText("问题变化", { exact: true }));
-  expect(screen.getByRole("region", { name: "问题变化" })).toBeVisible();
+  expect(screen.queryByText("问题状态")).not.toBeInTheDocument();
 });
 
-it("零样本、未标记、小样本和缺失来源不制造准确率", () => {
+it("零样本、小样本与来源缺失明确呈现，不制造准确率", () => {
   expect(qualityRatio(0, 0)).toBe("—（0 样本）");
   expect(qualityRatio(0, 10)).toBe("0%（0/10）");
   expect(qualityRatio(1, 4, 5)).toBe("样本不足（1/4）");
-  show(<QualityOverview data={{ ...data, quality: { ...quality, summary: { total: 10, helpful: 0, false_positive: 0, ignored: 0, unmarked: 10 }, unavailable_sources: 2 } }} days={7} repositoryId="" />);
-  expect(screen.getByText(/尚无有帮助或误报评价/)).toBeVisible();
+  show(<QualityOverview data={{ ...data, quality: { ...quality, summary: { total: 10, helpful: 0, false_positive: 0, ignored: 2, unmarked: 8 }, unavailable_sources: 2 } }} days={7} repositoryId="" />);
+  expect(screen.getByText("20%（2/10）")).toBeVisible();
   expect(screen.getByRole("alert")).toHaveTextContent("2 个来源记录待核实");
 });
 
 it("优化方向可以按项目切换，查看样本不丢失维度", async () => {
   show(<QualityBreakdown quality={quality} />);
   const table = screen.getByRole("region", { name: "优化方向" });
-  expect(within(table).getByRole("link", { name: "查看样本" }).getAttribute("href")).toContain("sample_category=security");
+  expect(within(table).getByRole("link", { name: "查看样本" }).getAttribute("href")).toContain("category=security");
   await userEvent.click(within(table).getByText("按项目", { exact: true }));
   expect(within(table).getByText("合成项目")).toBeVisible();
-  expect(within(table).getByRole("link", { name: "查看样本" }).getAttribute("href")).toContain("sample_repository=1");
+  expect(within(table).getByRole("link", { name: "查看样本" }).getAttribute("href")).toContain("repository_id=1");
 });
 
 it("样本失败保留范围且可重试，清除仅影响样本筛选", async () => {

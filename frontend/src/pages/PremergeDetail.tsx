@@ -8,6 +8,7 @@ import { parsePremergeResult, premergeLabels } from "../api/premerge";
 import type { PremergeReview } from "../api/premerge";
 import { QueryState } from "../ui/QueryState";
 import { formatSeverity } from "../ui/format";
+import { FindingDescription } from "./FindingDescription";
 import { PremergeEvidence } from "./PremergeEvidence";
 
 /** 地址栏决定当前版本，刷新后仍能恢复详情；只轮询未结束的审查。 */
@@ -44,7 +45,7 @@ export function PremergeDetail({ token, id, onClose, onOpenReview }: {
     {review && <><p>{review.repository_name} · MR !{review.mr_iid} · {premergeLabels[review.status]}</p><p className="mono file-path">{review.head_sha}</p><p className={review.status === "complete" && result.completeCoverage ? "result-note" : "attention-note"}>{message}</p>
       {(result.excludedCount ?? 0) > 0 && <p className="attention-note">纯换行策略排除 {result.excludedCount} 个文件，未调用模型；该结论不代表原始全范围模型覆盖。</p>}
       {review.error && <p className="form-error" role="alert">{review.error} <Link to="/repositories">检查项目接入与配置 →</Link></p>}
-      {review.status !== "superseded" && result.comments.length > 0 && <div className="findings">{result.comments.map((item, index) => <article className="finding" key={index} data-severity={item.severity ?? "none"}><div className="finding-head"><span className="mono finding-path">{item.path}{item.start_line ? `:${item.start_line}` : ""}</span><span>{formatSeverity(item.severity)}</span></div><p className="finding-body">{item.content}</p></article>)}</div>}
+      {review.status !== "superseded" && result.comments.length > 0 && <div className="findings">{result.comments.map((item, index) => <article className="finding" key={index} data-severity={item.severity ?? "none"}><div className="finding-head"><span className="mono finding-path">{item.path}{item.start_line ? `:${item.start_line}` : ""}</span><span>{formatSeverity(item.severity)}</span></div><div className="finding-body"><FindingDescription content={item.content} /></div></article>)}</div>}
       {review.status !== "superseded" && review.status === "complete" && !result.valid && <p>结果格式不可用，请检查服务版本；不要把本次结果当作通过。</p>}
       <PremergeEvidence filesJson={review.changed_files} contextJson={review.context_json} />
       <p className="coverage-note">合并前审查仅展示评审结果，不自动阻止 GitLab 合并，也不自动发送飞书或发布行内评论。</p>

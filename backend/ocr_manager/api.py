@@ -43,6 +43,7 @@ from ocr_manager.publications import register_publications
 from ocr_manager.review_contracts import TaskExecutionResponse
 from ocr_manager.review_effectiveness import register_effectiveness
 from ocr_manager.review_finding_api import register_finding_api
+from ocr_manager.review_findings_api import register_review_findings
 from ocr_manager.review_issues import register_review_issues
 from ocr_manager.review_recovery_api import register_recovery_api
 from ocr_manager.scheduler_api import register_scheduler_api
@@ -458,6 +459,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_publications(app, store, admin)
     register_review_issues(app, store, admin)
     register_effectiveness(app, store, admin)
+    register_review_findings(app, store, admin)
     register_premerge(app, store, admin)
     register_improvements(app, store, admin, config)
     register_improvement_themes(app, store, admin)

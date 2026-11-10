@@ -232,6 +232,6 @@ def test_quality_query_count_does_not_grow_with_findings(
         assert snapshot["summary"]["total"] == count
         measurements.append((len(queries), len(json.dumps(snapshot)), round(elapsed * 1000, 2)))
         assert "合成发现" not in json.dumps(snapshot, ensure_ascii=False)
-    assert measurements[0][0] == measurements[1][0] == 9
+    assert measurements[0][0] == measurements[1][0] == 10
     assert measurements[1][1] - measurements[0][1] < 200
     print(f"质量聚合 SQL数/响应字节/毫秒：{measurements}")

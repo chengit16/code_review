@@ -6,7 +6,7 @@ const content = [
   "【代码依据】`confirmDialog()` 提前返回后正常 resolve，关闭逻辑直接执行 `done()`；而在场景②下 `getId()` 仍返回 null，请求结束后留下不可见草稿。",
   "【实际后果】场景①已填写内容静默丢失；场景②产生孤儿草稿，需要手工清理。",
   "【建议】1）检查表单是否有输入；2）有输入时提示「关闭后已填写内容不会保存，是否继续」；3）确认后再关闭；4）仅表单为空时直接关闭。",
-  "补充：核对顺序：1) 核对基础信息；2) 核对异步请求。\n\n重复逻辑需两处维护，建议抽取公共方法。\n此处为合成验收描述，不关联真实业务代码或外部服务。",
+  "补充：核对顺序：1) 核对基础信息；2) 核对异步请求。\n\n重复逻辑需两处维护，建议抽取公共方法。\n此处为合成验收描述，不关联真实业务代码或外部服务。\n\n参考实现：\n```ts\nconst allowed = await checkAccess();\n```",
 ].join("\n");
 
 test("价值反馈不改变跟进状态，问题侧栏独立处置并经刷新持久化", async ({ page }) => {
@@ -23,10 +23,11 @@ test("价值反馈不改变跟进状态，问题侧栏独立处置并经刷新�
   await expect(card.getByRole("button", { name: "忽略", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(helpful).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(issue).toContainText("待处理");
+  await expect(card.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
+  await expect(issue).not.toContainText("待处理");
   await page.reload();
   await expect(card.getByRole("button", { name: "忽略", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(issue).toContainText("待处理");
+  await expect(card.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
   const after = await (await page.request.get("/api/jobs/1")).json();
   expect(after.feedback).toEqual({ "0": "ignored" });
   expect(after.issue_statuses["0"]).toBe("open");
@@ -45,7 +46,8 @@ test("价值反馈不改变跟进状态，问题侧栏独立处置并经刷新�
   await page.goto("/jobs/1");
   const persistedCard = page.getByRole("article", { name: "发现 1", exact: true });
   await expect(persistedCard.getByRole("button", { name: "忽略", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(persistedCard.getByRole("link", { name: /跟进问题/ })).toContainText("已忽略");
+  await expect(persistedCard.getByLabel("发现 1 的处理状态", { exact: true })).toHaveText("已处理");
+  await expect(persistedCard.getByRole("link", { name: /跟进问题/ })).toHaveText(`跟进问题 #${issueId}`);
 
   await page.goto(`/issues?status=all&issue=${issueId}`);
   const followup = page.locator(".ant-drawer");
@@ -92,7 +94,11 @@ for (const width of [1440, 768, 390, 320]) {
       for (let index = 1; index < rows.length; index++) expect(rows[index].top).toBeGreaterThanOrEqual(rows[index - 1].bottom);
     }
     const suggestionText = card.locator('[data-tone="suggestion"]');
-    await expect(suggestionText.locator("p")).toHaveText("建议抽取公共方法。");
+    await expect(suggestionText.locator(":scope > .finding-text-blocks > p")).toHaveText("建议抽取公共方法。");
+    const codeBlock = card.locator(".finding-code-block");
+    await expect(codeBlock).toContainText("ts");
+    await expect(codeBlock.locator("pre code")).toHaveText("const allowed = await checkAccess();");
+    await expect(codeBlock.getByRole("button", { name: "复制代码" })).toBeVisible();
     const plainCard = page.getByRole("article", { name: "发现 2", exact: true });
     await expect(plainCard.getByRole("heading", { name: "问题描述" })).toBeVisible();
     await expect(plainCard.locator('[data-tone="suggestion"]')).toContainText("建议删除调试输出");

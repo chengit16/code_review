@@ -23,6 +23,7 @@ const OperationsPage = lazy(() => import("../pages/OperationsPage").then((module
 const OnboardingPage = lazy(() => import("../pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage })));
 const PremergePage = lazy(() => import("../pages/PremergePage").then((module) => ({ default: module.PremergePage })));
 const RepositoriesPage = lazy(() => import("../pages/RepositoriesPage").then((module) => ({ default: module.RepositoriesPage })));
+const ReviewFindingsPage = lazy(() => import("../pages/ReviewFindingsPage").then((module) => ({ default: module.ReviewFindingsPage })));
 const ReviewIssuesPage = lazy(() => import("../pages/ReviewIssuesPage").then((module) => ({ default: module.ReviewIssuesPage })));
 const SystemSettingsPage = lazy(() => import("../pages/SystemSettingsPage").then((module) => ({ default: module.SystemSettingsPage })));
 const UsersPage = lazy(() => import("../pages/UsersPage").then((module) => ({ default: module.UsersPage })));
@@ -37,7 +38,7 @@ const navigation = [
   { heading: "工作台", links: [
     { to: "/", label: "项目总览", icon: LayoutDashboard, end: true },
     { to: "/jobs", label: "评审任务", icon: Activity },
-    { to: "/issues", label: "待跟进问题", icon: TriangleAlert },
+    { to: "/findings", label: "评审发现", icon: TriangleAlert },
     { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
     { to: "/events", label: "合并事件", icon: ClipboardList },
   ] },
@@ -131,6 +132,7 @@ function Workspace({ token, role, username, onLogout }: {
             <Route path="/feishu" element={role === "admin" ? <Navigate to="/settings?tab=feishu" replace /> : <Navigate to="/" replace />} />
             <Route path="/events" element={<EventCenterPage token={token} canEdit={role === "admin"} />} />
             <Route path="/jobs" element={<JobsPage token={token} canEdit={role === "admin"} />} />
+            <Route path="/findings" element={<ReviewFindingsPage token={token} canEdit={role === "admin"} />} />
             <Route path="/issues" element={<ReviewIssuesPage token={token} canEdit={role === "admin"} />} />
             <Route path="/effectiveness" element={<Navigate to={{ pathname: "/", search: location.search }} replace />} />
             <Route path="/premerge" element={<PremergePage token={token} />} />

@@ -12,6 +12,11 @@ export const findingFeedbackOptions = [
   { value: "ignored", label: "忽略", title: "本次不采纳，不等于发现错误；不自动关闭跟进问题" },
 ] as const;
 
+/** 当前三类价值反馈均表示发现已处理；无反馈及旧修复值仍按待反馈处理。 */
+export function isFindingHandled(marked?: FindingVerdict): boolean {
+  return marked === "helpful" || marked === "false_positive" || marked === "ignored";
+}
+
 /** 反馈的最小事实；服务端继续验证当前来源及管理员权限。 */
 export interface FindingActionsProps {
   /** 原始发现索引，不使用筛选后的序号。 */ index: number;

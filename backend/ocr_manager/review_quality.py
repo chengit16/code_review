@@ -13,6 +13,10 @@ from ocr_manager.review_effective import EFFECTIVE
 FeedbackFilter = Literal["all", "helpful", "false_positive", "ignored", "fixed", "unmarked"]
 DispositionFilter = Literal["all", "open", "fixed", "ignored", "false_positive", "unknown"]
 
+# 时间窗以外的完整性校验也复用同一主身份约束。
+VALID_FINDING = """typeof(finding_id)='text' AND typeof(path)='text' AND trim(path)!=''
+ AND typeof(content)='text' AND trim(content)!=''"""
+
 # 初审镜像只取一次；有效补审只取主身份，不展开 also_seen_in，不复活历史尝试。
 QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
  SELECT j.id AS job_id,j.repository_id,j.attempts AS source_attempt,j.finished_at,
@@ -41,6 +45,7 @@ QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
  CASE WHEN json_extract(f.finding,'$.severity') IN ('critical','high','medium','low')
  THEN json_extract(f.finding,'$.severity') ELSE 'unclassified' END AS severity,
  json_extract(f.finding,'$.path') AS path,json_extract(f.finding,'$.content') AS content,
+ json_extract(f.finding,'$.start_line') AS start_line,
  o.issue_id,i.status AS issue_status,
  NULLIF(CASE WHEN f.recovery_id IS NULL THEN COALESCE(legacy.verdict,feedback.verdict)
  ELSE feedback.verdict END,'fixed') AS verdict
@@ -51,8 +56,7 @@ QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
  AND legacy.comment_index=f.comment_index AND f.recovery_id IS NULL
 ), scoped AS (
  SELECT * FROM current_findings WHERE generated_at>=? AND generated_at<?
- AND typeof(finding_id)='text' AND typeof(path)='text' AND trim(path)!=''
- AND typeof(content)='text' AND trim(content)!=''
+ AND {VALID_FINDING}
 )"""
 
 COUNTS = """COUNT(*) AS total,
@@ -132,6 +136,10 @@ def quality_snapshot(db: sqlite3.Connection, repository_id: int | None,
         f"""{QUALITY_CTE} SELECT s.repository_id AS id,r.name,{COUNTS} FROM scoped s
         JOIN repositories r ON r.id=s.repository_id GROUP BY s.repository_id
         ORDER BY false_positive DESC,total DESC,r.name,s.repository_id""", args)]
+    pending_severity = dict.fromkeys(("critical", "high", "medium", "low", "unclassified"), 0)
+    for row in db.execute(f"""{QUALITY_CTE} SELECT severity,COUNT(*) AS count
+            FROM scoped WHERE verdict IS NULL GROUP BY severity""", args):
+        pending_severity[row["severity"]] = row["count"]
     trend = []
     for offset in range(days):
         day = (datetime.fromisoformat(start).date() + timedelta(days=offset)).isoformat()
@@ -142,6 +150,7 @@ def quality_snapshot(db: sqlite3.Connection, repository_id: int | None,
     return {"summary": summary, "trend": trend, "categories": categories,
             "projects": projects, "unavailable_sources": unavailable,
             "since": since, "until": until,
+            "pending_severity": pending_severity,
             "dispositions": disposition_snapshot(db, args, start, days)}
 
 
@@ -149,32 +158,43 @@ def quality_findings(db: sqlite3.Connection, repository_id: int | None, days: in
                      feedback: FeedbackFilter, category: str | None,
                      page: int, page_size: int, since: str | None = None,
                      until: str | None = None, severity: str | None = None,
-                     status: DispositionFilter = "all") -> dict[str, Any]:
-    """同集合只读分页，正文仅返回短摘要；身份与版本随样本保留，不允许从样本直接写反馈。"""
+                     status: DispositionFilter = "all", *, handling: str = "all",
+                     issue_id: int | None = None, finding_id: str | None = None,
+                     keyword: str | None = None, detail: bool = False) -> dict[str, Any]:
+    """汇总、发现列表与历史关联共用集合；筛选在分页前执行，详情按稳定身份读取。"""
 
     if repository_id is not None and not db.execute(
         "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
     ).fetchone():
         raise HTTPException(404, "项目不存在")
     _, default_since, default_until = quality_window(days)
-    start, end = since or default_since, until or default_until
+    start = since or (default_since if days else "1970-01-01 00:00:00")
+    end = until or (default_until if days else "9999-12-31 00:00:00")
     # 旧修复筛选兼容为未评价，不再单列与价值无关的修复反馈。
     if feedback == "fixed":
         feedback = "unmarked"
     where = """(?='all' OR COALESCE(verdict,'unmarked')=?) AND (? IS NULL OR category=?)
         AND (? IS NULL OR severity=?) AND (?='all' OR
         CASE WHEN issue_status IS NULL OR issue_status='merged' THEN 'unknown'
-        ELSE issue_status END=?)"""
+        ELSE issue_status END=?) AND
+        (?='all' OR (?='pending' AND verdict IS NULL) OR (?='handled' AND verdict IS NOT NULL))
+        AND (? IS NULL OR issue_id=?) AND (? IS NULL OR finding_id=?)
+        AND (? IS NULL OR instr(lower(content),lower(?))>0 OR instr(lower(path),lower(?))>0)"""
     args = (repository_id, repository_id, start, end, start, end, feedback, feedback,
-            category, category, severity, severity, status, status)
+            category, category, severity, severity, status, status,
+            handling, handling, handling, issue_id, issue_id, finding_id, finding_id,
+            keyword, keyword, keyword)
     total = db.execute(
         f"{QUALITY_CTE} SELECT COUNT(*) FROM scoped WHERE {where}", args).fetchone()[0]
     rows = [dict(row) for row in db.execute(f"""{QUALITY_CTE} SELECT
         s.finding_id,s.job_id,s.repository_id,r.name AS repository_name,s.source_attempt,
         s.revision,s.recovery_id,s.comment_index,s.generated_at,s.category,s.severity,
         s.path,substr(s.content,1,160) AS excerpt,s.issue_id,s.issue_status,
-        COALESCE(s.verdict,'unmarked') AS feedback FROM scoped s
-        JOIN repositories r ON r.id=s.repository_id WHERE {where}
+        {"s.content,s.start_line," if detail else ""}
+        j.commit_author,COALESCE(s.verdict,'unmarked') AS feedback,
+        CASE WHEN s.verdict IS NULL THEN 'pending' ELSE 'handled' END AS handling FROM scoped s
+        JOIN repositories r ON r.id=s.repository_id JOIN review_jobs j ON j.id=s.job_id
+        WHERE {where}
         ORDER BY generated_at DESC,s.job_id DESC,s.finding_id LIMIT ? OFFSET ?""",
         (*args, page_size, (page - 1) * page_size))]
     return {"items": rows, "total": total, "page": page, "page_size": page_size,

@@ -11,7 +11,9 @@ export type FindingContentBlock = { kind: "paragraph"; content: string } | { kin
 
 /** 等长遮蔽代码和引文，让分区与分项使用原始位置且不解析引用内的标签。 */
 export function maskFindingLiterals(content: string): string {
-  return content.replace(/(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|「[^」]*」|“[^”]*”|"[^"\n]*"|'[^'\n]*'/g, (value) => " ".repeat(value.length));
+  const fenced = content.replace(/^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\1[ \t]*(?=\n|$)|$(?![\s\S]))/gm,
+    (value) => " ".repeat(value.length));
+  return fenced.replace(/(`+)[\s\S]*?\1|~~~[\s\S]*?~~~|「[^」]*」|“[^”]*”|"[^"\n]*"|'[^'\n]*'/g, (value) => " ".repeat(value.length));
 }
 
 const chineseDigits = "一二三四五六七八九十";

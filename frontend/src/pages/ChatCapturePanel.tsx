@@ -44,12 +44,11 @@ export function ChatCapturePanel({ token, active = true }: { /** 仅内存管理
         <Button disabled={toggle.isPending} onClick={() => toggle.mutate(binding)}>{binding.enabled ? "暂停采集" : "恢复采集"} #{binding.id}</Button></article>)}
       {toggle.error && <p role="alert">{toggle.error.message}</p>}
       <div className="list-toolbar"><ListSelect label="来源分类" value={classification || "all"} onValueChange={(value) => update("classification", value)} options={[{ value: "all", label: "全部分类" }, { value: "issue", label: "疑似问题" }, { value: "pending", label: "待核实" }, { value: "progress", label: "进展线索" }]} /></div>
-      <ListTable rowKey="id" dataSource={query.data.items} pagination={false} scroll={{ x: 800 }} locale={{ emptyText: "尚无匹配摄取记录；不能由空列表推断聊天中没有问题" }} columns={[
-        { title: "来源 / 分类", key: "source", width: 160, render: (_, event) => <>来源 #{event.id}<span className="list-secondary">{event.classification === "issue" ? "疑似问题，自动受理" : event.classification === "progress" ? "进展线索" : "待核实"}</span></> },
+      <ListTable onOpenRow={setSelected} rowLabel={(event) => `查看来源 ${event.id}`} rowKey="id" dataSource={query.data.items} pagination={false} scroll={{ x: 800 }} locale={{ emptyText: "尚无匹配摄取记录；不能由空列表推断聊天中没有问题" }} columns={[
+        { title: "来源 / 分类", key: "source", width: 160, render: (_, event) => <><Button type="link" aria-label="详情 / 关联" onClick={() => setSelected(event)}>来源 #{event.id}</Button><span className="list-secondary">{event.classification === "issue" ? "疑似问题，自动受理" : event.classification === "progress" ? "进展线索" : "待核实"}</span></> },
         { title: "脱敏摘要", key: "excerpt", render: (_, event) => <ListExcerpt text={event.excerpt} limit={70} /> },
         { title: "关联记录", key: "linked", width: 140, render: (_, event) => event.improvement_id ? <Link to={`/improvements/${event.improvement_id}`}>记录 #{event.improvement_id}</Link> : "未关联正式记录" },
         { title: "来源时间", key: "time", width: 140, render: (_, event) => <ListTime value={new Date(event.source_ms).toISOString()} /> },
-        { title: "操作", key: "action", width: 100, render: (_, event) => <Button type="link" onClick={() => setSelected(event)}>详情 / 关联</Button> },
       ]} />
       <Pagination label="聊天收件箱分页" total={query.data.total} page={page} pageSize={pageSize} disabled={query.isFetching} onPage={(value) => update("page", String(value))} onPageSize={(size) => update("page_size", String(size))} />
       <Drawer open={selected !== null && active && open} title={selected ? `来源 #${selected.id} · 关联与核实` : "来源详情"} onClose={() => setSelected(null)} destroyOnHidden>{selected && <EventRow key={selected.id} event={selected} token={token} onSaved={setSelected} />}</Drawer>

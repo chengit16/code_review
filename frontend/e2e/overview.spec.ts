@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 const snapshot = {
   summary: { reviews: 20, failed_reviews: 2, generated: 46, published: 32, new_issues: 18, new_still_open: 12, fixed: 5, ignored: 2, open_now: 18, feedback_marked: 8, false_positive: 1 },
   quality: {
+    pending_severity: { critical: 1, high: 3, medium: 20, low: 4, unclassified: 2 },
     summary: { total: 210, helpful: 90, false_positive: 30, ignored: 60, unmarked: 30 },
     since: "2026-10-01 00:00:00", until: "2026-10-31 00:00:00", unavailable_sources: 0,
     trend: Array.from({ length: 30 }, (_, index) => ({ day: `2026-10-${String(index + 1).padStart(2, "0")}`, total: 7, helpful: 3, false_positive: 1, ignored: 2, unmarked: 1 })),
@@ -32,12 +33,12 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     await expect(filters.getByRole("combobox", { name: "项目" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "近 30 天" })).toBeChecked();
     await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("本期评审数");
-    await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("当前待处置");
-    const quality = page.getByRole("region", { name: "评审质量与处置" });
+    await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("待反馈发现");
+    const quality = page.getByRole("region", { name: "评审反馈" });
     await expect(quality).toBeVisible();
-    await expect(quality.getByRole("radio", { name: "反馈价值" })).toBeChecked();
+    await expect(quality.getByRole("radio", { name: "问题状态" })).toHaveCount(0);
     await expect(quality.getByRole("link", { name: "查看有帮助 90 条发现" })).toBeVisible();
-    await expect(quality.getByRole("link", { name: "已忽略 7 个" })).toBeVisible();
+    await expect(quality.getByRole("link", { name: "已处理 180 条" })).toBeVisible();
     const bars = await quality.locator(".quality-bar-group").first().locator("span").evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right, bottom: rect.bottom, height: rect.height };
@@ -58,8 +59,8 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       expect(await quality.locator(".overview-chart-axis").evaluate((element) => element.getBoundingClientRect().left)).toBeCloseTo(axisLeft, 1);
       await chartViewport.evaluate((element) => { element.scrollLeft = 0; });
     }
-    await expect(page.getByRole("region", { name: "待处置严重级别" })).toContainText("严重");
-    await expect(page.getByRole("region", { name: "项目概况" })).toContainText("严重 / 高危");
+    await expect(page.getByRole("region", { name: "待反馈严重级别" })).toContainText("严重");
+    await expect(page.getByRole("region", { name: "项目概况" })).toContainText("待反馈发现");
     await expect(page.getByRole("region", { name: "优化方向" })).toContainText("安全");
     await expect(page.getByRole("region", { name: "全平台运行摘要" })).toContainText("全平台");
     await expect(page.getByRole("region", { name: "最近评审" })).toHaveCount(0);
@@ -155,8 +156,7 @@ for (const width of [1440, 390, 320]) {
         items: Array.from({ length: 10 }, (_, index) => ({ finding_id: `j${current * 10 + index}:a1:c0`, job_id: 1, repository_id: 1, repository_name: "合成项目", source_attempt: 1, revision: 0, recovery_id: null, comment_index: 0, generated_at: "2026-10-05 00:00:00", category: "security", severity: "high", path: "src/long-file-name.ts", excerpt: `合成发现 ${current}-${index}：检查边界处理及人工反馈`, issue_id: 1, issue_status: "ignored", feedback: "helpful" })),
       } });
     });
-    await page.goto("/?days=30&repository_id=1");
-    await page.getByRole("link", { name: "查看有帮助 90 条发现" }).click();
+    await page.goto("/?days=30&repository_id=1&sample_open=1&sample_feedback=helpful&sample_since=2026-10-01+00%3A00%3A00&sample_until=2026-10-31+00%3A00%3A00");
     const drawer = page.getByRole("dialog", { name: "评审质量样本" });
     await expect(drawer).toBeVisible();
     await expect(drawer.getByText("共 90 条发现", { exact: true })).toBeVisible();
@@ -188,7 +188,7 @@ for (const width of [1440, 390, 320]) {
     await expect(drawer).not.toBeVisible();
     await expect(page).toHaveURL(/repository_id=1/);
     await expect(page).not.toHaveURL(/sample_open/);
-    await expect(page.getByRole("link", { name: "已忽略 7 个" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "已处理 180 条" })).toBeVisible();
   });
 }
 
@@ -199,15 +199,14 @@ test("真实隔离 API 的反馈计数与样本下钻一致，刷新后仍可复
   try {
     await page.goto("/?days=7&repository_id=1");
     await page.getByRole("link", { name: "查看有帮助 1 条发现" }).click();
-    const drawer = page.getByRole("dialog", { name: "评审质量样本" });
+    const drawer = page.locator(".page");
     await expect(drawer.getByText("共 1 条发现", { exact: true })).toBeVisible();
     await expect(drawer.getByText("示例发现", { exact: true })).toBeVisible();
     await page.reload();
     await expect(drawer.getByText("共 1 条发现", { exact: true })).toBeVisible();
-    await expect(drawer.getByRole("link", { name: "查看任务 #1" })).toHaveAttribute("href", "/jobs/1#job-result");
-    await expect(drawer.getByText("j1:a1:c0", { exact: true })).toBeVisible();
-    await drawer.getByRole("button", { name: "清除样本筛选" }).click();
-    await expect(page).not.toHaveURL(/sample_feedback/);
+    await expect(drawer.getByRole("link", { name: "任务 #1", exact: true })).toHaveAttribute("href", "/jobs/1#job-result");
+    await drawer.getByRole("button", { name: "示例发现", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "评审发现详情" })).toContainText("j1:a1:c0");
     await expect(page).toHaveURL(/repository_id=1/);
   } finally {
     expect((await page.request.delete("/api/jobs/1/feedback/0")).status()).toBe(200);

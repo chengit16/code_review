@@ -28,6 +28,7 @@ export interface DispositionCounts {
 
 /** 质量汇总和样本使用相同闭开窗口，统计不返回正文。 */
 export interface ReviewQuality {
+  /** 同一窗口未评价发现的严重级别。 */ pending_severity?: Record<SeverityLevel, number>;
   /** 新服务的当前处置集合；缺失时提示升级，不用历史评价替代。 */
   dispositions?: {
     summary: DispositionCounts;

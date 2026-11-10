@@ -205,6 +205,10 @@ export interface ReviewJob {
     available: boolean; coverage_complete: boolean; coverage_limited: boolean;
   };
   /** 飞书发送状态，与评审状态相互独立。 */ delivery_status?: string | null;
+  /** 当前有效发现的价值反馈条数；缺失不回退问题处置，历史修复归未评价。 */ feedback_summary?: {
+    available: boolean; total: number | null; helpful: number; false_positive: number;
+    ignored: number; unmarked: number;
+  };
   id: number;
   repository_id: number;
   event_id: number;
@@ -240,6 +244,7 @@ export interface TaskPage {
   page: number;
   page_size: number;
   /** 忽略分页和状态导航自身条件，保留其余筛选的全量分面计数。 */ status_counts?: Record<string, number>;
+  /** 忽略反馈条件自身和分页，保留评审状态等条件的任务数，不是发现条数。 */ feedback_counts?: Record<string, number>;
 }
 
 /** OCR 发现；行号为 0 时代表文件级问题。 */

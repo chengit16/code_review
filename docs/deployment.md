@@ -257,3 +257,24 @@ OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-proxy-compat-dist npx playwright test e2e/wor
 ```
 
 工作流浏览器回归在网络层显式拒绝 `PATCH`，验证页面仍可保存；该测试是隔离证据，不代表真实穿透入口已发布或已完成生产验收。
+
+### 单次评审历史清理（PI-20261109-001）
+
+仅用于用户明确确认的本机维护，不是定时保留策略，也不等于 `/api/maintenance/prune` 工件清理。离线模块 `ocr_manager.review_history_cleanup` 没有 HTTP 或自动执行入口；仅支持已核对的 schema 51，不自动迁移，调用者必须先备份和在副本演练。
+
+- 以任务 `created_at` 的 UTC 时间确定范围。本次北京时间 2026-11-09 00:00 对应 UTC 2026-11-08 16:00；边界时刻及之后的任务保留，不能用“当前时刻减一天”代替。
+- 清理任务的关联尝试、反馈、补审、结论及本地投递；无保留任务来源的旧问题和处置记录随之清理。跨日问题或保留问题引用旧合并目标时拒绝自动执行，须另行核对，不能只按问题首次发现时间删除。
+- 合并事件、项目/模型/规则/飞书/账号配置、合并前审查、运维审计、平台问题与改进、任务身份序列保持不变；远端 GitLab/飞书内容不操作。保留幂等事件后，对账可能报告已清理事件没有任务，这不表示应重放旧事件；不为消除提示删除事件或重跑评审。
+- 确认没有排队、运行、待投递或真实外部子进程，暂停同库全部写进程后，制作最终数据库与私有配置成对备份；使用 SQLite 在线备份，不复制活跃 WAL 主文件冒充完整快照。备份目录 0700、文件 0600，不将配置内容输出到日志。
+- `plan_cleanup` 生成只读预览；在最终备份副本运行 `apply_cleanup`，逐表核对保留内容、外键及完整性。正式连接独立事务重新核对预览签名；任何并发变化或意外副作用拒绝提交，不能绕过安全检查。
+- 工件目录只按已核对的旧任务编号移入受保护隔离目录，拒绝符号链接；数据库事务失败须移回。原进程恢复后检查真实 API 的任务/问题/统计及健康，不将隔离演练通过写成正式维护成功。恢复备份须另开维护窗口，考虑维护后新任务，不直接覆盖活动库。
+
+专项可执行检查（仅临时库，不清理业务实例）：
+
+```sh
+.venv/bin/ruff check backend/ocr_manager/review_history_cleanup.py backend/tests/test_review_history_cleanup.py
+.venv/bin/mypy backend/ocr_manager/review_history_cleanup.py
+.venv/bin/pytest -q backend/tests/test_review_history_cleanup.py
+```
+
+本次实施与实际实例生效结论见[问题与改进台账](problem-improvement-log.md) PI-20261109-001，不能仅凭本节说明推断清理已经完成。

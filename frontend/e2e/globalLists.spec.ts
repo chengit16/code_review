@@ -19,7 +19,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       items: [{ id: 999, repository_name: "合成长项目名称".repeat(8), mr_iid: 7, head_sha: "a".repeat(40), status: "partial", created_at: "2025-01-01 12:00:00", summary: { result_available: true, findings_count: 3, highest_severity: "high", coverage: "partial", excluded_count: 2, waived_count: 1 } }], total: 1, page: 1, page_size: 25, status_counts: { all: 1, partial: 1 },
     } }));
     const pages = [
-      ["/jobs", "评审任务"], ["/issues", "待跟进问题"], ["/premerge", "合并前审查"], ["/events", "合并事件"],
+      ["/jobs", "评审任务"], ["/issues", "历史问题与修复记录"], ["/findings", "评审发现"], ["/premerge", "合并前审查"], ["/events", "合并事件"],
       [`/improvements?q=${encodeURIComponent(title)}`, "问题与改进"], [`/improvements?view=themes&theme_q=${encodeURIComponent(title)}`, "问题与改进"],
       ["/repositories", "项目配置"], ["/settings", "系统设置"], ["/feishu", "系统设置"], ["/config-history", "配置历史"], ["/users", "访问权限"],
     ];
@@ -34,12 +34,21 @@ for (const width of [1440, 1280, 768, 390, 320]) {
         await expect(row).toContainText("代码已修改");
         await expect(row).toContainText("本地验证通过");
         await expect(row).toContainText("未部署");
-        await row.getByRole("link", { name: "详情", exact: true }).click();
+        await row.getByText("代码已修改", { exact: true }).click();
         await page.getByRole("link", { name: /返回/ }).first().click();
         await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(title)}`));
         await expect(page.getByRole("link", { name: `#${record.id} · ${title}`, exact: true })).toBeVisible();
       }
-      if (path.includes("view=themes")) await expect(page.getByRole("row").filter({ hasText: `#${theme.id}` })).toContainText("0 / 2 阶段已完成");
+      if (path.includes("view=themes")) {
+        const row = page.getByRole("row", { name: `查看主题 ${theme.id}`, exact: true });
+        await expect(row).toContainText("0 / 2 阶段已完成");
+        await expect(page.getByRole("columnheader", { name: "操作", exact: true })).toHaveCount(0);
+        await row.focus();
+        await page.keyboard.press("Enter");
+        await expect(page).toHaveURL(new RegExp(`/improvements/themes/${theme.id}`));
+        await page.getByRole("link", { name: /返回/ }).first().click();
+        await expect(row).toBeVisible();
+      }
       if (path === "/premerge") {
         await expect(page.getByText("覆盖不完整 · 排除 2 · 豁免 1", { exact: true })).toBeVisible();
         const time = page.getByRole("button", { name: /2025.*Asia/ });

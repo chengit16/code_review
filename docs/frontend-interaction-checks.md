@@ -1,5 +1,52 @@
 # 前端交互回归
 
+## 发现正文换行、代码与复制（PI-20261109-009）
+
+实现规则、上游输出边界与完整复验命令见[发现正文显示约定](finding-content-display.md)。新增 `findingMarkdown.spec.ts` 以合成描述检查 1440/390/320px 的字面标签换行、多行缩进、代码区域横向滚动、右上角复制、键盘操作及复制失败后重试；既有发现分区用例增加代码块检查。安全专项覆盖 HTML 文字、危险链接、图片不请求、未闭合围栏和普通代码转义保留。实际执行结果以本事项台账追加为准，不沿用历史通过数量。
+
+## 发现反馈即已处理的追加检查（PI-20261109-007）
+
+最新需求覆盖下方初版双标签展示：列表恢复“发现 / 价值反馈”，移除独立处置标签；详情有帮助、误报或忽略均显示已处理，撤销回待处理。处理筛选按同一反馈口径，旧 open 直达兼容为未反馈发现，历史修复值归未评价。问题修复记录保持独立，不因反馈自动修改。
+
+```sh
+npm --prefix frontend run lint
+npm --prefix frontend test
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-feedback-handled-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-handled-dist \
+npx playwright test e2e/taskList.spec.ts e2e/workflows.spec.ts e2e/findings.spec.ts \
+  --output /tmp/ocr-feedback-handled-browser
+# 普通服务退出后，串行运行合成补审夹具，仍仅操作临时 SQLite。
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-handled-dist OCR_BROWSER_REVIEW_RECOVERY=1 \
+npx playwright test e2e/reviewRecovery.spec.ts --output /tmp/ocr-feedback-handled-recovery-browser
+```
+
+前端全量最终 39 文件 / 244 项、普通隔离浏览器 20 项通过，ESLint、TypeScript 与隔离构建通过；已目视 1440px 列表与 320px 详情，验证有帮助显示已处理、撤销、刷新、未知和范围提示、列表无处置标签及筛选兼容。补审专项结果以台账最终追加为准。日志及截图位于 /tmp/ocr-feedback-handled-*；本轮只修改前端和文档，未发布静态资源、重启业务进程或修改真实业务记录。下方 250 项及双标签结论是前一阶段事实，不代表本轮展示方案。
+
+## 任务反馈与处置完成标识初版（PI-20261109-007，历史阶段）
+
+任务列名为“发现 / 反馈与处置”，使用两个 Ant Design Tag 分别显示逐条发现的反馈进度与去重问题的处置进度。验证反馈全未评价、部分和全部评价、撤销、已处理但未反馈、已反馈但待处理、合并去重、补审新增发现、未知关联、异常计数、无发现及覆盖受限；整行导航、选择隔离与返回筛选继续保留。
+
+以下命令在隔离临时 SQLite 和静态产物中验证，不连接真实 GitLab、OCR 或飞书，也不修改正式任务状态：
+
+```sh
+npm --prefix frontend run lint
+npm --prefix frontend test
+.venv/bin/pytest -q backend/tests/test_task_issue_summary.py backend/tests/test_task_feedback_summary.py
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-completion-indicators-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-completion-indicators-dist \
+npx playwright test e2e/taskList.spec.ts e2e/workflows.spec.ts \
+  --output /tmp/ocr-completion-indicators-browser
+```
+
+本轮前端全量 39 文件 / 250 项通过，新增进度专项 22 项；15 项隔离浏览器通过，包含 1440/768/390/320px 反馈与处置独立更新、撤销和刷新，已目视桌面与 320px 标签布局。ESLint、TypeScript、隔离构建通过，设计机械检查输出空数组；构建共享 JS 1151.13 kB / gzip 371.40 kB，保留大包警告。临时单测日志位于 /tmp/ocr-completion-indicators-unit.log，截图在上述浏览器输出目录。后端专项结果与最终同步以本编号台账为准；未运行后端全量、真实读屏、200% 放大、真实外部服务或正式入口验收。未覆盖 frontend/dist 或重启业务进程，新标识尚未部署。
+
 ## 检查范围
 
 - 项目配置切换页签保留草稿；关闭窗口、浏览器返回和离开页面时确认放弃。
@@ -434,3 +481,36 @@ git diff --check
 排查过程真实失败：首次专项 16 passed / 2 failed，是旧测试要求“跳号或不从一开始不分项”，与用户本轮要求不同，调整预期后通过；首次 TypeScript 检查发现过滤器类型谓词不满足返回类型，已修正并复验通过。首次目视发现合并后的独立建议被并入最后一项，修正段落边界并补充 DOM 断言后最终通过。日志为 `/tmp/ocr-history-description-frontend-final.log`、`/tmp/ocr-history-description-browser-final.log`，截图位于 `/tmp/ocr-history-description-browser-final`。
 
 共享 JS 1150.41 kB / gzip 371.10 kB，保留既有大包警告。本轮未改后端、未重跑后端全量或补审浏览器专项；真实读屏、200% 放大、生产数据及正式入口未验证。仅生成 `/tmp` 隔离产物，未覆盖正式静态资源，未重启业务 API / Worker / monitor，未迁移正式数据库；新版展示须发布后才会在运行实例生效。此前阶段曾默认构建生成 `frontend/dist` 的历史事实不变，不视为本轮已经部署。
+
+### 任务价值反馈计数与整行详情入口（2026-11-09，PI-20261109-005）
+
+本节覆盖此前“任务列表显示待处理数量并直达待处理发现”的展示约定：列表“发现 / 价值反馈”按当前有效发现显示“有帮助 N · 误报 N · 忽略 N”，不从跨任务问题处置状态推算。初审反馈镜像不双计，补审按主身份计数，历史修复归未评价，缺失反馈投影显示待核实；问题状态筛选仍独立保留。
+
+任务、待跟进问题、合并前审查、问题记录、优化主题、聊天收件箱和质量样本移除仅用于详情的操作列，点击行内非交互区域或行获得焦点后按 Enter 打开详情。已有标题链接或按钮保留，返回仍恢复筛选。配置历史支持整行查看差异，恢复列保留。选择框、按钮、链接、文本展开、文本选择和修饰键不触发行导航；编辑、删除、重试等实际操作不移除。
+
+本轮实际执行的检查命令如下，均使用合成数据、临时 SQLite 及隔离静态资源，不调用真实 GitLab、OCR 或飞书：
+
+```sh
+.venv/bin/ruff check backend
+.venv/bin/mypy backend/ocr_manager
+PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract
+.venv/bin/pytest -q backend/tests
+npm --prefix frontend test
+npm --prefix frontend run lint
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-feedback-counts-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-counts-dist \
+npx playwright test e2e/taskList.spec.ts e2e/globalLists.spec.ts e2e/issueAuthor.spec.ts \
+  e2e/workflows.spec.ts e2e/overview.spec.ts e2e/ux.spec.ts e2e/chatCapture.spec.ts \
+  --output /tmp/ocr-feedback-counts-browser-final
+# 普通服务退出后，串行启动独立合成聊天夹具，不采集真实聊天。
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-counts-dist OCR_BROWSER_CHAT_CAPTURE=1 \
+npx playwright test e2e/chatCapture.spec.ts --output /tmp/ocr-feedback-counts-chat-browser
+```
+
+实际结果：Ruff、Mypy 131 源文件、OpenAPI、TypeScript、ESLint、隔离构建通过；后端 778 passed / 1 skipped（外部 OCR 探针），前端 38 文件 / 228 项通过；普通浏览器 43 passed / 4 skipped（聊天需独立通道），独立聊天 4 passed。任务反馈替换、刷新、整行点击、Enter、选择隔离在 1440/768/390/320px 验证；跨页列表在 1440/1280/768/390/320px 验证，记录与主题返回保留筛选。已目视任务桌面、320px 任务及长项目名合并前列表。初次旧列数/旧表头断言、长项目名横溢和响应式动画时机失败的事实及修正见本编号台账，不覆盖历史结论。
+
+共享 JS 1151.13 kB / gzip 371.41 kB，保留大包告警及 Starlette 弃用提示。临时日志及截图位于 `/tmp/ocr-feedback-counts-*`。本轮未运行独立补审浏览器专项、真实读屏、200% 放大、生产负载或真实服务验收；补审主身份计数由隔离后端测试覆盖。未部署、未覆盖正式静态资源、未重启进程或迁移真实数据库，发布需前后端配套，不能仅凭本地测试宣称运行入口已生效。

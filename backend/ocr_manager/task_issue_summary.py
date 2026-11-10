@@ -6,6 +6,7 @@ import sqlite3
 from typing import Any
 
 from ocr_manager.review_effective import EFFECTIVE
+from ocr_manager.task_feedback_summary import attach_feedback_summary
 
 # 发现先固定到当前有效版本，再解析合并目标；缺失、循环和超长链均保留未知，不能算已关闭。
 TASK_FACTS_CTE = f"""WITH RECURSIVE
@@ -121,6 +122,7 @@ def attach_task_facts(db: sqlite3.Connection, jobs: list[dict[str, Any]], *,
                       detail: bool = False) -> None:
     """同一读事务批量附加摘要；详情同时解析合并目标，确保待处理入口与数字对应。"""
 
+    attach_feedback_summary(db, jobs)
     for offset in range(0, len(jobs), 500):
         chunk = jobs[offset:offset + 500]
         ids = [job["id"] for job in chunk]

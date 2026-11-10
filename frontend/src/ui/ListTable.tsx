@@ -4,6 +4,14 @@ import type { TableProps } from "antd";
 import { useSyncExternalStore } from "react";
 import type { TdHTMLAttributes } from "react";
 
+import { detailRowProps } from "./detailRow";
+
+/** 详情入口可选；调用页决定目标，其他行事件及权限不由通用表格推断。 */
+type DetailTableProps<T extends object> = TableProps<T> & {
+  /** 点击非交互区域或行焦点按 Enter 时打开只读详情。 */ onOpenRow?: (record: T) => void;
+  /** 提供包含业务身份的行名称；默认使用“查看详情”。 */ rowLabel?: (record: T) => string;
+};
+
 function ListCell({ children, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
   return <td {...props}><div className="list-cell-content">{children}</div></td>;
 }
@@ -21,13 +29,14 @@ export function useNarrowList() {
 }
 
 /** 沿用 Ant Design 表格语义；窄屏逐行展示全部业务字段，不隐藏状态与时间。 */
-export function ListTable<T extends object>(props: TableProps<T>) {
+export function ListTable<T extends object>({ onOpenRow, rowLabel, ...props }: DetailTableProps<T>) {
   const narrow = useNarrowList();
   const columns = props.columns?.map((column) => ({ ...column,
     onCell: (record: T, index?: number) => ({ ...column.onCell?.(record, index),
       "data-label": typeof column.title === "string" ? column.title : "" }),
   }));
   return <Table<T> {...props} columns={columns} size={props.size ?? "small"}
+    onRow={onOpenRow ? (record) => detailRowProps(() => onOpenRow(record), rowLabel?.(record) ?? "查看详情") : props.onRow}
     components={{ ...props.components, body: { cell: ListCell, ...props.components?.body } }}
     className={`compact-list-table ${props.className ?? ""}`} scroll={narrow ? undefined : props.scroll} />;
 }

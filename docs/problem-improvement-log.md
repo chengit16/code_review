@@ -2733,3 +2733,395 @@
 - 关联文件或证据：frontend/src/pages/findingLists.ts、findingContent.ts、FindingDescription.tsx、AttemptReports.tsx；frontend/src/test/findingContent.test.tsx、frontend/e2e/findings.spec.ts；docs/frontend-interaction-checks.md；/tmp/ocr-history-description-frontend-final.log、/tmp/ocr-history-description-browser-final.log 及最终浏览器截图目录。
 - 遗留与下一步：等待独立 monitor 正常周期，按本编号实际八条执行 improvement_log_check 只读核验，不强制导入、重启或扩大聊天采集；核验失败如实报告。运行实例与真实历史样本仍待授权配套发布后核对；本轮未改变统计口径或发现生成内容。
 - 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-001｜追加：确认保留当前版本并继续备份演练与清理
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：用户确认执行边界并授权保留当前新增改动，继续处理；关联本编号前两条。
+- 现象或目标：保留北京时间今天数据，清理 2026-11-09 00:00:00 之前的评审任务及关联跟进数据。
+- 原因或分析：上轮发现反馈及问题处置分离、schema 50/51 等新增工作区改动，依项目安全约定暂停且未操作数据；本轮用户明确基于当前版本继续。
+- 处理与改进：先确认运行实例及真实库版本、关联记录和在途任务，制作受保护备份，在副本演练验证后执行；保留其他模块、配置、审计与身份序列。
+- 代码修改：本轮尚无业务修改，仅追加主动进展；保留已确认的当前全部工作区改动。
+- 本地验证：尚未进行本轮备份、演练或删除；后续仅记录实际执行结果。
+- 部署生效：未执行清理、部署或重启；不因维护擅自升级业务数据库或发布当前未部署代码。
+- 关联文件或证据：用户本轮明确授权；本编号此前范围核对。
+- 遗留与下一步：核对真实实例，演练跨日关联、外键与保留表一致性，再在受控维护窗口清理；正常同步并核验本编号。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-001｜追加：成对备份及隔离清理演练通过，准备维护窗口
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：范围核对、备份和隔离演练完成，尚未对正式库删除；关联本编号前三条。
+- 现象或目标：保留今天数据，按任务创建时间清理 UTC 2026-11-08 16:00:00 之前的历史及其关联跟进事实。
+- 原因或分析：真实库 schema 51，完整性 ok、外键无异常；385 条旧任务，今日 8 条已完成任务及 18 个独立跟进问题，无跨日问题复用，当前无排队/运行/待投递记录。旧任务仍有今天人工处置的关联旧问题，随旧来源清理，不据操作日误保留旧来源。旧工件 382 个目录约 3,425,052,738 字节。
+- 处理与改进：新增无 HTTP 或自动入口的离线维护模块，拒绝未知 schema、在途任务、跨日问题及保留合并依赖；完整预览签名防变化，事务后逐表核对全部应保留行、外键及完整性，不迁移或重置序列。已成对备份数据库/私有配置并执行凭据恢复演练，副本实际清理 385 任务、1310 问题，保留 8 任务/18 问题/18 发现/4 条旧接口反馈/4 条稳定身份反馈；373 合并事件、2 项目及 397 条任务身份均保留。副本统计仅 11-09 非零，8 次评审、18 发现、17 待处理、1 人工修复，有帮助 3、忽略反馈 1、未评价 14。
+- 代码修改：新增 backend/ocr_manager/review_history_cleanup.py 和 backend/tests/test_review_history_cleanup.py；仅离线维护，不接入业务路由；其他当前改动保留。
+- 本地验证：实际 `.venv/bin/ruff check backend/ocr_manager/review_history_cleanup.py backend/tests/test_review_history_cleanup.py`、`.venv/bin/mypy backend/ocr_manager/review_history_cleanup.py` 通过；`.venv/bin/pytest -q backend/tests/test_review_history_cleanup.py` 9 passed，覆盖北京时间零点保留、重入、预览变化、跨日/合并依赖/在途拒绝、意外触发器事务回滚、拒绝隐式迁移。初次 Ruff 一处行长已修复重跑通过；既有 Starlette 弃用提示。实际调用 backup_database、backup_private_config、recovery_drill 及副本 apply_cleanup 通过，副本逐表 60 表保留内容核验和统计读取通过；未运行全量业务回归或浏览器。
+- 部署生效：正式数据尚未清理，未发布代码或重启服务；下一步在空闲状态短暂暂停现有 API/Worker/monitor 原进程，最终成对备份并再演练，工件移至受保护隔离目录后事务清理，finally 恢复原进程，不顺带升级代码。
+- 关联文件或证据：.local-data/backups/review-history-20261109-150338/preview.json、同目录成对备份和 recovery-check 报告、cleanup-drill.db；维护模块与专项测试。
+- 遗留与下一步：正式执行前再次核对实际进程与预览 ID 集合；变化则停止并重新演练。清理后核对真实 API 任务/问题/首页统计、服务恢复和备份权限；合并事件保留去重记录，既有对账可能提示已清理事件无任务，不能为消除提示删除事件。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-001｜追加：执行前发现今日新任务，安全拦截后等待
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：正式执行被在途保护拦截，未清理，继续等待新任务结束；关联本编号前四条。
+- 现象或目标：维护预览后新事件产生今日任务 #400，不能沿用“今日 8 条”的旧快照执行。
+- 原因或分析：执行脚本在发送任何暂停信号前发现 Worker 存在真实 OCR 子进程，主动拒绝；只读复核任务 #400 为 running、事件已完成，未绕过保护或终止模型执行。
+- 处理与改进：保留本次失败事实，等待任务及其投递结束，随后重新备份、演练及复核新保留集合；旧任务范围未因新任务扩大。
+- 代码修改：维护模块与专项测试不变；受保护备份目录新增本次执行脚本，没有接入正式 API。
+- 本地验证：实际运行 PYTHONPATH=backend .venv/bin/python .local-data/backups/review-history-20261109-150338/execute-maintenance.py，在子进程检查阶段失败；随后只读确认新增在途任务，正式清理未通过也未执行。不沿用之前副本结果宣称正式清理完成。
+- 部署生效：未删除、未暂停/重启正式进程，未发布或迁移；等待当前真实任务自然结束。
+- 关联文件或证据：上述执行脚本的 AssertionError 与只读任务/执行槽检查；任务 #400。
+- 遗留与下一步：待在途及通知结束后重复最终备份与演练；若跨日问题新出现则按保护规则处理，不改写今天数据或静默扩大范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261109-001｜追加：新任务完成，维护记录写入错误已保护性退出
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：在途任务 #400 自然完成后重试维护；本次在工件移动与正式数据库删除之前因维护脚本记录写入错误退出，已恢复原进程，继续修复重试。
+- 现象或目标：完整保留新增今日任务，并取得可核对的备份与执行报告。
+- 原因或分析：受保护操作脚本误用 Path.open 的 opener 参数；最终成对备份及副本演练已执行，但写工件计划时触发 TypeError。错误发生在目录移动及 apply_cleanup 正式库执行之前；finally 已恢复三个原 PID，真实健康检查确认服务正常、旧任务仍 385 条，今日任务增至 9 条。
+- 处理与改进：改用内置 open 的权限参数，隔离目录只接受空目录，最终演练副本使用唯一文件名；不绕过事务、预览或进程校验。继续重新备份和演练后再执行。
+- 代码修改：仅修正受保护备份目录中的执行脚本；维护业务模块及专项测试无变更，其他工作区改动保留。
+- 本地验证：此前等待检查确认 #400 complete；本次维护执行失败而非通过。退出后真实 /api/health 为 ok、worker running，三个 PID 非暂停，正式库旧任务 385/今日 9 条；关联专项 25 项、Ruff 与 Mypy 已通过，不据此宣称正式清理成功。
+- 部署生效：尚未清理正式数据，无工件移动、部署、迁移或重启；短暂暂停后原进程均已恢复。
+- 关联文件或证据：.local-data/backups/review-history-20261109-150338/execute-maintenance.py；终端 TypeError 及真实服务/任务核对。
+- 遗留与下一步：重跑最终备份演练与清理，完成真实 API、逐表内容、外键、目录及服务恢复验收后再收尾。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"failed","deployment_state":"not_deployed"}
+
+### PI-20261109-001｜追加：正式历史清理完成，今日数据保留，真实接口验收通过
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：用户明确授权范围内的本机维护已完成；关联本编号前六条，保留此前拦截和失败事实，不覆盖历史。
+- 现象或目标：保留北京时间 2026-11-09 当天数据，清理零点之前创建的评审任务及关联跟进数据，不动其他业务配置或模块。
+- 原因或分析：任务 #400 自然完成后，真实库变为今日 9 条任务/29 个问题；旧来源仍为 385 条任务/1310 个问题，无跨日复用或保留合并依赖。最终按 UTC 2026-11-08 16:00:00 边界执行，未按处置操作时间误保留旧任务来源。
+- 处理与改进：在核对同项目原 PID、无子进程与无在途工作后，短暂 SIGSTOP 暂停原 API/Worker/monitor，获取写锁探测；重新制作数据库与私有配置成对备份、凭据恢复演练与最终副本清理演练。382 个旧工件目录移至受保护隔离目录，正式事务清理并对 60 表的全部应保留行内容摘要核对，外键及完整性通过后提交；finally SIGCONT 恢复相同 PID，维护窗口约 1.043 秒，无进程重启、代码发布或版本迁移。
+- 代码修改：新增离线维护模块 review_history_cleanup.py 与专项测试 test_review_history_cleanup.py，docs/deployment.md 追加边界、备份、拒绝条件和恢复说明；执行脚本与脱敏证据保存在受保护本地备份目录，不新增 HTTP 或自动清理入口。保留当前全部其他工作区改动，未提交 Git。
+- 本地验证：实际 Ruff、维护模块 Mypy 通过；`.venv/bin/pytest -q backend/tests/test_review_history_cleanup.py backend/tests/test_review_effectiveness.py backend/tests/test_review_quality.py backend/tests/test_review_issues.py` 25 passed（含维护专项 9 项，既有 Starlette 弃用提示）；`git diff --check` 通过。成对备份恢复/解密和两次最终副本演练通过，最终正式提交删除 385 任务、404 尝试、1310 问题、1314 发现出现、2579 问题事件、119 条旧接口反馈、119 条稳定身份反馈、372 本地通知投递、4 补审及其结论/历史诊断等关联记录；未将本地投递记录删除冒充远端撤回。正式库 integrity_check=ok、foreign_key_check=0、schema 仍 51，今天全部保留行与其他表事务内逐内容核验通过。未运行全量业务测试或浏览器视觉测试。
+- 部署生效：本机真实数据库清理已生效，不是仅副本结果。实际 GET /api/health 返回 ok、worker running，原 API/Worker/monitor PID 72328/45948/45837 已恢复；GET /api/jobs 返回今日 #392–#400 共 9 条，GET /api/review-issues 返回 29 条；真实 /api/overview 总任务 9、已完成 9、排队/运行/执行异常/通知失败均 0。真实 /api/review-effectiveness 在 7/30/90 天窗口均为 9 次评审、29 条发现，仅 11-09 趋势非零，问题当前待处理 28、人工修复 1；价值反馈有帮助 3、误报 0、忽略 1、未评价 25。任务/问题创建日期早于边界的记录均 0，今日 9 个工件目录存在。374 条合并事件、2 个项目、398 条任务身份及配置/账号/审计/平台台账等不在删除范围；未调用远端 GitLab、OCR 或飞书清理接口。
+- 关联文件或证据：.local-data/backups/review-history-20261109-150338/execution.json、live-verification.json、artifact-move-plan.json；最终成对备份 app-20261109-151143-730899.db 及其 private.json；final-recovery-check、唯一 final-cleanup-drill 副本及 quarantined-runs。备份根/隔离目录权限 0700、数据库与私有配置备份 0600，旧工件约 3.43 GB 仅移至隔离保留，未声称磁盘空间已释放，不输出凭据或正文。
+- 遗留与下一步：用户刷新列表及首页即可读取新事实，无需为本次数据维护重新构建。合并事件保留幂等历史，既有对账可能提示已清理事件无关联任务；不据此重放旧评审或删除事件。备份/隔离工件尚未永久删除，恢复须另开维护窗口并核对清理后新增数据，不能直接覆盖活动库。本次不是永久统计截止配置，未来人工重新评审旧提交仍会产生新记录。等待正常 monitor 周期并执行本编号累计七条只读核验，不强制同步或扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261109-005｜受理：任务列表显示价值反馈计数并统一整行详情入口
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：改进需求已受理，排查中；关联 PI-20261109-003 的价值反馈与问题处置分离。
+- 现象或目标：用户截图中任务列表仍显示“待处理”数量，希望改为详情中的有帮助、误报、忽略条数；点击整行进入详情，移除仅用于详情入口的操作列，其他类似页面一并处理。
+- 原因或分析：尚待核对列表统计字段、详情反馈口径及其他列表的交互边界，不将跟进问题状态当作价值反馈推算。
+- 处理与改进：先检查现有数据契约和复用列表，再实施反馈计数、整行导航与交互隔离；保留真实编辑、批量选择和危险操作。
+- 代码修改：尚未修改业务代码；仅追加本条受理。保留既有 docs/deployment.md、台账及离线清理模块和测试的工作区变更。
+- 本地验证：尚未运行本事项测试；已读取项目规范。项目引用的 ~/.codex/comment-standards.md 不存在，采用项目中文注释规范。
+- 部署生效：未部署、未重启、未修改业务数据。
+- 关联文件或证据：本轮用户截图与明确需求；后续以实际修改和检查记录为准。
+- 遗留与下一步：核对反馈来源及同类页面，补充组件和浏览器验证；收尾追加事实后执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-005｜追加：反馈计数与同类整行入口实现，主要回归通过
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：代码实现及主要本地回归完成，补充隔离聊天通道验证中；关联本编号受理及 PI-20261109-003。
+- 现象或目标：任务列表不再用跟进问题待处理数代表反馈；移除重复详情列，鼠标整行及键盘 Enter 打开详情，内部选择与动作互不干扰。
+- 原因或分析：原 issue_summary 按最终问题身份去重，与详情逐条发现的价值反馈不是同一集合。反馈须固定当前有效版本，兼容初审镜像、补审主身份及历史修复值，重审排队不能复活旧计数。
+- 处理与改进：增加只读 feedback_summary，按当前发现返回有帮助、误报、忽略、未评价；历史修复归未评价，缺失结论不伪造零。保留问题状态筛选及处置接口。任务、问题、合并前审查、台账记录、优化主题、聊天来源及首页质量样本统一整行详情入口；配置历史增加整行查看差异，保留恢复列；编辑、删除、重试等真实动作列不删除。保护选择框、按钮、链接、展开、文本选择与修饰键，保留返回筛选和表格语义。
+- 代码修改：后端增加 task_feedback_summary.py 并接入任务投影、响应契约；更新前端类型、共享行入口、相关页面和样式，以及 OpenAPI、组件及浏览器测试。未改变 schema、反馈写入或问题处置规则；保留既有离线历史清理等无关改动，未提交 Git。
+- 本地验证：实际 Ruff 全 backend、Mypy 131 源文件、OpenAPI 快照核验通过；pytest 后端全量 778 passed / 1 skipped（外部 OCR 探针），Starlette 弃用提示保留。前端 npm test 最终 38 文件 / 228 项通过，TypeScript、ESLint 和 /tmp/ocr-feedback-counts-dist 隔离构建通过。主要浏览器最终 43 passed / 4 skipped，覆盖任务反馈替换及刷新、批量选择隔离、Enter、1440/1280/768/390/320px 同类列表与返回、问题侧栏和首页样本；4 项聊天测试因需独立夹具跳过，正在单独执行，不计入通过。已目视任务桌面及 320px、修正后的 320px 合并前列表；设计机械检查输出空数组，非无障碍全面认证。
+- 部署生效：未部署，仅构建 /tmp 隔离静态资源；未重启 API、Worker 或 monitor，未迁移或修改真实任务、反馈及问题数据，当前运行入口是否展示新效果未验证。
+- 关联文件或证据：/tmp/ocr-feedback-counts-backend-full.log、ocr-feedback-counts-unit-final.log、ocr-feedback-counts-build-final.log、ocr-feedback-counts-browser-final.log、ocr-feedback-counts-browser-final 截图及设计检查 JSON；对应路径均为临时本地证据。
+- 遗留与下一步：初次前端全量 224 passed / 4 failed 为删除操作列后旧列数断言，已更新复验；初次浏览器 39 passed / 4 failed，涉及合并前长项目名窄屏溢出、侧栏响应式动画未稳定即断言、旧表头预期，修正后上述主要浏览器通过。初次新增测试 Ruff 一处行长已修正。继续验证独立聊天来源行，补充文档及最终收尾记录后核验同步；不将本地通过等同部署生效。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-005｜追加：独立聊天行入口通过，代码与本地验证完成，未部署
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮实现及本地验证完成，部署未执行；关联本编号前两条，保留初次失败及修正事实。
+- 现象或目标：任务列表显示详情中的三类反馈条数，整行进入详情并去除重复操作列，其他同类详情列表统一。
+- 原因或分析：反馈与问题状态必须分离；同一个跟进问题的多条发现分别评价，不能用去重问题数量替代。整行入口不能吞掉选择、恢复、链接或查看时间等独立动作。
+- 处理与改进：维持前条实现，修正合并前长项目名按钮的窄屏换行；任务标题保留原可访问入口名称，聊天来源标题保留显式按钮，来源摘要与优化主题支持整行点击或 Enter。补充前端交互检查文档，说明旧待处理入口展示约定已由本轮覆盖、问题筛选保留及部署边界。
+- 代码修改：已修改后端只读反馈投影和契约、前端相关列表及共享详情行、样式、OpenAPI 和测试/交互说明；无 schema、鉴权、反馈写入、重试或问题处置语义变更。既有历史清理模块、部署说明及其他无关工作区改动保留，未提交 Git。
+- 本地验证：实际 `.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`（131 源文件）、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 通过；`.venv/bin/pytest -q backend/tests` 为 778 passed / 1 skipped，外部 OCR 探针跳过，保留 Starlette 弃用提示。`npm --prefix frontend test` 为 38 文件 / 228 passed；`npm --prefix frontend run lint`、frontend 内 `npx tsc -b` 和 `npx vite build --outDir /tmp/ocr-feedback-counts-dist --emptyOutDir` 通过。普通隔离浏览器最终 43 passed / 4 skipped，随后显式 OCR_BROWSER_CHAT_CAPTURE=1 的独立通道 4 passed，原先跳过的聊天项均实际执行。设计检查 `impeccable detect --json` 对本轮 UI 文件输出 []；git diff --check 已通过，收尾再次检查。完整可执行浏览器命令已追加 docs/frontend-interaction-checks.md，前条日志与截图继续保留。
+- 部署生效：未部署，仅 /tmp 隔离构建，未覆盖 frontend/dist、重启 API/Worker/monitor、迁移数据库或修改真实反馈和任务。当前运行实例的新反馈字段与新页面未验收，前后端须配套发布后生效。
+- 关联文件或证据：/tmp/ocr-feedback-counts-chat-browser.log（4 passed）、ocr-feedback-counts-browser-final.log（43 passed / 4 skipped）、ocr-feedback-counts-backend-full.log、ocr-feedback-counts-unit-final.log、ocr-feedback-counts-build-final.log；本轮已目视任务桌面、320px 任务和修正后的长项目名合并前列表截图。
+- 遗留与下一步：共享 JS 1151.13 kB / gzip 371.41 kB，既有大包告警保留。本轮未验证真实读屏、200% 放大、真实模型/生产负载或独立补审浏览器专项；补审计数由隔离后端验证。等待原 monitor 正常周期，执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-005 --minimum-entries 3` 只读核对三条来源及页面；不强制导入、重启或扩大聊天授权，失败则明确报告未同步而不宣称闭环。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+### PI-20261109-006｜受理：停止旧进程并重启本地全部项目服务
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：运维需求已受理，排查中；关联 PI-20261109-005 的配套发布边界。
+- 现象或目标：用户要求继续处理本地所有服务重启，先停止以前的进程，再提供可重复执行的方法。
+- 原因或分析：当前可见 API、Worker 和 monitor 三个旧进程；仍需核对进程归属、启动配置、队列和静态资源，避免重复 Worker 或中断在途评审。
+- 处理与改进：沿用本实例私有配置及主密钥，核对后仅停止本项目进程，重新构建前端并启动同版服务，检查真实接口和台账同步。
+- 代码修改：尚未修改业务代码；只追加本条受理，保留既有工作区变更。
+- 本地验证：已实际运行进程列表和部署文档检索，尚未执行重启或健康验收；引用的 ~/.codex/comment-standards.md 不存在。
+- 部署生效：尚未停止、构建或重启，不宣称新页面已生效。
+- 关联文件或证据：本轮用户请求；docs/deployment.md、README.md 和本机进程列表。
+- 遗留与下一步：核对服务归属与活动任务后执行维护；收尾追加进展并执行本编号至少两条的只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-006｜追加：旧服务退出、新服务恢复及真实资源检查完成
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本地服务重启完成，收尾核对中；关联本编号受理及 PI-20261109-005。
+- 现象或目标：停止本项目旧 API、Worker、monitor，再以原配置运行当前代码与前端静态资源，避免重复 Worker。
+- 原因或分析：三个旧进程均属于本项目，数据库版本与代码目标同为 51。停止 API 时任务 #405 尚在运行，等待其自然完成后核对执行槽空闲，再停止 Worker 与 monitor。原三个终端随后分别重新拉起新进程，额外启动 API 的尝试因端口占用退出，未继续启动第二套 Worker/monitor。
+- 处理与改进：旧 PID 72328、45948、45837 已确认退出；现 API/Worker/monitor 分别为 89298、89341、89362，启动时间为北京时间 16:38:38、16:38:43、16:38:48。重新核对三个进程工作目录及 OCR_APP_CONFIG_FILE 均指向本实例。沿用私有配置与主密钥，不新增聊天绑定或扩大采集授权。
+- 代码修改：未新增或修改业务代码；只追加本编号台账，保留既有工作区变更。实际执行 npm --prefix frontend run build 更新 frontend/dist，未提交 Git。
+- 本地验证：实际前端 TypeScript 与 Vite 构建通过，保留 1151.13 kB 共享包告警；停止前 PRAGMA quick_check=ok、代码与数据库版本均 51。使用 backup_database、backup_private_config、recovery_drill 完成成对备份及隔离恢复/解密演练。实际 GET /api/health 为 status=ok、worker=running、auth_mode=dev；GET /api/task-search 返回 14 条且均含 feedback_summary，任务 #405 已 complete。首页及其 JS/CSS 返回 200，与本次 frontend/dist 文件逐字节一致。Worker 执行槽 PID 均为 89341 且 idle；monitor 最近维护时间前进、last_error_code 为空。初次 git diff --check 提示本轮受理末尾多余空行，收尾追加后重新核对。未重跑全量业务测试或浏览器交互验收，不沿用此前测试结论冒充本轮运行。
+- 部署生效：本机 127.0.0.1:8781 的 API、Worker、monitor 与当前前端资源已实际生效；未运行独立 Vite，页面由 API 提供。未做数据库迁移、重新生成密钥、直接修改任务或重放历史任务；#405 由旧 Worker 正常完成。未验证外部 GitLab 回调、模型或飞书新投递，不宣称外部链路验收通过。
+- 关联文件或证据：.local-data/backups/local-restart-20261109-163835 中的成对备份及 recovery-drill；.local-data/local/logs/api-local-restart-20261109.log 记录额外 API 启动因端口占用退出。真实接口摘要、进程归属与静态资源对照来自本轮实际命令，不保存凭据或完整外部响应。
+- 遗留与下一步：原终端存在自动重新拉起行为，彻底停止须在对应终端结束启动循环，不能只终止子进程；手动重新启动前先确认旧服务已退出。等待既有 monitor 正常周期，再实际运行 PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-006 --minimum-entries 2；核验失败则明确报告未同步或受阻，不强制导入、不覆盖历史。当前浏览器可刷新读取本次构建。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"unchanged","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261109-007｜受理：规划任务列表的反馈完成与问题处理标识
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：体验改进已受理，排查中；关联 PI-20261109-003、PI-20261109-005。
+- 现象或目标：用户希望截图中“发现 / 价值反馈”区域直接标识是否已标记、反馈完或处理完，无须自行加总计数；本轮请求先规划合适方案。
+- 原因或分析：待核对价值反馈与问题处置的数据口径，避免把“有帮助”当作已修复或把评审执行完成当作人工处理完成。
+- 处理与改进：先读取当前列表、反馈汇总和问题状态，再给出状态定义、列表层级与边界方案。
+- 代码修改：尚未修改业务代码；仅追加本条受理，保留当前已有工作区变更。
+- 本地验证：已实际读取项目约定、规范及台账，运行 git status --short 识别既有变更；尚未运行本事项业务检查，规划阶段不沿用历史测试结论。
+- 部署生效：未部署、未重启、未修改业务数据。
+- 关联文件或证据：用户本轮任务列表截图；后续以实际代码核对记录为准。项目引用的 ~/.codex/comment-standards.md 当前不存在，采用项目中文文档及注释规范。
+- 遗留与下一步：核对数据与展示实现，追加规划结果并执行本编号至少两条的只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-007｜追加：完成双维度状态规划及截图任务只读核对
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮规划完成，界面实施待后续执行；关联本编号受理及 PI-20261109-003、PI-20261109-005。
+- 现象或目标：直接识别反馈进度和问题处理进度，保留反馈构成，无须人工加总。
+- 原因或分析：现有 feedback_summary 已含 total、unmarked 及三类反馈；issue_summary 另含去重问题的开放、修复、忽略、误报及未知计数。complete 表示关联信息完整，不表示人工处理完毕；两个分母不能混用。
+- 处理与改进：新增规划文档，建议在同一单元格增加“待反馈 / 反馈中 / 反馈完成”和“待处理 / 处理中 / 已处理”两个文字标识，分别展示剩余发现与问题数量；注明未知、无发现、部分覆盖、撤销、重新打开及当前有效版本边界，不新增手动完成开关。
+- 代码修改：仅新增 docs/task-completion-indicators-plan.md 并追加本编号台账，未修改业务实现，保留既有工作区改动。
+- 本地验证：实际读取 TaskIssueSummary.tsx、JobsTable.tsx、task_feedback_summary.py、task_issue_summary.py、契约与配置指南；运行 PYTHONPATH=backend .venv/bin/python 的只读 SQLite 脚本，在同一读事务调用 attach_task_facts 核对 #403 和 #394。#403 为 8 条未评价、8 个开放问题；#394 为有帮助 1、未评价 0、人工修复 1、开放 0，两者未知数均 0。仅验证当前快照及规划数据可用性，未运行本轮业务测试、构建或浏览器验证，不沿用既有通过结论。
+- 部署生效：未部署、未重启、未修改真实任务、反馈或问题数据；规划中的新标识尚未在页面生效。
+- 关联文件或证据：docs/task-completion-indicators-plan.md；本轮只读终端摘要与用户截图；未保存凭据、发现正文或完整外部响应。
+- 遗留与下一步：后续实施按文档覆盖反馈及处置独立状态、未知与覆盖边界，并做桌面和窄屏验证。本轮等待独立 monitor 正常周期，运行 PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-007 --minimum-entries 2 核对；未通过则明确报告未同步，不强制导入或扩大聊天采集。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-007｜追加：用户确认方案，开始实施双维度完成标识
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：用户已确认按本编号规划改造，实施中；关联本编号前两条。
+- 现象或目标：列表直接展示反馈进度及问题处置进度，保留现有反馈构成与详情入口。
+- 原因或分析：复用既有反馈和去重问题汇总，不将有帮助等同已修复，不将关联完整等同处置完成。
+- 处理与改进：按规划修改任务摘要、表头和局部布局，验证独立进度、缺失及异常数据、覆盖边界和桌面窄屏。
+- 代码修改：本轮尚未修改业务实现；仅追加本条，保留当前已有工作区变更。
+- 本地验证：已实际运行 git status --short，读取当前摘要、契约、组件及浏览器用例和设计质量要求；本轮测试尚未运行。
+- 部署生效：尚未部署、构建或重启，未修改真实业务数据。
+- 关联文件或证据：用户本轮明确确认；docs/task-completion-indicators-plan.md。
+- 遗留与下一步：实施与验证后追加真实结果，按本编号本轮累计条数核对独立 monitor 同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-007｜追加：双维度完成标识实施及本地验证完成，尚未部署
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：按用户确认的方案完成界面实现及本地验证，部署未执行；关联本编号前三条。
+- 现象或目标：任务列表无需自行加总，直接区分发现是否已反馈及问题是否已处理。
+- 原因或分析：反馈按当前有效发现逐条计数，问题按最终关联身份去重；两个分母不同且互不替代。关联完整不能直接当作处理完成，缺失或矛盾计数不能补零确认完成。
+- 处理与改进：同一单元格增加两个 Ant Design 文字标签，列名改为“发现 / 反馈与处置”；保留发现/级别与三类反馈明细。反馈显示待反馈、反馈中及反馈完成；处置显示待处理、处理中及已处理。缺失与异常显示待核实；部分覆盖、排除或豁免提示仅当前已发现范围；无发现及无结论不绘制人工完成标签。保留整行详情、键盘、选择隔离及筛选返回，窄屏自然换行。
+- 代码修改：修改 TaskIssueSummary.tsx、JobsTable.tsx、task-migration.css，新增 taskCompletion.test.tsx，更新 jobsTable 组件与 taskList/workflows 浏览器用例、配置指南、交互检查及规划状态。复用已有只读汇总，无新增后端实现、写接口、数据库迁移或 Worker 流程；保留其他既有工作区改动，未提交 Git。
+- 本地验证：实际 `npm --prefix frontend test` 为 39 文件 / 250 passed（新增进度专项 22 项；先行两个文件 30 项通过）；`npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-completion-indicators-dist --emptyOutDir` 在 frontend 中通过。指定本机 Chrome 与 OCR_BROWSER_FRONTEND_DIST，实际 `npx playwright test e2e/taskList.spec.ts e2e/workflows.spec.ts --output /tmp/ocr-completion-indicators-browser` 为 15 passed，覆盖 1440/768/390/320px 反馈替换、反馈完成但仍待处理、标记修复、撤销反馈后处置仍完成、刷新、整行导航、选择隔离和相关工作流；已目视桌面及 320px 截图。实际 `.venv/bin/pytest -q backend/tests/test_task_issue_summary.py backend/tests/test_task_feedback_summary.py` 为 9 passed，保留 Starlette 弃用提示。设计机械检查对三个修改 UI 文件输出 []，`git diff --check` 通过。未运行后端全量、独立补审浏览器、真实读屏、200% 放大或真实外部服务验收；组件测试覆盖有效集合新增与合并去重，不冒充真实补审链路验证。
+- 部署生效：未部署；仅生成 /tmp 隔离资源，未覆盖 frontend/dist、未重启 API/Worker/monitor、未修改真实任务、问题及反馈；本机运行页面尚未展示本轮新标识。
+- 关联文件或证据：docs/frontend-interaction-checks.md 中的可执行命令；/tmp/ocr-completion-indicators-unit.log（250 项）、/tmp/ocr-completion-indicators-browser 下四档截图；本轮终端检查结果。共享 JS 1151.13 kB / gzip 371.40 kB，保留既有大包告警。
+- 遗留与下一步：待发布本轮静态资源后核对真实运行入口；当前仅完成代码与本地验证，不宣称部署完成。等待独立 monitor 正常周期，实际运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-007 --minimum-entries 4` 核对本编号四条来源与页面；未通过则明确说明未同步，不强制导入或扩大聊天采集。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-007｜追加：用户要求移除处置标签并按反馈识别详情已处理
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：同一事项交互口径调整已受理，排查中；关联本编号前四条，保留原方案和验证历史。
+- 现象或目标：列表不再显示截图中的“待处理几个问题”标签；详情选择有帮助应表示这条发现已经处理，不再继续以待处理呈现。
+- 原因或分析：此前同时展示反馈进度与跨任务问题处置，用户明确希望简化任务阅读处理口径；需核对初审、补审及筛选入口，避免将阅读反馈错误写成代码已修复。
+- 处理与改进：移除列表独立问题处置标签，详情以当前价值反馈展示发现已处理或待处理；核对并统一相关筛选与有效结论入口。
+- 代码修改：尚未修改本轮业务代码；仅追加本条，保留既有工作区变更。
+- 本地验证：实际运行 git status --short 并读取列表与详情状态实现；尚未运行本轮测试，不沿用前轮通过结论。
+- 部署生效：未部署、未重启、未修改真实反馈或问题状态。
+- 关联文件或证据：用户本轮截图及说明；FindingsPanel.tsx、TaskIssueSummary.tsx 与 JobDetailPage.tsx。
+- 遗留与下一步：明确发现反馈的处理状态展示与初审/补审筛选一致性，实施验证后追加结果，按本编号累计条数执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-007｜追加：移除列表处置标签，详情有反馈即已处理，验证完成
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮口径调整实现及本地验证完成，尚未部署；关联本编号前五条，原双维度方案和测试历史保留，不覆盖。
+- 现象或目标：按用户最新要求，列表不再展示“待处理几个问题”；详情选择有帮助应显示已处理，避免继续被呈现为待处理。
+- 原因或分析：原卡片把独立跟进问题的开放状态附在链接上，与用户对发现已阅读并反馈的处理口径冲突。现将任务发现的处理定义为当前三类反馈之一，代码修复记录仍保存在独立跟进问题中。
+- 处理与改进：列表移除所有独立问题处置标签，恢复“发现 / 价值反馈”表头和原列宽，保留反馈进度与构成。详情增加发现级已处理/待处理 Tag：有帮助、误报和忽略均为已处理，撤销为待处理；处理状态筛选及旧 finding_state=open 直达按同一口径。跟进问题链接只显示编号，不在任务发现中混入修复状态。历史修复反馈仍按未评价，初审与补审有效结论共用规则。
+- 代码修改：修改 TaskIssueSummary.tsx、JobsTable.tsx、FindingsPanel.tsx、FindingActions.tsx、EffectiveReview.tsx 的展示与注释，更新组件、任务列表、工作流、发现及补审浏览器用例与文档。未修改后端业务、反馈接口、SQLite schema 或跨任务问题状态，保留其他既有改动，未提交 Git。
+- 本地验证：实际 `npm --prefix frontend test` 最终 39 文件 / 244 passed；frontend 中 `npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-feedback-handled-dist --emptyOutDir` 通过。指定本机 Chrome 与隔离产物，实际 `npx playwright test e2e/taskList.spec.ts e2e/workflows.spec.ts e2e/findings.spec.ts --output /tmp/ocr-feedback-handled-browser` 为 20 passed；普通服务退出后显式 OCR_BROWSER_REVIEW_RECOVERY=1 运行 `npx playwright test e2e/reviewRecovery.spec.ts --output /tmp/ocr-feedback-handled-recovery-browser` 为 12 passed。覆盖四档列表/详情、有帮助显示已处理、撤销回待处理、反馈替换、刷新、只读权限、跟进记录不被改写及 1280/390/320px 有效补审同口径。已目视 1440px 列表和 320px 详情截图。设计机械检查对五个修改 UI 文件输出 []；git diff --check 最终通过。未修改后端，未重跑后端全量或真实外部服务验收；真实读屏及 200% 放大未运行。
+- 部署生效：未部署；仅生成 /tmp 隔离资源，未覆盖 frontend/dist、未重启 API/Worker/monitor、未修改真实反馈及问题数据。运行实例截图中的旧标签须发布本轮前端资源后才会移除。
+- 关联文件或证据：/tmp/ocr-feedback-handled-unit-final.log（244 项）、ocr-feedback-handled-build-final.log、ocr-feedback-handled-browser.log（20 项）、ocr-feedback-handled-recovery-browser.log（12 项）及对应截图；共享 JS 1151.13 kB / gzip 371.40 kB，保留既有大包告警。
+- 遗留与下一步：首次 TypeScript 因测试误用 Testing Library 的 exact 参数失败，已移除；首次全量 243 passed / 1 failed 为 Ant Design 虚拟选项定位未触发筛选，处理状态选择器关闭无必要的虚拟化后最终全量通过；git diff --check 曾提示摘要文件末尾空行，已修正复验。等待 monitor 正常周期，实际运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-007 --minimum-entries 6` 核对六条来源与页面；失败则明确报告，不强制导入或扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜受理：规划首页与待跟进问题的反馈统一及状态视图简化
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：新的跨页面一致性问题已受理，排查中；关联 PI-20261109-007 的发现有反馈即已处理及 PI-20261109-003 的反馈分离历史。
+- 现象或目标：用户截图中问题状态与反馈价值的误报、忽略计数不一致，待跟进问题也未对应反馈；希望核对原因，并考虑移除问题状态、问题变化两个视图。
++- 原因或分析：尚待核对首页各视图、跟进问题页与反馈来源，不能仅凭截图判定漏存、计算错误或应批量改写历史状态。
+- 处理与改进：先只读检查统计与问题列表的对象、范围和来源，提出统一反馈入口、处理状态、历史记录和首页精简方案，本轮先规划。
+- 代码修改：尚未修改业务代码，仅追加本条受理；保留既有工作区变更。
+- 本地验证：实际运行 git status --short、台账及状态视图检索；尚未进行本轮数据核对或测试，不沿用历史验收结论。
+- 部署生效：未部署、未重启、未修改真实反馈、问题或其他业务数据。
+- 关联文件或证据：用户本轮两张首页截图；QualityOverview.tsx、IssueTrend.tsx 与 ReviewIssuesPage.tsx。
+- 遗留与下一步：核对数据口径后持久化规划及结论，追加收尾记录并运行本编号至少两条只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜追加：确认双状态来源差异，完成统一发现反馈与首页精简规划
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮只读核对与规划完成，业务实施待执行；关联本编号受理及 PI-20261109-007。
+- 现象或目标：首页误报、忽略与待跟进问题一致；按用户当前“有反馈即已处理”的使用方式，评估移除问题状态和问题变化视图。
+- 原因或分析：本机同一批 51 条有效发现中，反馈为有帮助 8、误报 11、忽略 2、未评价 30；跟进处置为开放 46、修复 2、忽略 0、误报 3。11 条误报反馈全部对应开放跟进问题；忽略两条分别对应开放与误报；有帮助八条对应开放六条、人工修复两条。源码确认反馈与跟进状态独立存储，未发现本轮证据支持反馈漏存；问题变化及跟进列表仍读取独立问题对象，与最新发现处理口径冲突。
+- 处理与改进：新增 docs/unified-review-feedback-plan.md，建议首页只保留“评审反馈”及同集合的已处理/待处理进度，移除两个状态页签及处置计数带；“待跟进问题”主流程改为按当前有效 finding 的评审发现列表，筛选、详情反馈、统计及首页下钻同源。核对其他待办、严重级别、项目概况与样本入口；历史修复及审计保留，不批量把反馈转成修复或覆盖多来源混合反馈。当前快照已处理 21、待处理 30，处理完成率约 41%，与有效评价 19/51 明确区分。
+- 代码修改：仅新增规划文档及追加本编号台账，未改业务实现，保留当前既有工作区变更。受理条目“原因或分析”行存在多余前缀，原文保留；本条补齐结构化分析，不修改可能已同步的历史段落。
+- 本地验证：实际读取 QualityOverview.tsx、ReviewIssuesPage.tsx、QualitySamples.tsx、qualityView.ts、review_quality.py、review_effectiveness.py、review_issues.py 及反馈写入来源；运行 PYTHONPATH=backend .venv/bin/python 只读 SQLite 脚本，在单一读事务调用 quality_snapshot 并用 QUALITY_CTE 汇总反馈与问题状态交叉计数，以上快照与用户截图一致。仅核对数据口径与规划可行性，未运行本轮业务测试、构建或浏览器；不得沿用历史通过结论作为本轮结果。
+- 部署生效：未部署、未重启、未修改真实反馈/问题或回填历史；首页与问题页尚未按本规划改造。
+- 关联文件或证据：docs/unified-review-feedback-plan.md；本轮终端脱敏统计，30 天窗口 UTC 2026-10-11 至 2026-11-10（左闭右开），全部项目。未输出发现正文、私有配置或完整外部响应。
+- 遗留与下一步：实施时须一起覆盖共享有效集合、服务端筛选分页、版本冲突、反馈撤销、多来源、旧问题链接和权限，不能只删两个页签。等待 monitor 正常周期后实际运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-008 --minimum-entries 2` 核对受理与规划两条来源，不强制导入、重启或扩大聊天授权；失败则明确说明未同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜追加：用户授权完整实施统一反馈规划
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：用户明确要求按规划全部落地，实施中；关联本编号前两条及 PI-20261109-007。
+- 现象或目标：首页、评审发现列表、任务详情及反馈写入统一当前有效发现口径，消除误报、忽略与处理计数不一致，保留旧修复历史。
+- 原因或分析：需要同时处理共享集合、服务端筛选分页、版本冲突、批量反馈、首页其他待办指标和旧入口，不能只删除两个页签。
+- 处理与改进：先补齐读取与写入契约，再改造前端和历史入口，执行自动化及隔离浏览器验证，完成本机发布与真实入口核对。
+- 代码修改：本轮尚未修改业务代码；仅追加实施记录，保留当前所有既有工作区变更。
+- 本地验证：实际运行 git status --short 并读取统一规划、后端规范及首页页面实现；本轮业务验证尚未运行。
+- 部署生效：尚未部署、未重启、未修改业务数据；后续发布前核对服务与在途任务。
+- 关联文件或证据：用户本轮完整实施授权；docs/unified-review-feedback-plan.md。
+- 遗留与下一步：实施、验证和发布分维度追加事实；收尾按本编号累计条数执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜追加：共享发现契约及主要页面接通，进入完整回归
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：实施中；关联本编号完整实施受理。
+- 现象或目标：首页反馈、发现分页及任务待反馈筛选使用当前有效主身份，同步处理进度，保留历史问题及人工修复事实。
+- 原因或分析：旧首页和问题列表原按不同对象计数；只隐藏图表不足以消除待办入口差异。新写入必须携带稳定身份与冻结版本，部分失败不能覆盖成功项或悄悄刷新目标。
+- 处理与改进：复用 QUALITY_CTE 增加统一发现列表、详情和逐项批量反馈；新增任务 feedback_state，旧 issue_state 保留历史语义。首页移除状态页签与处置计数带，改造待反馈、分级及项目入口；新列表与详情复用反馈和描述控件，保留原问题历史入口。
+- 代码修改：已修改后端共享查询与新接口，前端新发现页、详情、首页与反馈缓存刷新；无数据库迁移或历史状态回填。尚在回归和完善，不宣称完成。
+- 本地验证：实际运行 `.venv/bin/pytest -q backend/tests/test_review_findings_api.py backend/tests/test_review_quality.py`，11 passed；`.venv/bin/mypy backend/ocr_manager` 通过，132 模块；前端 ESLint、TypeScript 首轮通过。首次前端全量 237 passed / 7 failed，失败涉及旧状态页签和旧样本链接验收，正在按新行为补齐；Ruff 报新增长行待修复，尚未通过。未运行本轮完整构建、全量后端或浏览器。
+- 部署生效：尚未发布，未重启真实服务，未写真实发现反馈或问题处置。
+- 关联文件或证据：/tmp/ocr-unified-api-test.log、/tmp/ocr-unified-mypy.log、/tmp/ocr-unified-unit.log、/tmp/ocr-unified-ruff.log；review_findings_api.py 与 ReviewFindingsPage.tsx。
+- 遗留与下一步：完善自动化和冲突交互，完整检查及隔离浏览器后安全发布，核对真实只读计数，再执行同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"failed","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜追加：统一反馈完成本地验收，准备本机发布
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本地实现及回归完成，发布准备中；关联本编号前四条。
+- 现象或目标：统一首页、发现列表、任务详情与任务反馈筛选，反馈保存后同步刷新，保留历史处置与原问题关联。
+- 原因或分析：处理完成率包含忽略，有效评价占比不包含忽略；旧修复反馈仍未评价，不能将历史问题状态转换为反馈。批量选择在刷新后也须冻结来源版本。
+- 处理与改进：新增当前发现列表/详情/批量接口、稳定单项写入、筛选分页与显式窗口；任务摘要复用共享查询。三类反馈及撤销在各页面一致；冲突和失败保留目标输入，批量部分成功仅移除成功项。旧问题编号提供全部关联发现及修复历史，未迁移或批量改写历史数据。
+- 代码修改：统一反馈规划已实现，更新配置指南及 OpenAPI；保留既有工作区变更。新增选中后刷新仍保留旧版本的验证；无数据库结构变化。
+- 本地验证：`.venv/bin/pytest -q backend/tests` 完整回归 781 passed / 1 skipped；新增旧反馈单独撤销后再运行 `backend/tests/test_review_findings_api.py`，4 passed；共享摘要专项 20 passed。Ruff、mypy（132 模块）、OpenAPI 校验、ESLint、TypeScript 通过；前端完整 40 文件 / 248 项通过。隔离构建成功，共享 JS 1143.50 kB / gzip 370.13 kB 左右，仍有既有大包提示，以最终构建日志为准。浏览器主批最终 51 passed / 1 failed，失败为测试未清理前例的有帮助反馈、仍期望待反馈一条；补齐前置清理后，发现与任务列表定向 8 passed，全部失败已复验消除；其余 51 项无失败。补审浏览器 12 passed。实际查看桌面与 390px 列表及首页截图；设计检测结果为空。各批均使用临时 8791 数据库与隔离构建，未调用真实模型/GitLab/飞书。
+- 部署生效：尚未发布。已实际只读核对本机 8781 健康为 ok / dev / Worker running，运行中评审和补审均为 0、排队任务为 0、schema 51；已运行 `.venv/bin/python -m ocr_manager.backup --data-dir .local-data/local --config-file .local-data/local/private.json --output-dir .local-data/backups`，生成成对快照 app-20261109-182225-032688，备份命令通过。
+- 关联文件或证据：/tmp/ocr-unified-backend-final.log、ocr-unified-api-final.log、ocr-unified-unit-final.log、ocr-unified-build-final.log、ocr-unified-browser-final.log、ocr-unified-target-browser.log、ocr-unified-recovery-browser.log、ocr-unified-backup.log；本机仅只读运行状态核对。
+- 遗留与下一步：保持原主密钥和端口，在无在途任务时发布已验收静态产物、重启 API/Worker；monitor 不因同步而重启。发布后只读核对实际页面、同窗计数及服务健康，不在真实业务数据写测试反馈；再追加部署事实并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261109-008｜追加：首轮发布后发现真实长摘要溢出，继续修复验收
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：发布后的真实入口验收中发现边界问题，修复中；关联本编号前五条。
+- 现象或目标：真实发现列表在 390px 下，长摘要按钮把页面宽度撑开；合成短摘要专项未覆盖这个内容边界。
+- 原因或分析：列表旧通用规则 `.compact-list-table .list-cell-content .ant-btn-link` 的 nowrap 优先级高于新摘要规则，长文本未折行。首次真实脚本另因服务继续接收业务、未评价从 34 变为 35，固定计数断言失效；不能将不同时刻快照差异当作漏存。
+- 处理与改进：提高仅发现摘要的局部样式精度，约束宽度并允许自然折行，不改全局按钮规则；补充连续长字符、长项目、长作者及路径的桌面/手机浏览器验收，继续隔离构建后发布静态补丁。
+- 代码修改：已修正摘要样式并新增长内容浏览器场景；无后端或真实反馈写入。
+- 本地验证：首次发布真实 HTTP 逐项核对同窗四类反馈、处理数量、级别及项目合计相等；真实浏览器已读通首页、误报 11 条下钻、详情选中误报及旧问题历史入口。390px 页面宽度实测 1798px，长摘要按钮计算样式为 nowrap，因此本条边界验收未通过。追加修复尚待隔离浏览器复验，不以首轮合成短文本通过替代。
+- 部署生效：首轮已发布静态入口，沿用原配置重启 API 15370 / Worker 15384，健康 ok / dev / running，monitor 89362 保持运行；本次样式补丁尚未发布。原静态包与发布日志保存在受控 releases/unified-feedback-20261109-183149；没有在真实业务数据试写反馈。
+- 关联文件或证据：/tmp/ocr-unified-release.log、ocr-unified-live-browser.log、ocr-unified-mobile-check.mjs 与计算尺寸输出；上一轮五条来源同步核验已实际通过（page 34 / version 5）。
+- 遗留与下一步：修复、定向浏览器和真实长内容复验通过后追加收尾，按累计条数核验来源与页面；当前不能宣称完整闭环。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"failed","deployment_state":"unknown"}
+
+### PI-20261109-008｜追加：统一反馈完整落地，本机发布与真实入口复验完成
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮实现、本地验证及本机部署复验完成；关联本编号前六条，首轮发布暴露的长摘要溢出已修复。
+- 现象或目标：首页与评审发现使用同一反馈集合，有帮助、误报、忽略均为已处理，撤销为待处理；不再用历史问题处置计数表示发现反馈。
+- 原因或分析：真实服务持续产生发现及反馈，验收不能固定使用规划中的 51 条或首轮误报 11 条。最后同窗只读快照为 56 条：有帮助 8、误报 12、忽略 2、未评价 34；已处理 22、待处理 34。动态页面验收读取当时数量，不把跨时刻变化解释为丢失，也未为验收试写真实反馈。
+- 处理与改进：首页精简为评审反馈，新评审发现支持同窗下钻、服务端筛选分页、详情反馈、撤销及显式批量反馈；任务详情和摘要统一口径。版本冲突保留冻结目标与输入，批量部分成功保留失败项；旧问题、人工修复和审计历史继续保留。长摘要使用局部高精度选择器折行，不覆盖全局按钮样式。
+- 代码修改：统一规划及长内容修复已完成，保留原有工作区变更，未提交 Git；没有数据库结构迁移、历史处置回填或批量改写真实反馈。原始规划快照保留，不覆盖历史台账。
+- 本地验证：承接前条的后端全量 781 passed / 1 skipped、后续接口 4 passed、共享摘要 20 passed，前端全量 40 文件 / 248 passed，Ruff、mypy、OpenAPI、TypeScript 及前端检查通过。最后实际运行 `npm --prefix frontend run lint`、`git diff --check` 通过；在 frontend 运行 `npx vite build --outDir /tmp/ocr-unified-feedback-dist --emptyOutDir` 成功，指定本机 Chrome 与该隔离产物运行 `npx playwright test e2e/reviewFindings.spec.ts --output /tmp/ocr-unified-feedback-long-browser`，6 passed，覆盖 1440/390/320px 的反馈、撤销、批量及长连续字符、项目、作者和路径。设计检测四个界面文件输出 []。既有共享包 1143.53 kB / gzip 370.15 kB 的大包告警仍在，未在本轮处理；未运行真实模型、GitLab、飞书写入验收或真实读屏测试。
+- 部署生效：首轮后端发布沿用原配置，API 15370、Worker 15384；最后静态补丁于本机发布，先复制哈希资源再原子替换入口，保留旧资源与上一入口，未再次重启 API/Worker/monitor。真实 8781 返回入口与本地发布产物哈希一致，`/api/health` 为 ok / dev / running。真实浏览器只使用 GET/HEAD，页面错误 0、写请求 0；首页误报 12 条下钻、详情选中误报、旧问题历史入口均通过。390px 下页面宽度与滚动宽度均为 390，无越界元素，已目视真实截图。此结论仅限本机 8781，不代表其他环境部署。
+- 关联文件或证据：/tmp/ocr-unified-long-browser.log、ocr-unified-build-final.log、ocr-unified-lint-patch.log、ocr-unified-design-detect-final.json、ocr-unified-static-patch.log、ocr-unified-live-browser-final.log、ocr-unified-mobile-final.log、ocr-unified-health-final.json、ocr-unified-counts-final.log；受控发布目录 .local-data/releases/unified-feedback-20261109-183149 及 verification 截图。
+- 遗留与下一步：实际只读 SQLite 单事务及 HTTP 同窗核对均通过：四类反馈与列表一致，待反馈严重级别合计 34，项目合计 56，窗口 UTC 2026-10-11 至 2026-11-10（左闭右开）。等待独立 monitor 正常周期后，运行本编号 minimum-entries 7 的只读来源与页面核验；不强制导入、不重启 monitor、不扩大聊天授权，结果以收尾实际输出为准。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261109-008｜追加：修正尚未同步进展的状态枚举并重新核验
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮业务实现与本机部署事实不变，收尾来源同步核验中。
+- 现象或目标：minimum-entries 7 核验返回 check_unavailable，不能据此宣称台账已经闭环。
+- 原因或分析：第六条尚未同步记录使用 deployment_state=unconfirmed，而契约仅支持 not_deployed、confirmed、unknown、not_applicable，解析失败；monitor 脱敏状态为 source_conflict。实际只读核对 improvement_log_imports，网页仍为第 5 版、已导入 5 条，前五条摘要与来源前缀一致，第六条尚未导入，无需覆盖网页事实。
+- 处理与改进：仅将未导入第六条的无效状态字段修正为 unknown，保留该条发布验收未完成的正文，不修改前五条已同步历史，不强制导入或重启 monitor；追加本条说明排查和修正依据。
+- 代码修改：本次只修正未同步台账枚举并追加记录，无业务代码变化；保留原工作区修改。
+- 本地验证：实际运行规定的 minimum-entries 7 命令未通过；直接只读诊断定位到第六条状态字段 ValidationError，查询导入条数 5、前缀摘要一致为 true。先前业务自动化及真实只读页面验收结果不变，不能用它们替代本次同步结果。
+- 部署生效：统一反馈与长摘要补丁已在本机 8781 生效，健康 ok / dev / running，未再次重启服务或修改真实反馈；本次台账修正无需部署业务服务。
+- 关联文件或证据：/tmp/ocr-unified-sync-final.log 的首次失败；improvement_log_parser.py、improvement_contracts.py 及本轮脱敏只读检查输出。
+- 遗留与下一步：等待 monitor 正常周期，实际运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-008 --minimum-entries 8`，以最终命令结果报告同步情况，不宣称语义零遗漏。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261109-009｜受理：发现描述换行、修复建议代码块与复制操作
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：新的前端显示问题已受理，排查中；与现有评审反馈体验相关，关联 PI-20261109-008。
+- 现象或目标：评审发现描述中的换行显示为字面量 `\\n` 或被折叠；修复建议中的 Markdown 围栏未呈现为代码块，用户希望代码有清晰格式及一键复制操作。
+- 原因或分析：尚待确认字段实际存储格式、当前渲染组件与 Markdown 解析边界；不可仅凭截图对所有 `\\n` 做全局替换。
+- 处理与改进：按确认规划核对文本来源和渲染方式，采用安全 Markdown/纯文本兼容显示，代码围栏呈现语言与代码区域，并增加复制反馈；保留不可信正文安全处理。
+- 代码修改：尚未修改本轮业务代码；仅追加本条受理记录，保留当前工作区已有修改。
+- 本地验证：已实际查看台账编号及工作区现状；实现核对和专项验证尚未运行。
+- 部署生效：未部署、未重启、未修改业务数据。
+- 关联文件或证据：用户提供的两张界面截图；待检查发现详情与渲染组件。
+- 遗留与下一步：确认数据形态与依赖后实施，覆盖实际/字面换行、Markdown代码围栏、不可信 HTML、安全链接和复制操作；完成后追加本编号收尾并运行规定的台账只读核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261109-009｜追加：确认字面换行来源形态，代码显示已实现，修复浏览器键盘边界
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：实现完成初轮检查，浏览器边界修复中；关联本编号受理。
+- 现象或目标：分区恢复、建议代码格式及右上角复制在各正文入口一致，复制失败后可直接用键盘重试。
+- 原因或分析：只读 SQLite 核对 #1362，实际换行 0、字面 `\n` 3，均在分区标签前；旧组件仅解析单反引号行内代码。未确认上游具体引入环节。浏览器首轮发现复制期间 disabled 导致焦点丢失，失败后 Enter 无法重试；既有浏览器断言另因 Markdown 列表新增段落节点需要收窄定位。
+- 处理与改进：明确标签前且位于代码/引文外的字面分隔符只读兼容，使用 react-markdown 安全节点渲染，不执行 HTML、不请求图片、限制链接；新增 Ant Design 代码复制、局部滚动及读屏状态。复制改为 loading 与在途锁保留焦点，旧段落断言限定直接正文。首轮测试暴露过转义识别表达式错误，已以专项验证修正；全局转义替换方案已收窄，不改写代码字符串。
+- 代码修改：已修改共享正文与分区/代码保护、样式和对应测试，新增代码组件、Markdown 依赖及显示约定；接入合并前与保留初审正文。保留原有工作区变更。
+- 本地验证：最新焦点修复前实际 ESLint、TypeScript、隔离构建通过，40 文件/257 项单测通过（描述专项 47 项）。首轮 14 项浏览器中存在失败，尚未通过，不能以初版 5 项浏览器或单测通过替代最终复验。设计机械检查 []，git diff --check 通过。后端未修改，未运行后端全量；未运行真实读屏。
+- 部署生效：未部署；仅生成 /tmp 隔离构建并在临时 SQLite/8791 验证，未覆盖 frontend/dist、未重启真实 API/Worker/monitor、未修改真实正文或反馈。
+- 关联文件或证据：docs/finding-content-display.md；/tmp/ocr-finding-markdown-unit-final.log、ocr-finding-markdown-build.log、ocr-finding-markdown-browser.log 与隔离失败追踪；本轮脱敏 SQLite 计数。
+- 遗留与下一步：重新构建并复验焦点、复制内容、桌面/手机及共享入口，追加最终结果后按本编号累计条数运行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"failed","deployment_state":"not_deployed"}
+
+### PI-20261109-009｜追加：换行与代码复制实现完成，本地验收通过，未部署
+
+- 记录日期：2026-11-09（北京时间）。
+- 类型与进展：本轮代码与本地验证完成，部署未执行；关联本编号前两条，保留失败及修复过程。
+- 现象或目标：明确标签前字面换行正常分区，修复建议的代码具有独立等宽区域、语言标记与右上角复制，桌面和手机可阅读及操作。
+- 原因或分析：已确认 #1362 原文为三个字面换行而非真实换行，旧组件不解析 Markdown 围栏；上游具体额外转义环节仍未确认。兼容处理只作用于代码/引用之外的明确标签分隔符，不对所有字符串解码，不写回原文。
+- 处理与改进：使用 react-markdown 安全节点渲染，保留旧分区和中文编号，支持 Markdown 段落、加粗、列表、行内代码及围栏；HTML 作为文字、图片不请求、危险链接不可点击。代码区域保留缩进和转义，长行局部滚动；Ant Design 复制按钮显示成功/失败、保持键盘焦点、在途锁防重复，复制不带围栏。共享正文用于初审、有效补审、保留初审、历史对比、发现抽屉、问题侧栏及合并前详情。未增加语法高亮或自动执行代码。
+- 代码修改：已修改 FindingDescription.tsx、findingContent.ts、findingLists.ts、findings.css、PremergeDetail.tsx 与 EffectiveReview.tsx 的正文入口，新增 FindingCodeBlock.tsx；新增 Markdown 依赖和锁文件、findingMarkdown.spec.ts，补充描述专项及原发现浏览器用例。新增 docs/finding-content-display.md 和交互检查入口。保留其他既有工作区修改，未提交 Git。
+- 本地验证：实际最终 `npm test`（frontend）40 文件/258 passed，描述专项 48 passed；`npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-finding-markdown-dist --emptyOutDir` 通过。指定本机 Chrome、OCR_BROWSER_FRONTEND_DIST 后最终 `npx playwright test e2e/findingMarkdown.spec.ts e2e/findings.spec.ts e2e/reviewFindings.spec.ts --output /tmp/ocr-finding-markdown-browser-final` 为 15 passed，覆盖 1440/768/390/320px、局部滚动、精确复制、失败与键盘重试、旧列表/反馈和合并前失败仍展示代码建议。此前串行 OCR_BROWSER_REVIEW_RECOVERY=1 执行 `npx playwright test e2e/reviewRecovery.spec.ts --output /tmp/ocr-finding-markdown-recovery-browser` 为 12 passed；其后仅调整链接样式和围栏与旧编号共处的分块兼容，已由最终单测及主浏览器复验，补审专项未再次重跑。已目视桌面与 320px 代码截图；设计机械检查 []；git diff --check 通过。安装依赖时审计 0 vulnerabilities，但不等于完整安全审计；保留既有约 1143.67 kB/gzip 370.19 kB 共享包提示，正文分块约 128.52 kB/gzip 40.53 kB。未运行后端全量、真实外部服务、物理手机或真实读屏测试。
+- 部署生效：未部署；仅使用 /tmp 静态产物、临时 SQLite 与 8791。未覆盖 frontend/dist，未重启真实 API、Worker 或 monitor，未修改真实发现正文、反馈或跟进状态；当前业务页面须发布新静态资源后才会采用本轮渲染。
+- 关联文件或证据：docs/finding-content-display.md 的可执行复验命令；/tmp/ocr-finding-markdown-unit-final.log、ocr-finding-markdown-build-final.log、ocr-finding-markdown-browser-final.log、ocr-finding-markdown-recovery-browser.log 及对应截图。首轮浏览器 7 passed/7 failed，焦点及旧段落定位修正后最终失败消除，不隐去历史。
+- 遗留与下一步：本地实现已交付，部署与真实入口核验尚未执行；上游转义来源如需治理应另以原始工件与入库投影对照定位，不批量改写历史正文。本编号前两条已实际通过只读同步核验（page 35/version 2）。等待 monitor 正常周期后运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261109-009 --minimum-entries 3`，以实际输出报告最终同步，不强制导入或扩大聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261110-001｜受理：任务列表增加反馈状态快捷筛选
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：阶段改进；已受理，排查中。
+- 关联记录：PI-20261109-007、PI-20261109-008。
+- 现象或目标：用户希望在任务列表顶部状态栏增加反馈状态入口，直接筛出待处理、待反馈的任务。
+- 原因或分析：现有页面已有发现反馈下拉条件，但顶部仅展示评审执行状态；需核对快捷入口与持久化反馈的筛选口径。
+- 处理与改进：沿用当前有效发现的反馈定义，检查后端筛选、列表统计、URL 与分页，再实现顶部直接筛选。
+- 代码修改：本轮尚未修改业务代码；仅追加受理记录，保留工作区既有变更。
+- 本地验证：实际运行 `git status --short` 并读取任务页面、筛选组件、规范及台账；尚未运行本轮测试。全局注释规范文件 `~/.codex/comment-standards.md` 不存在，按仓库中文注释规范执行。
+- 部署生效：未部署、未重启、未修改真实反馈或任务数据。
+- 关联文件或证据：用户本轮截图；frontend/src/pages/JobsPage.tsx、frontend/src/pages/TaskFilters.tsx。
+- 遗留与下一步：实现、验证后追加事实；收尾执行本编号至少两条的只读来源与页面同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}

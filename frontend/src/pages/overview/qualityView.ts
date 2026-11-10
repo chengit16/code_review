@@ -36,17 +36,14 @@ export function qualityBuckets(rows: ReviewQuality["trend"], days: number) {
   return result;
 }
 
-/** 保留首页范围与显式 UTC 窗口，样本筛选进入地址栏并可前后退。 */
+/** 保留项目与显式 UTC 窗口，数量下钻进入同集合发现列表。旧处置参数不映射为反馈。 */
 export function qualitySampleHref(params: URLSearchParams, quality: ReviewQuality,
-  filters: { feedback?: FeedbackKind; status?: string; category?: string; repositoryId?: number } = {}) {
-  const next = new URLSearchParams(params);
-  for (const key of [...next.keys()]) if (key.startsWith("sample_")) next.delete(key);
-  next.set("sample_open", "1");
-  next.set("sample_since", quality.since);
-  next.set("sample_until", quality.until);
-  if (filters.feedback) next.set("sample_feedback", filters.feedback);
-  if (filters.status) next.set("sample_status", filters.status);
-  if (filters.category) next.set("sample_category", filters.category);
-  if (filters.repositoryId) next.set("sample_repository", String(filters.repositoryId));
-  return `?${next}`;
+  filters: { feedback?: FeedbackKind; status?: string; handling?: "all" | "pending" | "handled"; severity?: string; category?: string; repositoryId?: number } = {}) {
+  const next = new URLSearchParams({ handling: filters.handling ?? "all", since: quality.since, until: quality.until });
+  const repository = filters.repositoryId ? String(filters.repositoryId) : params.get("repository_id");
+  if (repository) next.set("repository_id", repository);
+  if (filters.feedback) next.set("feedback", filters.feedback);
+  if (filters.category) next.set("category", filters.category);
+  if (filters.severity) next.set("severity", filters.severity);
+  return `/findings?${next}`;
 }

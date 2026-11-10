@@ -22,7 +22,7 @@ function setup(canEdit = false, initialFailure = false) {
     }
     if (path === "/api/overview") return new Response(JSON.stringify(dataFailure ? { detail: "合成概览失败" } : overview), { status: dataFailure ? 503 : 200 });
     if (path === "/api/repositories") return new Response("[]");
-    return new Response(JSON.stringify(dataFailure ? { detail: "合成效果失败" } : { days: 30, summary: { reviews: 0, failed_reviews: 0, new_issues: 0, fixed: 0, generated: 0, published: 0, new_still_open: 0, open_now: 0, ignored: 0, feedback_marked: 0, false_positive: 0 }, trend: [{ day: "2026-11-08", new: 2, fixed: 1 }], categories: [], projects: [] }), { status: dataFailure ? 503 : 200 });
+    return new Response(JSON.stringify(dataFailure ? { detail: "合成效果失败" } : { days: 30, quality: { summary: { total: 2, helpful: 0, false_positive: 0, ignored: 0, unmarked: 2 }, trend: [{ day: "2026-11-08", total: 2, helpful: 0, false_positive: 0, ignored: 0, unmarked: 2 }], since: "2026-10-11 00:00:00", until: "2026-11-10 00:00:00", categories: [], projects: [], unavailable_sources: 0 }, summary: { reviews: 0, failed_reviews: 0, new_issues: 0, fixed: 0, generated: 0, published: 0, new_still_open: 0, open_now: 0, ignored: 0, feedback_marked: 0, false_positive: 0 }, trend: [{ day: "2026-11-08", new: 2, fixed: 1 }], categories: [], projects: [] }), { status: dataFailure ? 503 : 200 });
   });
   render(<DesignProvider><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><OverviewPage token="" canEdit={canEdit} /></MemoryRouter></QueryClientProvider></DesignProvider>);
   return { fail: () => { failing = true; }, failData: () => { dataFailure = true; }, delay: () => { delay = new Promise<void>((resolve) => { release = resolve; }); }, release: () => release?.() };
@@ -31,8 +31,8 @@ function setup(canEdit = false, initialFailure = false) {
 it("首次读取不以未知健康和未返回计数伪装零态", async () => {
   setup();
   expect(screen.getByText(/Worker 正在检测/)).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "评审质量与处置" })).not.toBeInTheDocument();
-  await screen.findByRole("heading", { name: "评审质量与处置" });
+  expect(screen.queryByRole("heading", { name: "评审反馈" })).not.toBeInTheDocument();
+  await screen.findByRole("heading", { name: "评审反馈" });
 });
 
 it("健康首次失败无缓存时明确无检测记录，其他资源正常展示", async () => {
@@ -44,9 +44,8 @@ it("健康首次失败无缓存时明确无检测记录，其他资源正常展�
 
 it("概览与效果刷新失败分别保留旧数据，不更新它们的成功读取时间", async () => {
   const control = setup();
-  await screen.findByRole("heading", { name: "评审质量与处置" });
-  await userEvent.click(screen.getByText("问题变化", { exact: true }));
-  await screen.findByRole("button", { name: "查看趋势数据" });
+  await screen.findByRole("heading", { name: "评审反馈" });
+
   const dataRead = screen.getByText(/运行数据 · 成功读取于/).textContent;
   control.failData();
   await userEvent.click(screen.getByRole("button", { name: "刷新概览" }));
@@ -85,14 +84,13 @@ it("手动刷新延迟时禁止重复请求，完成后解锁并保留成功读�
 
 it("趋势表默认折叠，键盘可展开读取与图表同源的精确数据", async () => {
   setup();
-  await screen.findByRole("heading", { name: "评审质量与处置" });
-  await userEvent.click(screen.getByText("问题变化", { exact: true }));
-  const button = await screen.findByRole("button", { name: "查看趋势数据" });
+  await screen.findByRole("heading", { name: "评审反馈" });
+  const button = await screen.findByRole("button", { name: "查看反馈数据" });
   expect(button).toHaveAttribute("aria-expanded", "false");
   button.focus();
   await userEvent.keyboard("{Enter}");
   expect(button).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByRole("table", { name: "问题变化数据（UTC）" })).toBeVisible();
+  expect(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
   expect(screen.getByRole("cell", { name: "2026-11-08" })).toBeVisible();
 });
 

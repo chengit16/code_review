@@ -54,7 +54,7 @@ export function IssueDetailDrawer({ token, id, canEdit, batchPending, onSelect }
     styles={{ body: { padding: 0 } }} keyboard={!busy && !confirming} mask={{ closable: !busy && !confirming }}
     onClose={() => { if (!busy && !confirming) onSelect(null); }} extra={<Button disabled={busy || confirming} onClick={() => onSelect(null)}>关闭</Button>}>
     <div className="issue-drawer-body"><QueryState loading={detail.isLoading} error={detail.error} onRetry={() => void detail.refetch()} />
-      {issue && <><div className="issue-detail-head"><span>{issue.repository_name} · {labels[issue.status]}</span><span>{formatSeverity(issue.severity)} · {formatCategory(issue.category)}</span></div><p className="mono file-path">{issue.path}</p><FindingDescription content={issue.content} />
+      {issue && <><p>历史处置与价值反馈分别保留。<Link to={`/findings?handling=all&issue_id=${issue.id}`}>查看此问题关联的全部当前发现</Link>，不以单条反馈代表整组。</p><div className="issue-detail-head"><span>{issue.repository_name} · {labels[issue.status]}</span><span>{formatSeverity(issue.severity)} · {formatCategory(issue.category)}</span></div><p className="mono file-path">{issue.path}</p><FindingDescription content={issue.content} />
         {issue.merged_into_id && <p>已并入问题 <button className="text-link" onClick={() => onSelect(issue.merged_into_id)}>#{issue.merged_into_id}</button></p>}
         {canEdit && issue.status !== "merged" && <div className="issue-actions"><IssueStateActions index={0} issueId={issue.id} issueStatus={issue.status} canSubmit={!busy} groupLabel={`问题 ${id} 的当前状态`} onDisposition={(input) => change.mutateAsync(input)} onConfirmationChange={setConfirming} /></div>}
         {(change.error || merge.error) && <p className="form-error" role="alert">{(change.error || merge.error)?.message}</p>}

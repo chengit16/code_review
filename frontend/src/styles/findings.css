@@ -18,8 +18,10 @@
 .finding-description-section h3 { display: flex; gap: var(--space-2); align-items: baseline; margin: 0; color: var(--color-muted); font-size: 13px; line-height: 1.9; }
 .finding-section-number { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .finding-description p { margin: 0; max-inline-size: 100ch; font-size: 14px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-description a { color: var(--color-accent-text); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.finding-description a:focus-visible, .finding-code-block pre:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .finding-text-blocks { display: grid; gap: var(--space-3); min-width: 0; }
-.finding-text-blocks li > span { white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-text-blocks li > span, .finding-text-blocks li > div { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .comparison-finding { display: grid; gap: var(--space-3); min-width: 0; padding-block: var(--space-4); border-top: 1px solid var(--color-border); }
 .comparison-finding > strong { overflow-wrap: anywhere; }
 .issue-detail-drawer .finding-description { margin-block: var(--space-6); }
@@ -27,11 +29,22 @@
 .finding-ordered-list { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; font-size: 14px; line-height: 1.9; }
 .finding-ordered-list li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2); }
 .finding-list-marker { font-variant-numeric: tabular-nums; }
+.finding-description .finding-markdown-list { display: block; margin: 0; padding-inline-start: 1.5em; list-style: revert; font-size: 14px; line-height: 1.9; }
+.finding-description .finding-markdown-list li { display: list-item; white-space: normal; overflow-wrap: anywhere; }
+.finding-description .finding-markdown-list li + li { margin-top: var(--space-2); }
 .finding-description-section[data-tone="consequence"] { background: var(--color-warning-soft); }
 .finding-description-section[data-tone="consequence"] h3 { color: var(--color-warning); }
 .finding-description-section[data-tone="suggestion"] { background: var(--color-accent-soft); }
 .finding-description-section[data-tone="suggestion"] h3 { color: var(--color-accent-text); }
 .finding-description code { padding: 1px var(--space-1); border-radius: 3px; background: var(--color-surface-subtle); color: var(--color-ink); font-size: .92em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.finding-code-block { position: relative; min-width: 0; max-width: 100%; margin: 0; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+.finding-code-block figcaption { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 40px; padding-inline: var(--space-3); border-bottom: 1px solid var(--color-border); color: var(--color-muted); font-size: 12px; }
+.finding-code-block figcaption > span { min-width: 0; overflow-wrap: anywhere; }
+.finding-code-block figcaption .ant-btn { min-height: 36px; flex-shrink: 0; }
+.finding-code-block pre { max-width: 100%; margin: 0; padding: var(--space-4); overflow: auto; color: var(--color-ink); font: 13px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
+.finding-description .finding-code-block pre code { padding: 0; background: transparent; color: inherit; font: inherit; white-space: pre; overflow-wrap: normal; }
+.finding-code-copy-status { display: block; min-height: 0; padding-inline: var(--space-3); color: var(--color-muted); font-size: 12px; }
+.finding-code-copy-status:not(:empty) { padding-bottom: var(--space-2); }
 .finding-card .finding-footer { flex-wrap: wrap; gap: var(--space-4); padding: var(--space-4) var(--space-6); }
 .finding-card .finding-issue-link { margin: 0; line-height: 1.8; }
 .finding-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }

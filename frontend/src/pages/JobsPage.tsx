@@ -55,6 +55,13 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
     applyFilters(next);
   }
   function detailPath(id: number) { return `/jobs/${id}${params.size ? `?${params}` : ""}`; }
+  function quickFeedback(value: string) {
+    const next = new URLSearchParams(params);
+    next.delete("page");
+    if (params.get("feedback_state") === value) next.delete("feedback_state");
+    else next.set("feedback_state", value);
+    applyFilters(next);
+  }
   return <div className="page jobs-migration"><PageHeader title="评审任务" subtitle="查看评审进度、问题处理与通知状态。" actions={
     <Button aria-label="刷新任务" icon={<RefreshCw size={18} />} disabled={batchPending} loading={jobs.isFetching} onClick={() => void jobs.refetch()}>刷新</Button>
   } />
@@ -63,7 +70,16 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
         const active = (params.get("view") ?? params.get("status") ?? "") === value;
         const count = jobs.isSuccess ? jobs.data.status_counts?.[value || "total"] : undefined;
         return <Button key={value || "all"} size="small" type={active ? "primary" : "default"} aria-pressed={active} disabled={batchPending} onClick={() => quickFilter(value)}>{label} <span className="jobs-status-count">{count ?? "—"}</span></Button>;
-      })}<Dropdown disabled={batchPending} menu={{ items: [["skipped", "已跳过"], ["cancelled", "已取消"]].map(([key, label]) => ({ key, label: `${label} ${jobs.isSuccess ? jobs.data.status_counts?.[key] ?? "—" : "—"}` })), onClick: ({ key }) => quickFilter(key) }}><Button size="small">更多状态</Button></Dropdown></div>
+      })}<Dropdown disabled={batchPending} menu={{ items: [["skipped", "已跳过"], ["cancelled", "已取消"]].map(([key, label]) => ({ key, label: `${label} ${jobs.isSuccess ? jobs.data.status_counts?.[key] ?? "—" : "—"}` })), onClick: ({ key }) => quickFilter(key) }}><Button size="small">更多状态</Button></Dropdown>
+        <div className="jobs-feedback-filters" role="group" aria-label="反馈状态快捷筛选">
+          <span className="jobs-feedback-label">反馈状态</span>
+          {[["pending", "待反馈"], ["handled", "已反馈"]].map(([value, label]) => {
+            const active = params.get("feedback_state") === value;
+            const count = jobs.isSuccess ? jobs.data.feedback_counts?.[value] : undefined;
+            return <Button key={value} size="small" type={active ? "primary" : "default"} aria-pressed={active} title={value === "pending" ? "仍有发现未反馈的任务，包含部分已反馈" : "当前发现已全部反馈的任务"} disabled={batchPending} onClick={() => quickFeedback(value)}>{label} <span className="jobs-status-count">{count ?? "—"}</span></Button>;
+          })}
+        </div>
+      </div>
       <TaskFilters params={params} repositories={repositories.data ?? []} repositoriesKnown={repositories.isSuccess} disabled={batchPending} onApply={applyFilters} />
       <ReadFeedback name="项目筛选" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} />
     <ReadFeedback name="任务" loading={false} error={jobs.error} onRetry={() => void jobs.refetch()} />

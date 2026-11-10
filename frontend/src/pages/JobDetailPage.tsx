@@ -1,9 +1,11 @@
 /** @description 展示单次 OCR 评审的覆盖、发现和可重跑状态。 */
 
+import { Button } from "antd";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, RotateCcw, Send } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { setFindingFeedback } from "../api/reviewConclusions";
 import { apiRequest } from "../api/client";
 import { downloadTaskReport } from "../api/tasks";
 import type { ReviewJobDetail } from "../api/types";
@@ -55,10 +57,10 @@ function JobDetail({ token, canEdit }: {
   const retry = useMutation({ mutationFn: () => apiRequest<{ job_id: number }>(token, `/api/jobs/${id}/retry`, { method: "POST" }), onSuccess: (result) => { void queryClient.invalidateQueries({ queryKey: ["job", id] }); void queryClient.invalidateQueries({ queryKey: ["jobs"] }); void queryClient.invalidateQueries({ queryKey: ["overview"] }); void queryClient.invalidateQueries({ queryKey: ["job-neighbors"] }); if (result.job_id !== Number(id)) navigate(`/jobs/${result.job_id}${back.startsWith("/jobs?") ? back.slice(5) : ""}`, { state: { back } }); } });
   const resend = useMutation({ mutationFn: () => apiRequest<unknown>(token, `/api/jobs/${id}/notification/retry`, { method: "POST" }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["job", id] }) });
   const feedback = useMutation({
-    mutationFn: ({ index, verdict }: { index: number; verdict: FindingFeedbackChoice | null }) => apiRequest<unknown>(token, `/api/jobs/${id}/feedback/${index}`, verdict ? { method: "PUT", body: JSON.stringify({ verdict }) } : { method: "DELETE" }),
+    mutationFn: ({ index, verdict, sourceAttempt }: { index: number; verdict: FindingFeedbackChoice | null; sourceAttempt: number }) => setFindingFeedback(token, Number(id), `j${id}:a${sourceAttempt}:c${index}`, { source_attempt: sourceAttempt, revision: 0 }, verdict),
     onSuccess: async () => {
       // 反馈不改变问题处置；刷新发现评价及同源统计，避免旧评价留在缓存。
-      await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness", "overview"].map((key) =>
+      await Promise.all(["jobs", "job-neighbors", "job", "review-feedback-summary", "review-issues", "review-issue", "review-effectiveness", "overview", "review-findings", "review-finding"].map((key) =>
         queryClient.invalidateQueries({ queryKey: [key] })));
     },
   });
@@ -81,6 +83,7 @@ function JobDetail({ token, canEdit }: {
     } />
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     {(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
+    {feedback.error && <p role="alert">反馈未保存，操作版本与输入已保留，请刷新核对后重新选择。<span>保留目标 j{id}:a{feedback.variables?.sourceAttempt}:c{feedback.variables?.index} · 版本 {feedback.variables?.sourceAttempt}/0 · 反馈 {feedback.variables?.verdict ?? "撤销"}。</span><Button onClick={async () => { await query.refetch(); feedback.reset(); }}>刷新并重新核对</Button></p>}
     {job && <>
       <section className="detail-summary job-summary-card">
         <div><span>评审状态</span><Status value={job.effective_status ?? job.status} /></div>
@@ -104,7 +107,7 @@ function JobDetail({ token, canEdit }: {
       {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
       {job.error && <div className="detail-error" role="alert">{job.error}<p>{["configuration", "ocr_configuration"].includes(job.failure_stage ?? "") ? <Link to="/settings?tab=model">检查模型配置 →</Link> : <Link to="/repositories">打开项目配置，查看接入诊断 →</Link>}</p></div>}
       <section id="job-result" className="job-detail-region" aria-label="评审结论与发现">
-        {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} initialIssueState={openFindings ? "open" : "all"} /> : <FindingsPanel initialIssueState={openFindings ? "open" : "all"} comments={comments} feedback={job.feedback} issueIds={issueIds} issueStatuses={issueStatuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict })} />}
+        {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} initialIssueState={openFindings ? "open" : "all"} /> : <FindingsPanel initialIssueState={openFindings ? "open" : "all"} comments={comments} feedback={job.feedback} issueIds={issueIds} issueStatuses={issueStatuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending || Boolean(feedback.error)} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict, sourceAttempt: job.attempts })} />}
       </section>
       <section id="job-execution" className="job-detail-region" aria-label="失败与补审">
         <JobExecution job={job} />

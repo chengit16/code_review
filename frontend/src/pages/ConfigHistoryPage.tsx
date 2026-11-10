@@ -72,7 +72,7 @@ export function ConfigHistoryPage({ token }: { /** 内存中的管理口令。 *
       {dateError && <p role="alert">{dateError}</p>}{feedback && <p role="status">{feedback}</p>}
       <QueryState loading={history.isLoading} error={history.error || objects.error || restore.error} onRetry={() => { void history.refetch(); void objects.refetch(); }} />
       <p className="form-note">凭据只展示是否变更；恢复不改变模型启用状态，也不保证历史凭据仍然有效。</p>
-      <ListTable rowKey="id" dataSource={history.data?.items ?? []} loading={history.isFetching} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: history.error ? "无法读取配置历史" : "暂无配置版本" }} columns={[
+      <ListTable onOpenRow={setDetail} rowLabel={(revision) => `查看版本 ${revision.id}`} rowKey="id" dataSource={history.data?.items ?? []} loading={history.isFetching} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: history.error ? "无法读取配置历史" : "暂无配置版本" }} columns={[
         { title: "版本 / 动作", key: "version", width: 120, render: (_, revision) => <>#{revision.id}<span className="list-secondary">{actions[revision.action] ?? revision.action}</span></> },
         { title: "对象", key: "object", width: 200, render: (_, revision) => <>{objects.data?.find((item) => item.id === revision.object_id)?.name ?? (objects.isSuccess ? `已删除对象 #${revision.object_id}` : `对象 #${revision.object_id} · 名称待确认`)}<span className="list-secondary">{kinds.find((item) => item.value === kind)?.label}</span></> },
         { title: "操作人", dataIndex: "actor", key: "actor", width: 130 },

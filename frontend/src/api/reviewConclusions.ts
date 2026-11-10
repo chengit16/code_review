@@ -86,5 +86,6 @@ export interface FindingFeedbackRecord {
 
 /** 按稳定主身份写反馈；删除同样要求源版本，不接受聚合数组下标。 */
 export function setFindingFeedback(token: string, jobId: number, findingId: string, version: FindingFeedbackVersion, verdict: FindingFeedbackWrite["verdict"] | null) {
-  return apiRequest(token, `/api/jobs/${jobId}/finding-feedback/${findingId}${verdict ? "" : `?source_attempt=${version.source_attempt}&revision=${version.revision}`}`, verdict ? { method: "PUT", body: JSON.stringify({ ...version, verdict }) } : { method: "DELETE" });
+  const identifier = encodeURIComponent(findingId);
+  return apiRequest(token, `/api/jobs/${jobId}/finding-feedback/${identifier}${verdict ? "" : `?source_attempt=${version.source_attempt}&revision=${version.revision}`}`, verdict ? { method: "PUT", body: JSON.stringify({ ...version, verdict }) } : { method: "DELETE" });
 }

@@ -1,4 +1,4 @@
-/** @description 列表只展示可信结论，未知关联、部分覆盖和失败不冒充全部已处置或零发现。 */
+/** @description 列表反馈按发现计数，不由问题处置推断；保留覆盖和加载边界。 */
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it } from "vitest";
@@ -9,7 +9,7 @@ import { JobsTable } from "../pages/jobs/JobsTable";
 
 const summary: NonNullable<ReviewJob["issue_summary"]> = {
   available: true, finding_count: 1, highest_severity: "high",
-  open_count: 0, fixed_count: 0, ignored_count: 1, unknown_count: 0,
+  open_count: 0, fixed_count: 0, ignored_count: 1, false_positive_count: 0, unknown_count: 0,
   complete: true, no_findings: false, coverage_complete: true, coverage_limited: false,
 };
 
@@ -18,6 +18,7 @@ const job: ReviewJob = {
   commit_sha: "a".repeat(40), ordinal: 0, status: "complete", error: null, attempts: 1,
   created_at: "2026-01-01 00:00:00", finished_at: "2026-01-01 00:00:01",
   issue_summary: summary,
+  feedback_summary: { available: true, total: 1, helpful: 1, false_positive: 0, ignored: 0, unmarked: 0 },
 };
 
 function show(item: ReviewJob) {
@@ -27,16 +28,20 @@ function show(item: ReviewJob) {
   </MemoryRouter></DesignProvider>);
 }
 
-it("人工忽略计入已处置，不误写为全部已修复", () => {
+it("问题被忽略仍按独立价值反馈展示，只保留反馈完成状态", () => {
   show(job);
-  expect(screen.getByText(/全部已处置 · 忽略 1/)).toBeVisible();
+  expect(screen.getByText("有帮助 1 · 误报 0 · 忽略 0")).toBeVisible();
+  expect(screen.getByLabelText("反馈进度：反馈完成 1/1")).toBeVisible();
+  expect(screen.queryByLabelText(/^问题处置/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("columnheader", { name: "操作" })).not.toBeInTheDocument();
   expect(screen.queryByText(/修复 1/)).not.toBeInTheDocument();
 });
 
-it("缺失关联显示待核实，不显示全部已处置", () => {
-  show({ ...job, issue_summary: { ...summary, complete: false, unknown_count: 1 } });
-  expect(screen.getByText(/状态待核实/)).toBeVisible();
-  expect(screen.queryByText(/全部已处置/)).not.toBeInTheDocument();
+it("缺失反馈投影显示待核实，不将问题忽略数当作反馈", () => {
+  show({ ...job, feedback_summary: undefined, issue_summary: { ...summary, complete: false, unknown_count: 1 } });
+  expect(screen.getByText("反馈待核实")).toBeVisible();
+  expect(screen.queryByLabelText(/^问题处置/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/已处理/)).not.toBeInTheDocument();
 });
 
 it("部分覆盖零发现不显示本次未发现问题", () => {

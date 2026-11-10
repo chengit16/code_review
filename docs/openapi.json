@@ -83,6 +83,36 @@
         "title": "BackfillRequest",
         "type": "object"
       },
+      "BatchFeedback": {
+        "additionalProperties": false,
+        "description": "限定批量大小与唯一目标；逐项提交，冲突项保留原记录，不自动重试。",
+        "properties": {
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackTarget"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Targets",
+            "type": "array"
+          },
+          "verdict": {
+            "enum": [
+              "helpful",
+              "false_positive",
+              "ignored"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targets",
+          "verdict"
+        ],
+        "title": "BatchFeedback",
+        "type": "object"
+      },
       "BatchIds": {
         "additionalProperties": false,
         "description": "最多处理 100 个目标；逐条冲突不回滚已成功的命令。",
@@ -958,6 +988,41 @@
           "failed_count"
         ],
         "title": "FailureGroup",
+        "type": "object"
+      },
+      "FeedbackTarget": {
+        "additionalProperties": false,
+        "description": "显式冻结的发现与来源版本；拒绝客户端提供作者或使用问题编号代替身份。",
+        "properties": {
+          "finding_id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "job_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source_attempt": {
+            "exclusiveMinimum": 0.0,
+            "title": "Source Attempt",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_attempt",
+          "revision",
+          "job_id",
+          "finding_id"
+        ],
+        "title": "FeedbackTarget",
         "type": "object"
       },
       "FindingFeedbackRecord": {
@@ -4951,6 +5016,16 @@
             "description": "已持久化安全摘要；旧结果缺失时不回填",
             "title": "Failure Summary"
           },
+          "feedback_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskFeedbackSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -5024,6 +5099,52 @@
           "cumulative_usage"
         ],
         "title": "TaskExecutionResponse",
+        "type": "object"
+      },
+      "TaskFeedbackSummary": {
+        "description": "当前有效发现的互斥反馈条数；历史修复归未评价，不按跟进问题去重。",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "false_positive": {
+            "title": "False Positive",
+            "type": "integer"
+          },
+          "helpful": {
+            "title": "Helpful",
+            "type": "integer"
+          },
+          "ignored": {
+            "title": "Ignored",
+            "type": "integer"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "unmarked": {
+            "title": "Unmarked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "total",
+          "helpful",
+          "false_positive",
+          "ignored",
+          "unmarked"
+        ],
+        "title": "TaskFeedbackSummary",
         "type": "object"
       },
       "TaskIssueSummary": {
@@ -5112,6 +5233,14 @@
       "TaskSearchResponse": {
         "description": "全量检索的稳定分页响应，条目保留既有兼容字段。",
         "properties": {
+          "feedback_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "反馈状态分面任务数；忽略自身条件和分页，保留其他筛选",
+            "title": "Feedback Counts",
+            "type": "object"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/TaskExecutionResponse"
@@ -8401,6 +8530,26 @@
           },
           {
             "in": "query",
+            "name": "feedback_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "handled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feedback State"
+            }
+          },
+          {
+            "in": "query",
             "name": "notification_failed",
             "required": false,
             "schema": {
@@ -11342,6 +11491,295 @@
         "summary": "Review Feedback Summary"
       }
     },
+    "/api/review-findings": {
+      "get": {
+        "description": "所有条件先过滤再稳定分页；首页携带原始窗口，不在翻页时重新计算。",
+        "operationId": "listing_api_review_findings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedback",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "helpful",
+                "false_positive",
+                "ignored",
+                "fixed",
+                "unmarked"
+              ],
+              "title": "Feedback",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "handling",
+            "required": false,
+            "schema": {
+              "default": "pending",
+              "enum": [
+                "all",
+                "pending",
+                "handled"
+              ],
+              "title": "Handling",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(critical|high|medium|low|unclassified)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issue_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Listing Api Review Findings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing"
+      }
+    },
+    "/api/review-findings/batch-feedback": {
+      "post": {
+        "description": "每项独立版本事务；允许部分成功，返回全部失败身份，客户端不得悄悄换成最新版本。",
+        "operationId": "batch_api_review_findings_batch_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchFeedback"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Batch Api Review Findings Batch Feedback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch"
+      }
+    },
+    "/api/review-findings/{finding_id}": {
+      "get": {
+        "description": "详情只读当前有效主身份；来源离开当前版本时明确报错，不跳到其他发现。",
+        "operationId": "detail_api_review_findings__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detail Api Review Findings  Finding Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail"
+      }
+    },
     "/api/review-issues": {
       "get": {
         "description": "按仓库、状态和级别分页；提交人取最近出现记录的持久化任务作者。",
@@ -12324,6 +12762,26 @@
                 }
               ],
               "title": "Issue State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "feedback_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "handled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Feedback State"
             }
           },
           {

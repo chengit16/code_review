@@ -65,3 +65,14 @@
 @media (max-width: 600px) {
   .list-surface .issue-filter-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+.detail-entry-row { cursor: pointer; }
+.detail-entry-row:focus-visible { outline: 2px solid var(--color-accent, #1677ff); outline-offset: -2px; }
+.list-detail-title { max-width: 100%; padding-inline: 0; text-align: left; justify-content: flex-start; }
+.list-detail-title > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+/* 发现筛选沿用列表密度，长摘要和批量版本在窄屏自然折行。 */
+.finding-list-filters { margin-bottom: 12px; align-items: end; }
+.finding-list-filters label { display: flex; flex-direction: column; gap: 6px; }
+.finding-list-filters .ant-select { min-width: 140px; }
+.finding-list-batch { padding: 12px 0; }
+.compact-list-table .list-cell-content .finding-list-summary.ant-btn { display: block; width: 100%; max-width: 100%; min-width: 0; height: auto; white-space: normal; text-align: left; padding-inline: 0; overflow-wrap: anywhere; }

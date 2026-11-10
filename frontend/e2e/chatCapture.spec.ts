@@ -28,7 +28,8 @@ test("候选关联可逆且持久化，暂停后不会宣称正在采集", async
   await page.goto("/improvements");
   await page.getByText("维护与聊天收件箱（低频工具）", { exact: true }).click();
   await page.getByText(/^聊天自动受理与待核实收件箱/).click();
-  await page.getByRole("row").filter({ hasText: "来源 #2" }).getByRole("button", { name: "详情 / 关联" }).click();
+  const source = page.getByRole("row", { name: "查看来源 2", exact: true });
+  await source.getByText("合成方案咨询", { exact: true }).click();
   const row = page.locator("article").filter({ has: page.getByRole("heading", { name: "来源 #2 · 待核实" }) });
   await row.getByLabel("来源 #2 关联记录编号").fill("1");
   await row.getByRole("button", { name: "关联已有记录" }).click();

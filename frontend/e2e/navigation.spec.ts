@@ -5,7 +5,7 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.goto("/settings");
   const navigation = page.getByRole("navigation", { name: "主导航" });
   await expect(navigation.getByRole("link")).toHaveText([
-    "项目总览", "评审任务", "待跟进问题", "合并前审查", "合并事件",
+    "项目总览", "评审任务", "评审发现", "合并前审查", "合并事件",
     "运行监控", "配置历史", "问题与改进", "首次接入引导", "项目配置", "系统设置", "访问权限",
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("系统设置");
@@ -50,7 +50,7 @@ test("旧效果地址兼容并保留项目与时间筛选", async ({ page }) => 
   await page.goto("/effectiveness?days=7&repository_id=1");
   await expect(page).toHaveURL("/?days=7&repository_id=1");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("项目总览");
-  await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("本期人工标记修复");
+  await expect(page.getByRole("region", { name: "项目核心指标" })).toContainText("待反馈发现");
   await expect(page.getByText("更多效果分析与统计口径")).toBeVisible();
   await page.screenshot({ path: "test-results/overview-statistics-desktop.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

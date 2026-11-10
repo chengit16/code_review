@@ -42,7 +42,7 @@ it.each([true, false])("管理员或只读列表显示提交人与缺失状态�
   expect(within(rows[0]).getByRole("cell", { name: "合成作者乙" })).toBeVisible();
   expect(within(rows[1]).getByRole("cell", { name: "未记录" })).toBeVisible();
   expect(within(rows[2]).getByRole("cell", { name: "未记录" })).toBeVisible();
-  expect(within(rows[0]).getAllByRole("cell")).toHaveLength(canEdit ? 9 : 8);
+  expect(within(rows[0]).getAllByRole("cell")).toHaveLength(canEdit ? 8 : 7);
 });
 
 it("出现记录分别显示对应提交人，不把最新作者套用到历史提交", async () => {
@@ -58,8 +58,8 @@ it("出现记录分别显示对应提交人，不把最新作者套用到历史�
   expect(within(drawer as HTMLElement).getAllByRole("link", { name: /初审/ })).toHaveLength(2);
 });
 
-it.each([true, false])("空列表占满新增列后的表格（可编辑：%s）", async (canEdit) => {
+it.each([true, false])("空列表占满移除操作列后的表格（可编辑：%s）", async (canEdit) => {
   renderIssues(canEdit, true);
   const cell = await screen.findByRole("cell", { name: "当前筛选下没有问题" });
-  expect(cell).toHaveAttribute("colspan", canEdit ? "9" : "8");
+  expect(cell).toHaveAttribute("colspan", canEdit ? "8" : "7");
 });
