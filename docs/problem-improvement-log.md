@@ -3343,3 +3343,73 @@
 - 关联文件或证据：frontend/src/pages/overview/QualityOverview.tsx；frontend/e2e/overview.spec.ts；/tmp/ocr-trend-visible-tests.log；/tmp/ocr-trend-visible-browser.log；/tmp/ocr-trend-visible-live-320.png。
 - 遗留与下一步：本轮调整无待实施项，用户刷新页面即可使用；等待独立 monitor 正常同步周期并执行本编号 minimum-entries 9 只读核验，不强制导入、不扩大采集范围，不宣称语义零遗漏。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261110-004｜受理：调研飞书卡片按提交人自动提及
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：新事项已受理、排查中；关联 PI-20261110-002 的应用机器人研究。
+- 现象或目标：用户希望评审飞书卡片根据提交人自动 @ 对应成员，并询问适合当前项目的方案。
+- 原因或分析：需区分可点击的真实提及与普通姓名文本，核实当前通知通道、GitLab 身份来源和飞书成员标识的映射条件。
+- 处理与改进：先核对源码及飞书官方资料，形成分阶段建议；本轮用户请求为方案分析。
+- 代码修改：本条受理时仅追加台账，未修改业务代码。
+- 本地验证：实际执行 `git status --short`，开始时工作区干净；已读取项目实施约定并检索既有飞书研究，尚未验证提及能力。
+- 部署生效：未部署、未修改真实通知配置、未发送外部消息。
+- 关联文件或证据：用户本轮文字及参考截图；docs/feishu-feedback-sync-research.md。
+- 遗留与下一步：核实 webhook 与应用机器人分别支持的提及方式、映射与失败兜底；完成后追加结论并核验本编号至少两条同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-004｜追加：完成提交人提及方案，推荐先映射后自动解析
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：本轮方案分析完成，功能尚未实施；关联本编号受理及 PI-20261110-002。
+- 现象或目标：在现有飞书评审卡片中真实 @ 对应提交成员，降低人工转发和寻找责任人的成本。
+- 原因或分析：现有 Git 读取只使用 `%an` 并保存 commit_author 姓名，卡片为 plain_text，没有飞书身份映射。官方自定义机器人已支持卡片通过有效 open_id/user_id 提及所在群成员，但不支持直接邮箱提及或自身查询通讯录；姓名、MR 作者、合并人和多人 Push 作者不能混同。
+- 处理与改进：新增 docs/feishu-author-mention-research.md，推荐保留 webhook 并集中管理精确提交身份到飞书成员的映射；后续结合公司应用机器人补权限范围内的用户邮箱查询与缓存，人工覆盖优先。建议有发现才提醒、未知目标不自动 @所有人、初审补审明确去重、Worker 独立投递。保留发现普通文本，只新增受控提及区域，不解释不可信内容。
+- 代码修改：仅新增方案文档和本编号两条台账；未修改业务代码、接口、数据库或真实配置。
+- 本地验证：实际读取 git_repo.py、worker.py、feishu.py、GitLab 和补审投递源码；通过 Python HTTP 成功获取飞书官方自定义机器人、富文本组件、邮箱查询 ID 三份 Markdown 正文。实际 `git diff --check` 通过；Python 断言核对三处源码文件、作者姓名格式、普通文本结构和三份官方关键依据通过，仅为文档证据检查。旧 Markdown 路径尝试 404 后改用成功来源；未跑业务测试、未真实查询成员或联调提及，不能计为功能验证通过。项目要求的 `~/.codex/comment-standards.md` 当前不存在，本轮未新增代码注释，未据此阻断文档分析。
+- 部署生效：未部署、未重启、未读取私有通知凭据、未调用真实群机器人或发送消息；公开文档查询不代表用户租户权限和触达验证。
+- 关联文件或证据：docs/feishu-author-mention-research.md；官方 https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot、https://open.feishu.cn/document/feishu-cards/card-components/content-components/rich-text、https://open.feishu.cn/document/server-docs/contact-v3/user/batch_get_id；临时公开正文 /tmp/ocr-feishu-mention-*.md。
+- 遗留与下一步：待用户确定路线后实施身份字段、映射配置、通知策略与自动化；真实测试群发消息另需明确授权。本轮等待 monitor 正常周期后执行本编号 minimum-entries 2 只读核验，不强制导入或扩大聊天范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261110-004｜追加：澄清按姓名选人与真实提及身份，补充免填 ID 的交互建议
+
+- 记录日期：2026-11-10（北京时间）。
+- 类型与进展：同一方案的补充答疑完成，尚未实施。
+- 现象或目标：用户询问是否一定要找到飞书 ID，能否按名字对应，关注降低人员配置成本。
+- 原因或分析：底层发送需要唯一成员标识不代表使用者必须手动录入 ID。现有自定义机器人仅支持 open_id/user_id 真实提及；姓名可作为候选搜索和经确认的别名，不能直接替代成员身份。
+- 处理与改进：方案追加第 8 节，建议有授权目录后按姓名搜索并选人、后台保存 ID；重名人工区分，首次确认的姓名别名按实例或仓库限定，冲突不猜测。现有 webhook 无成员查询能力，需应用授权目录或已有核对目录；不将建议说成现成功能。
+- 代码修改：仅补充研究文档和本条台账，未修改业务代码或真实配置。
+- 本地验证：实际执行 `git status --short` 并读取本编号原记录；复核本会话已读取的官方机器人正文关于卡片仅支持 open_id/user_id 的规定，并运行 `git diff --check` 检查文档格式。未运行功能测试或真实提及联调，不宣称功能验证通过。
+- 部署生效：未部署、未重启、未向真实群发送消息或获取成员目录。
+- 关联文件或证据：docs/feishu-author-mention-research.md 第 8 节；本会话官方自定义机器人文档 /tmp/ocr-feishu-mention-bot.md。
+- 遗留与下一步：按姓名选人的界面仍为待实施建议；本轮执行本编号 minimum-entries 3 只读同步核验，不强制同步、不扩大采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261111-001｜受理：首页评审反馈增加各类别占比
+
+- 记录日期：2026-11-11（北京时间）。
+- 类型与进展：新体验改进已受理、排查中；关联 PI-20261110-003 的首页反馈展示。
+- 现象或目标：用户希望首页直接看到有帮助、误报、忽略和未评价的占比，并评估合适的放置位置。
+- 原因或分析：现有四项摘要仅展示数量，用户需要自行计算各类别占当前有效发现总数的比例；现有处理完成率使用另一业务含义，不能代替类别占比。
+- 处理与改进：拟在评审反馈四项数量旁显示占比，并就近说明统一分母；沿用当前项目和时间窗口的同一快照，处理无数据与窄屏展示。
+- 代码修改：受理时尚未修改业务代码；仅追加本条台账，保留原有台账改动与研究文档。
+- 本地验证：实际执行 `git status --short` 并读取实施流程、前端规范、混合记录说明及首页组件；尚未运行本轮代码检查。全局 `~/.codex/comment-standards.md` 缺失，以项目内更具体规范执行。
+- 部署生效：本轮尚未部署，不能确认占比展示生效。
+- 关联文件或证据：用户本轮文字及截图；frontend/src/pages/overview/QualityOverview.tsx；frontend/src/styles/overview.css。
+- 遗留与下一步：完成局部展示改动、统计口径与桌面/窄屏验证，追加本编号实际结果并执行至少两条同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261111-001｜追加：首页四类反馈占比完成，本机页面核对生效
+
+- 记录日期：2026-11-11（北京时间）。
+- 类型与进展：本轮体验改进已完成；关联本编号受理记录及 PI-20261110-003。
+- 现象或目标：首页直接读取有帮助、误报、忽略、未评价各自占全部有效发现的比例，无需自行计算。
+- 原因或分析：占比与对应数量紧邻更便于扫描；统一分母包含未评价，避免与误报占已评价的另一口径混淆。保留一位小数，舍入合计可能略偏离 100%。
+- 处理与改进：四项数量旁显示类别占比，手机端换到数量下方；就近说明当前筛选范围和全部发现分母，无样本显示破折号，有样本且类别为零显示 0.0%。沿用同一服务端快照和原有数量下钻。同步更新操作说明。
+- 代码修改：已修改 QualityOverview.tsx、overview.css、组件及首页浏览器用例和配置指南；不改后端、数据库结构及业务反馈。保留此前已有研究文档和台账改动，未提交 Git commit。
+- 本地验证：实际在 frontend 执行 `npm test -- --run src/test/qualityOverview.test.tsx src/test/overview.test.tsx`，2 文件 16 项通过；`npm run lint`、`npx tsc -b`、`npx vite build --outDir /tmp/ocr-feedback-shares-dist` 通过。实际执行 `OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-feedback-shares-dist PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npx playwright test e2e/overview.spec.ts --reporter=line --output /tmp/ocr-feedback-shares-browser-final`，16 项通过，覆盖 1440/1280/768/390/320px、项目与时间筛选、反馈数据、样本及刷新。实际查看 1440/320px 隔离截图和本机截图，`git diff --check` 通过。首次 TypeScript 因测试使用不支持的 exact 参数失败，修正后复验通过；浏览器首次沙箱绑定端口受阻，获准后执行；首轮 11 passed / 5 failed 为原用例未展开问题诊断，补展开后最终通过。构建仍有既有大包警告，本轮未跑后端或前端全量测试。
+- 部署生效：原 frontend/dist 已完整备份至 `.local-data/backups/feedback-shares-20261111-171810/frontend-dist-before`，保留旧资源并最后原子替换入口文件；未重启 API、Worker 或 monitor。实际 `curl --fail --silent http://127.0.0.1:8781/api/health` 为 ok/dev/Worker running；`node /tmp/ocr-feedback-shares-live.mjs` 在本机 8781 的 1440/390/320px 只读核验均通过：35/16/19/8 条对应 44.9%/20.5%/24.4%/10.3%，四项均未溢出、整页无横溢、JavaScript 错误和业务写请求均为 0，外部资源请求被拦截。仅确认本机页面，不推断其他环境。
+- 关联文件或证据：frontend/src/pages/overview/QualityOverview.tsx；frontend/src/styles/overview.css；frontend/src/test/qualityOverview.test.tsx；frontend/e2e/overview.spec.ts；docs/configuration-guide.md；/tmp/ocr-feedback-shares-browser-final；/tmp/ocr-feedback-shares-live-checks.json；/tmp/ocr-feedback-shares-live-1440.png 与 /tmp/ocr-feedback-shares-live-320.png。
+- 遗留与下一步：本轮功能范围无待实施项；等待独立 monitor 正常周期，运行本编号 minimum-entries 2 的来源与页面只读核验，不强制导入、不扩展聊天授权范围。真实读屏、200% 放大和生产负载不在本轮验证范围内。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

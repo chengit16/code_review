@@ -61,6 +61,24 @@ it("旧接口明确缺失，不以历史处置补反馈计数", () => {
   expect(screen.queryByText("问题状态")).not.toBeInTheDocument();
 });
 
+it("四类占比使用全部有效发现作分母，包含未评价并保留一位小数", () => {
+  show(<QualityOverview data={{ ...data, quality: { ...quality, summary: { total: 78, helpful: 35, false_positive: 16, ignored: 19, unmarked: 8 } } }} days={7} repositoryId="1" />);
+  const feedback = screen.getByRole("region", { name: "评审反馈" });
+  expect(within(feedback).getAllByRole("definition").map((entry) => entry.textContent)).toEqual([
+    "35条占 44.9%", "16条占 20.5%", "19条占 24.4%", "8条占 10.3%",
+  ]);
+  expect(screen.getByText(/全部 78 条有效发现为分母（含未评价）/)).toBeVisible();
+});
+
+it("零样本占比保持未定义，有样本但该类为零时显示零占比", () => {
+  const { unmount } = show(<QualityOverview data={{ ...data, quality: { ...quality, summary: { total: 0, helpful: 0, false_positive: 0, ignored: 0, unmarked: 0 } } }} days={7} repositoryId="1" />);
+  expect(screen.getAllByText("—（无样本）")).toHaveLength(4);
+  expect(screen.queryByText(/NaN|Infinity|占 0\.0%/)).not.toBeInTheDocument();
+  unmount();
+  show(<QualityOverview data={data} days={7} repositoryId="1" />);
+  expect(screen.getByText("占 0.0%")).toBeVisible();
+});
+
 it("零样本、小样本与来源缺失明确呈现，不制造准确率", () => {
   expect(qualityRatio(0, 0)).toBe("—（0 样本）");
   expect(qualityRatio(0, 10)).toBe("0%（0/10）");

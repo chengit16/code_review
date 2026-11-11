@@ -119,9 +119,11 @@
 .quality-overview .ant-segmented-item-label { min-height: 36px; display: flex; align-items: center; }
 .quality-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 22px 22px 12px; margin: 0; }
 .quality-facts dt { color: var(--color-muted); font-size: 13px; display: flex; align-items: center; gap: 7px; }
-.quality-facts dd { margin: 8px 0 0; display: flex; align-items: baseline; gap: 6px; font-size: 28px; font-weight: 650; }
+.quality-facts dd { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; font-size: 28px; font-weight: 650; }
 .quality-facts dd a { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; }
 .quality-facts dd small { font-size: 12px; color: var(--color-muted); font-weight: 400; }
+.quality-fact-share { margin-left: 6px; font-size: 13px; font-weight: 500; color: var(--color-muted); white-space: nowrap; }
+.quality-share-caption { margin: 0 22px 8px; color: var(--color-muted); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
 .quality-facts i, .quality-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
 .quality-color-helpful { background: #247357; }
 .quality-color-false_positive { background: #b54733; }
@@ -161,6 +163,8 @@
 }
 @media (max-width: 600px) {
   .quality-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; gap: 8px 16px; }
+  .quality-fact-share { flex-basis: 100%; margin-left: 0; }
+  .quality-share-caption { margin-inline: 16px; }
   .quality-overview > .section-head { padding: 14px 16px; }
   .quality-ratios, .quality-legend { padding-inline: 16px; }
   .quality-dispositions { margin-inline: 16px; gap: 0 14px; }

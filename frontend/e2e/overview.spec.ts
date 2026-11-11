@@ -60,6 +60,16 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     await expect(quality).toBeVisible();
     await expect(quality.getByRole("radio", { name: "问题状态" })).toHaveCount(0);
     await expect(quality.getByRole("link", { name: "查看有帮助 90 条发现" })).toBeVisible();
+    for (const share of ["占 42.9%", "占 28.6%"]) {
+      await expect(quality.getByText(share, { exact: true })).toBeVisible();
+    }
+    await expect(quality.getByText("占 14.3%", { exact: true })).toHaveCount(2);
+    await expect(quality.getByText(/全部 210 条有效发现为分母（含未评价）/)).toBeVisible();
+    expect(await quality.locator(".quality-facts > div").evaluateAll((facts) => facts.every((fact) => {
+      const bounds = fact.getBoundingClientRect();
+      const share = fact.querySelector(".quality-fact-share")?.getBoundingClientRect();
+      return share && share.left >= bounds.left && share.right <= bounds.right + 1;
+    }))).toBe(true);
     await expect(quality.getByRole("link", { name: "已处理 180 条" })).toBeVisible();
     const bars = await quality.locator(".quality-bar-group").first().locator("span").evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
@@ -81,6 +91,7 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       expect(await quality.locator(".overview-chart-axis").evaluate((element) => element.getBoundingClientRect().left)).toBeCloseTo(axisLeft, 1);
       await chartViewport.evaluate((element) => { element.scrollLeft = 0; });
     }
+    await page.getByRole("button", { name: "展开问题诊断" }).click();
     await expect(page.getByRole("region", { name: "待反馈严重级别" })).toContainText("严重");
     await expect(page.getByRole("region", { name: "项目概况" })).toContainText("待反馈发现");
     await expect(page.getByRole("region", { name: "优化方向" })).toContainText("安全");
