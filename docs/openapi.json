@@ -871,6 +871,77 @@
         "title": "CumulativeUsage",
         "type": "object"
       },
+      "DeleteTaskRequest": {
+        "additionalProperties": false,
+        "description": "确认框看到的任务版本；重审或后台状态变化后必须重新确认。",
+        "properties": {
+          "expected_attempts": {
+            "minimum": 0.0,
+            "title": "Expected Attempts",
+            "type": "integer"
+          },
+          "expected_finished_at": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Finished At"
+          },
+          "expected_status": {
+            "enum": [
+              "complete",
+              "partial",
+              "failed",
+              "skipped",
+              "cancelled"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_status",
+          "expected_attempts",
+          "expected_finished_at"
+        ],
+        "title": "DeleteTaskRequest",
+        "type": "object"
+      },
+      "DeleteTaskResult": {
+        "description": "已提交的清理数量；不将外部通知描述为已撤回。",
+        "properties": {
+          "deleted_findings": {
+            "title": "Deleted Findings",
+            "type": "integer"
+          },
+          "deleted_issues": {
+            "title": "Deleted Issues",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "status": {
+            "const": "deleted",
+            "default": "deleted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "deleted_findings",
+          "deleted_issues"
+        ],
+        "title": "DeleteTaskResult",
+        "type": "object"
+      },
       "DiagnosticSignal": {
         "description": "固定中文类别和出现次数，不把外部错误原文透传给页面。",
         "properties": {
@@ -7821,6 +7892,54 @@
       }
     },
     "/api/jobs/{job_id}": {
+      "delete": {
+        "description": "只删除已确认的终态版本，拒绝在途和过期目标。",
+        "operationId": "remove_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteTaskResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove"
+      },
       "get": {
         "description": "获取评审详情及原始机器可读结果。",
         "operationId": "get_job_api_jobs__job_id__get",

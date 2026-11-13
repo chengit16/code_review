@@ -1,18 +1,20 @@
 /** @description 任务 Ant Design 表格；桌面扫描主结论，窄屏使用摘要列，选择范围由父页维护。 */
 import { Checkbox, Grid, Table } from "antd";
 import type { TableColumnsType } from "antd";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import type { ReviewJob } from "../../api/types";
 import { Status } from "../../ui/Status";
 import { formatTime, shortSha } from "../../ui/format";
 import { detailRowProps } from "../../ui/detailRow";
 import { JobTimeFacts } from "../JobExecution";
+import { TaskDelete } from "../TaskDelete";
 
 import { IssueSummary } from "./TaskIssueSummary";
 
 /** 使用同一份服务端事实构造桌面和窄屏，不把费用或缺失耗时改写为零。 */
-export function JobsTable({ items, canEdit, selectable, targets, disabled, onSelect, detailPath, loading, failed }: {
+export function JobsTable({ token, items, canEdit, selectable, targets, disabled, onSelect, detailPath, loading, failed }: {
+  /** 内存管理凭据，仅由删除 Service 发送同源请求。 */ token: string;
   /** 当前页任务。 */ items: ReviewJob[];
   /** 仅控制选择界面，服务端仍负责授权。 */ canEdit: boolean;
   /** 本页允许重审的终态编号。 */ selectable: number[];
@@ -25,7 +27,12 @@ export function JobsTable({ items, canEdit, selectable, targets, disabled, onSel
 }) {
   const screens = Grid.useBreakpoint();
   const navigate = useNavigate();
+  const location = useLocation();
   const compact = !screens.md;
+  function deleteAction(job: ReviewJob) {
+    return <TaskDelete token={token} target={job} compact back={`${location.pathname}${location.search}`}
+      disabled={disabled || Boolean(job.active_recovery_id)} />;
+  }
   const cell = (label: string) => ({ className: "jobs-fact-cell", "data-label": label });
   const desktop: TableColumnsType<ReviewJob> = [
     { title: "任务 / 项目", key: "source", width: 185, onCell: () => cell("任务 / 项目"), render: (_, job) => <div className="jobs-source"><Link aria-label={`查看任务 ${job.id}`} title={job.repository_name} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><small title={`${job.target_branch ?? ""} · ${job.commit_sha}`}>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · <span className="mono">{shortSha(job.commit_sha)}</span></small></div> },
@@ -40,14 +47,17 @@ export function JobsTable({ items, canEdit, selectable, targets, disabled, onSel
     <div className="jobs-mobile-heading"><Link aria-label={`查看任务 ${job.id}`} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><ReviewState job={job} /></div>
     <small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · {shortSha(job.commit_sha)}</small>
     <IssueSummary job={job} /><details><summary>提交、耗时与通知</summary><span>提交人：{job.commit_author?.trim() || "未记录"}</span><JobTimeFacts job={job} compact /><span>创建：{formatTime(job.created_at)}</span><Notification job={job} /></details>
+    {canEdit && <div className="row-actions"><Link to={detailPath(job.id)}>查看详情</Link>{deleteAction(job)}</div>}
   </div> }];
   const selection: TableColumnsType<ReviewJob> = canEdit ? [{ key: "selection", width: compact ? 40 : 48,
     title: <Checkbox aria-label="全选本页可重审任务" checked={targets.length > 0 && targets.length === selectable.length} indeterminate={targets.length > 0 && targets.length < selectable.length} disabled={disabled || !selectable.length} onChange={(event) => onSelect(event.target.checked ? selectable : [])} />,
     render: (_, job) => <Checkbox aria-label={`选择任务 ${job.id}`} checked={targets.includes(job.id)} disabled={disabled || !selectable.includes(job.id)} onChange={(event) => onSelect(event.target.checked ? [...targets, job.id] : targets.filter((id) => id !== job.id))} />,
   }] : [];
-  return <section aria-label="评审任务列表" className="jobs-table"><Table<ReviewJob> rowKey="id" columns={[...selection, ...(compact ? mobile : desktop)]}
+  const actions: TableColumnsType<ReviewJob> = canEdit && !compact ? [{ title: "操作", key: "actions", width: 80,
+    fixed: "right", render: (_, job) => deleteAction(job) }] : [];
+  return <section aria-label="评审任务列表" className="jobs-table"><Table<ReviewJob> rowKey="id" columns={[...selection, ...(compact ? mobile : desktop), ...actions]}
     onRow={(job) => detailRowProps(() => navigate(detailPath(job.id)), `查看任务 ${job.id}`)}
-    dataSource={items} loading={loading} pagination={false} size="small" tableLayout="fixed" scroll={compact ? undefined : { x: 1040 }}
+    dataSource={items} loading={loading} pagination={false} size="small" tableLayout="fixed" scroll={compact ? undefined : { x: 1120 }}
     locale={{ emptyText: loading ? "正在读取任务…" : failed ? "任务读取失败，请重新读取，不能据此判断没有任务。" : "当前筛选下没有任务，可清空筛选或检查项目接入。" }} /></section>;
 }
 function Notification({ job }: { job: ReviewJob }) {

@@ -26,7 +26,7 @@ function show(child: React.ReactNode, path = "/?repository_id=1&days=7") {
 
 it("并排柱纵轴依据单类最大值而非总量，数据表仍展示同源总发现", async () => {
   show(<QualityTrend quality={quality} days={7} />);
-  expect(screen.getByRole("img", { name: /四类反馈按日期并排/ })).toHaveAccessibleName(/纵轴 0 至 8 条/);
+  expect(screen.getByRole("group", { name: /四类反馈按日期并排/ })).toHaveAccessibleName(/纵轴 0 至 8 条/);
   await userEvent.click(screen.getByRole("button", { name: "查看反馈数据" }));
   const rows = within(screen.getByRole("table", { name: "反馈价值数据（UTC）" })).getAllByRole("row");
   expect(within(rows[1]).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["2026-11-08", "4", "1", "0", "5", "10"]);

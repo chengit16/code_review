@@ -26,6 +26,7 @@ import { AttemptTimeline } from "./JobExecution";
 import { JobFiles } from "./JobFiles";
 import { JobNavigation } from "./JobNavigation";
 import { TaskStop } from "./TaskControls";
+import { TaskDelete } from "./TaskDelete";
 import type { FindingFeedbackChoice } from "./FindingActions";
 
 /** 按任务重新挂载详情，防止连续导航时沿用旧任务的发现筛选和操作状态。 */
@@ -84,7 +85,7 @@ function JobDetail({ token, canEdit }: {
   return <div className="page job-detail-page">
     <JobNavigation token={token} id={Number(id)} back={back} />
     <PageHeader title={`任务 #${id ?? ""}`} subtitle={job ? `${job.mr_iid < 0 ? "默认分支 Push" : `MR !${job.mr_iid}`} · ${job.commit_sha}` : "逐提交评审详情"} actions={
-      job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{canEdit && ["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending || Boolean(job.active_recovery_id)} onClick={() => { if (window.confirm(`重新评审任务 #${id}？将再次调用模型并可能产生费用，不会修改代码。仅通知失败请使用重发通知。`)) retry.mutate(); }}><RotateCcw size={16} />重新评审</button></>}</>
+      job && <><button className="icon-button" title="下载脱敏报告" aria-label="下载脱敏报告" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} /></button>{canEdit && ["complete", "partial", "failed", "skipped"].includes(job.status) && <><button className="button button-secondary" type="button" disabled={resend.isPending || !["failed", "sent"].includes(job.delivery?.status ?? "")} onClick={() => resend.mutate()}><Send size={16} />重发通知</button><button className="button button-secondary" type="button" disabled={retry.isPending || Boolean(job.active_recovery_id)} onClick={() => { if (window.confirm(`重新评审任务 #${id}？将再次调用模型并可能产生费用，不会修改代码。仅通知失败请使用重发通知。`)) retry.mutate(); }}><RotateCcw size={16} />重新评审</button></>}{canEdit && <TaskDelete token={token} target={job} back={back} disabled={Boolean(job.active_recovery_id) || retry.isPending || resend.isPending || feedback.isPending} />}</>
     } />
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     {(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}

@@ -1,7 +1,18 @@
 /** @description 任务检索与脱敏报告下载，管理口令仅随同源请求发送。 */
 
 import { apiRequest } from "./client";
-import type { TaskPage } from "./types";
+import type { ReviewJob, TaskPage } from "./types";
+
+/** 删除确认时冻结的终态版本；后台变化须由服务端返回冲突。 */
+export type TaskDeletionTarget = Pick<ReviewJob, "id" | "status" | "attempts" | "finished_at">;
+
+/** 删除单条已结束任务及其统计来源，不撤回已发通知或清理工件。 */
+export function deleteTask(token: string, target: TaskDeletionTarget) {
+  return apiRequest<{ status: "deleted"; job_id: number; deleted_findings: number; deleted_issues: number }>(token, `/api/jobs/${target.id}`, {
+    method: "DELETE",
+    body: JSON.stringify({ expected_status: target.status, expected_attempts: target.attempts, expected_finished_at: target.finished_at }),
+  });
+}
 
 /** 单个 MR 补触发请求的入队结果。 */
 export interface MrEnqueueResult {

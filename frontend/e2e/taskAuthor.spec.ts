@@ -13,6 +13,7 @@ test("列表和详情展示提交人，兼容旧任务与窄屏", async ({ page 
   await expect(author).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.goto("/jobs");
+  await page.getByRole("row", { name: "查看任务 1", exact: true }).getByText("提交、耗时与通知", { exact: true }).click();
   await expect(page.getByText("提交人：测试提交人", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 320, height: 844 });

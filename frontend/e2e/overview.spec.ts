@@ -29,7 +29,7 @@ for (const width of [1440, 390, 320]) {
     const chart = quality.getByRole("region", { name: "反馈趋势图，可横向滚动" });
     await expect(chart).toBeVisible();
     await expect(quality.getByRole("button", { name: /展开反馈趋势|收起反馈趋势/ })).toHaveCount(0);
-    await expect(quality.getByRole("img", { name: /四类反馈按日期并排/ })).toBeVisible();
+    await expect(quality.getByRole("group", { name: /四类反馈按日期并排/ })).toBeVisible();
     await quality.getByRole("button", { name: "查看反馈数据" }).click();
     await expect(quality.getByRole("table", { name: "反馈价值数据（UTC）" })).toBeVisible();
     await quality.getByRole("button", { name: "收起反馈数据" }).click();
@@ -126,7 +126,7 @@ for (const days of [7, 90]) {
     await page.route("**/api/overview", (route) => route.fulfill({ json: runtime }));
     await page.route("**/api/review-effectiveness**", (route) => route.fulfill({ json: { ...snapshot, quality: { ...snapshot.quality, summary: counts, trend } } }));
     await page.goto(`/?days=${days}`);
-    const chart = page.getByRole("img", { name: /四类反馈按日期并排/ });
+    const chart = page.getByRole("group", { name: /四类反馈按日期并排/ });
     await expect(chart).toBeVisible();
     await expect(chart).toHaveAccessibleName(/纵轴 0 至 40 条/);
     const heights = await chart.locator(".quality-bar-group").first().locator("span").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));

@@ -22,7 +22,7 @@ const job: ReviewJob = {
 };
 
 function show(item: ReviewJob) {
-  render(<DesignProvider><MemoryRouter><JobsTable items={[item]} canEdit={false}
+  render(<DesignProvider><MemoryRouter><JobsTable token="" items={[item]} canEdit={false}
     selectable={[]} targets={[]} disabled={false} onSelect={() => {}}
     detailPath={(id) => `/jobs/${id}?status=complete`} loading={false} failed={false} />
   </MemoryRouter></DesignProvider>);

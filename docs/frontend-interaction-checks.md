@@ -514,3 +514,52 @@ npx playwright test e2e/chatCapture.spec.ts --output /tmp/ocr-feedback-counts-ch
 实际结果：Ruff、Mypy 131 源文件、OpenAPI、TypeScript、ESLint、隔离构建通过；后端 778 passed / 1 skipped（外部 OCR 探针），前端 38 文件 / 228 项通过；普通浏览器 43 passed / 4 skipped（聊天需独立通道），独立聊天 4 passed。任务反馈替换、刷新、整行点击、Enter、选择隔离在 1440/768/390/320px 验证；跨页列表在 1440/1280/768/390/320px 验证，记录与主题返回保留筛选。已目视任务桌面、320px 任务及长项目名合并前列表。初次旧列数/旧表头断言、长项目名横溢和响应式动画时机失败的事实及修正见本编号台账，不覆盖历史结论。
 
 共享 JS 1151.13 kB / gzip 371.41 kB，保留大包告警及 Starlette 弃用提示。临时日志及截图位于 `/tmp/ocr-feedback-counts-*`。本轮未运行独立补审浏览器专项、真实读屏、200% 放大、生产负载或真实服务验收；补审主身份计数由隔离后端测试覆盖。未部署、未覆盖正式静态资源、未重启进程或迁移真实数据库，发布需前后端配套，不能仅凭本地测试宣称运行入口已生效。
+
+
+### 反馈柱状图整列提示（2026-11-13，PI-20261113-004）
+
+反馈图改用 Ant Design Tooltip，每个日期整列支持悬停、键盘聚焦和点击，包括零值与柱间留白；显示同源四类反馈及总发现，90 天保留实际周桶起止日期。单一活动日期避免提示叠加，Escape、失焦与横向滚动关闭旧提示，Portal 避免提示被滚动容器裁切；原精确数据表、零基线及统计口径保持。
+
+本轮实际执行：
+
+```sh
+npm --prefix frontend run lint
+npm --prefix frontend test -- --run src/test/qualityTrendTooltip.test.tsx src/test/qualityOverview.test.tsx
+git diff --check
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-chart-tooltip-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-chart-tooltip-dist \
+npx playwright test e2e/qualityTrendTooltip.spec.ts e2e/overview.spec.ts \
+  --output /tmp/ocr-chart-tooltip-browser-final
+```
+
+结果：ESLint、TypeScript、隔离构建与 diff 检查通过；组件 13 项、浏览器 20 项通过。覆盖整列顶端空白、柱底、零值、日期交界、离开关闭、Tab/Escape/焦点保留、精确表格、90 天周桶跨年范围及横向滚动，手机触屏点击日期切换与外部关闭；既有首页 1440/1280/768/390/320px、7/30/90 天及筛选下钻回归通过。已目视桌面提示与窄屏周桶提示截图，文字与数值完整、无整页横向溢出。
+
+排查中曾发现退出动画令前后两份提示短暂重叠，已关闭此处提示过渡；触屏会合成悬停、聚焦、点击，原点击切换将刚打开的提示又关闭，现点击只打开并增加专项回归。失败记录保留，不通过放宽数量断言或移除触屏测试掩盖问题。构建仍有既有大包警告；未运行后端全量、真实移动设备或真实读屏验证。浏览器验证只使用隔离服务、临时数据库与合成数据，未执行真实评审、删除或反馈写入；本机静态发布与实际入口核验另记于本编号台账。
+
+
+同次补验实际执行 `cd frontend && npx tsc -b && npx vite build --outDir /tmp/ocr-chart-tooltip-dist --emptyOutDir`，然后使用相同 Chrome 与隔离产物执行 `npx playwright test e2e/qualityTrendTooltip.spec.ts --grep '触屏' --repeat-each 3 --output /tmp/ocr-chart-tooltip-touch-repeat`，3 项通过；增加同日重复轻触后提示仍打开的断言。已目视触屏截图，并在本机 8781/8000 的桌面和移动模拟模式逐一只读核对非零／零日期提示值与同次接口响应一致，未尝试业务写请求。发布细节、已知台账同步阻塞与证据另见 PI-20261113-004。
+
+
+### 图表提示占比与 90 天区间口径（2026-11-13，PI-20261113-004 续办）
+
+日期提示在四类数量后增加 1 位小数占比：7／30 天按当天总发现，90 天按每组区间总发现（含未评价）；区间先求和再除，不平均每日比例。90 天从窗口首日每 7 日一组，13 组，最后 6 日显示实际完整日期。零样本显示“—”并说明不适用；有样本但类别为零为 0.0%。精确数据表继续展示原数量。
+
+本轮实际执行：
+
+```sh
+npm --prefix frontend run lint
+npm --prefix frontend test -- --run src/test/qualityTrendTooltip.test.tsx src/test/qualityOverview.test.tsx
+git diff --check
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-chart-share-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-chart-share-dist \
+npx playwright test e2e/qualityTrendTooltip.spec.ts e2e/overview.spec.ts \
+  --output /tmp/ocr-chart-share-browser
+```
+
+结果：lint、TypeScript、隔离构建及 diff 检查通过，组件 15 项、浏览器 20 项通过；新增单日占比分母含未评价、零样本、不均匀每日样本先求和、90 天 13 组与末组跨年日期验证。保留整列命中、键盘、触屏和首页五档视口回归。已目视 90 天区间占比提示与触屏截图；提示数量及比例清楚，构建保留既有大包告警。未运行后端全量、真实移动设备或真实读屏；本机静态发布、双端口实际接口核对及台账同步状态另记本编号收尾。

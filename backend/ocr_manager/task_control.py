@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
+from ocr_manager.task_deletion import register_task_deletion
 
 
 class BatchIds(BaseModel):
@@ -46,6 +47,8 @@ def cancel_job(store: Store, job_id: int) -> str | None:
 
 def register_task_control(app: FastAPI, store: Store, settings: Settings, admin: Any) -> None:
     """继承管理授权，批量请求仅建立持久化工作，不调用外部服务。"""
+
+    register_task_deletion(app, store, admin)
 
     @app.post("/api/jobs/{job_id}/cancel", dependencies=[admin])
     def cancel(job_id: int) -> dict[str, str]:
