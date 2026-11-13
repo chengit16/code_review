@@ -93,7 +93,7 @@ test("配置读取失败不能保存默认值，重新加载后才恢复操作",
   await page.getByRole("tab", { name: "发布审查" }).click();
   await expect(page.getByRole("alert").first()).toContainText("合成配置读取失败");
   await expect(page.getByRole("button", { name: "保存合并前配置" })).toHaveCount(0);
-  await expect(page.getByRole("checkbox", { name: "向 MR 发布可定位的评审发现" })).toBeDisabled();
+  await expect(page.getByRole("switch", { name: "向 MR 发布可定位的评审发现" })).toBeDisabled();
   failed = false;
   await page.locator("section").filter({ has: page.getByRole("heading", { name: "GitLab 行内评论", exact: true }) }).getByRole("button", { name: "重新加载" }).click();
   await page.locator("section").filter({ has: page.getByRole("heading", { name: "合并前审查", exact: true }) }).getByRole("button", { name: "重新加载" }).click();

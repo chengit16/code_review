@@ -46,6 +46,33 @@ def payload(head: str, action: str = "update") -> dict[str, Any]:
                                   "last_commit": {"id": head}}}
 
 
+@pytest.mark.parametrize("action", ["open", "reopen", "update"])
+def test_unmerged_mr_triggers_independently_of_postmerge_switch(
+    client: TestClient, action: str,
+) -> None:
+    """合并后开关关闭时，目标分支匹配的 MR 事件仍可独立触发合并前审查。"""
+
+    repo_id = create_repository(client)
+    assert client.post(f"/api/repositories/{repo_id}", headers=ADMIN, json={
+        "enable_merge_requests": False,
+    }).status_code == 200
+    assert client.put(f"/api/repositories/{repo_id}/premerge", headers=ADMIN,
+                      json={"enabled": True}).status_code == 200
+    # 开启配置不扫描 GitLab 现有 MR；仅接收符合项目与目标分支的事件。
+    assert client.get("/api/premerge-reviews", headers=ADMIN).json() == []
+    body = payload("a" * 40, action)
+    body["object_attributes"]["target_branch"] = "other"
+    url = f"/api/webhooks/gitlab/{repo_id}"
+    assert client.post(url, headers=WEBHOOK, json=body).json() == {"status": "ignored"}
+    assert client.get("/api/premerge-reviews", headers=ADMIN).json() == []
+    body["object_attributes"]["target_branch"] = "main"
+    assert client.post(url, headers=WEBHOOK, json=body).json() == {"status": "queued"}
+    assert client.post(url, headers=WEBHOOK, json=body).json() == {"status": "duplicate"}
+    reviews = client.get("/api/premerge-reviews", headers=ADMIN).json()
+    assert len(reviews) == 1
+    assert reviews[0]["mr_iid"] == 7 and reviews[0]["status"] == "queued"
+
+
 def test_premerge_is_opt_in_and_versions_supersede(client: TestClient,
                                                     settings: Settings) -> None:
     """默认关闭；新 SHA 使运行中的旧版本失效，迟到结果不能复活。"""

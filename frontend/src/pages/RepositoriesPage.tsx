@@ -33,6 +33,7 @@ import { PremergeSetting } from "./PremergeSetting";
 import { ProjectReviewLimits } from "./ProjectReviewLimits";
 import { RepositoryDiagnosis } from "./RepositoryDiagnosis";
 import { WebhookTokenCell } from "./WebhookTokenCell";
+import "../styles/repository-publication.css";
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
 type RepositoryEditSection = "connection" | "review" | "publication" | "diagnosis";
@@ -280,7 +281,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       {update.isSuccess && JSON.stringify(editForm) === editBaseline && <p className="form-success wide" role="status">基础接入配置已保存</p>}
     </fieldset></form>
     <div hidden={editSection !== "review"} className="repository-editor-panel"><EffectiveConfiguration token={token} repositoryId={editing.id} /><ProjectReviewLimits token={token} repositoryId={editing.id} onStatusChange={setReviewStatus} /></div>
-    <div hidden={editSection !== "publication"} className="repository-editor-panel repository-editor-stack"><GitLabPublicationSetting token={token} repositoryId={editing.id} onStatusChange={setPublicationStatus} /><PremergeSetting token={token} repositoryId={editing.id} onStatusChange={setPremergeStatus} /></div>
+    <div hidden={editSection !== "publication"} className="repository-editor-panel repository-editor-stack"><GitLabPublicationSetting token={token} repositoryId={editing.id} onStatusChange={setPublicationStatus} /><PremergeSetting token={token} repositoryId={editing.id} targetBranch={editing.target_branch} onOpenDiagnosis={() => selectSection("diagnosis")} onStatusChange={setPremergeStatus} /></div>
     <div hidden={editSection !== "diagnosis"} className="repository-editor-panel"><RepositoryDiagnosis token={token} repository={editing} targets={targets.data ?? []} /></div>
     </div>
   </Modal>}

@@ -8715,3 +8715,47 @@
 - 关联文件或证据：用户本轮提供的原文、backend/ocr_manager/finding_policy.py、frontend/src/pages/findingContent.ts、本轮最终答复中的完整建议文案。
 - 遗留与下一步：本轮仅交付文案；若后续落地到生成规则，需同步处理内置四项约束、规则版本及相应验证，不能只改前端标签。按本编号两条记录实际运行只读同步核验；保留历史来源冲突边界，不覆盖历史或人工页面，不强制导入或扩大采集。
 - 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"not_applicable","verification_state":"not_applicable","deployment_state":"not_applicable"}
+
+
+### PI-20261113-006｜发布审查页布局与未合并 MR 触发说明（受理）
+
+- 记录日期：2026-11-13（北京时间）。
+- 类型与进展：独立页面优化与使用咨询事项，已受理／排查中。
+- 现象或目标：用户截图中合并前审查选项拥挤、保存提示不清晰；希望优化该页，并确认开启后创建 MR 是否自动进入审查及需要的配置。
+- 原因或分析：已定位 GitLabPublicationSetting.tsx、PremergeSetting.tsx 和仓库编辑页；尚未核实完整事件过滤、Worker 条件和实际项目配置，不提前承诺自动触发。
+- 处理与改进：按现有灰白蓝风格及 Ant Design 约束调整局部设置布局、保存反馈与说明，并核对接收端和 Worker 的真实触发规则。
+- 代码修改：尚未修改业务代码；仅追加本条受理记录。
+- 本地验证：已查看工作区状态（受理前无未提交变更）、项目规范、页面实现和混合记录说明；尚未运行测试。指定 ~/.codex/comment-standards.md 文件不存在，遵守仓库中文注释规范。
+- 部署生效：未部署、未修改运行配置、未触发真实评审。
+- 关联文件或证据：用户本轮截图和请求、frontend/src/pages/RepositoriesPage.tsx、frontend/src/pages/PremergeSetting.tsx、frontend/src/pages/GitLabPublicationSetting.tsx。
+- 遗留与下一步：核实触发规则后实施并运行组件及隔离浏览器验证；收尾追加实际结果并运行本编号 minimum-entries=2 同步核验，不扩展聊天采集授权。
+
+
+### PI-20261113-006｜发布审查页优化完成并本机发布（收尾）
+
+- 记录日期：2026-11-13（北京时间）。
+- 类型与进展：本轮页面优化、触发条件核实与本机前端发布完成；台账同步另行只读核验，不据此宣称全部闭环。
+- 现象或目标：解决发布审查页选项拥挤、保存机制不易分辨及用户不清楚创建 MR 是否自动审查的问题。
+- 原因或分析：旧页使用相邻原生 checkbox 与行内说明，自动保存和手动保存缺少明确分区状态。代码确认 open／reopen／update 的已鉴权 MR 事件可独立于合并后开关排队，要求项目启用、合并前开关已保存、项目与目标分支匹配，Worker 再核对 GitLab 当前 MR 和版本。只读业务库确认截图项目 id=3、名称“景云销web端”、目标分支 test，接收和合并前开关均已保存开启、包含描述开启；当时尚无合并前审查记录，最近八条投递为 Push，不能据此确认 GitLab 的 MR 订阅已配置。
+- 处理与改进：两分区改用 Ant Design Switch、Checkbox、Input、Button、Tag、Alert、Collapse，主开关独立行、背景可选、路径要求贴近输入；底部集中未保存／保存中／已保存状态，错误保留草稿，重复／超过三份路径阻止提交。行内评论确认成功后更新缓存，合并前保存采用服务端规范化结果。展开说明列出 MR 事件订阅、已保存目标分支、接收、模型／Worker 条件及保留草稿的接入诊断入口；明确无需 GitLab CI、不补扫未收到过事件的 MR、结果在合并前审查页且不自动发飞书／写 GitLab／阻止合并。
+- 代码修改：局部修改 PremergeSetting.tsx、GitLabPublicationSetting.tsx、RepositoriesPage.tsx，新增 repository-publication.css、组件与四档浏览器测试，更新旧回归中的发布开关语义及配置／验证文档；后端仅追加现有 test_premerge.py 的三种事件、分支过滤与重复投递验证，未改生产后端、schema、Worker 或 monitor。
+- 本地验证：实际执行 `.venv/bin/pytest -q backend/tests/test_premerge.py backend/tests/test_webhook.py`（29 passed）、`.venv/bin/ruff check backend/tests/test_premerge.py`、`npm --prefix frontend test`（44 文件／279 passed）、`npm --prefix frontend run lint`、`cd frontend && npx tsc -b && npx vite build --outDir /tmp/ocr-publication-settings-dist --emptyOutDir`，均通过。指定本机 Chrome、OCR_BROWSER_FRONTEND_DIST 后执行 `npx playwright test e2e/publicationSettings.spec.ts e2e/optimization.spec.ts --output /tmp/ocr-publication-settings-browser-final`，18 passed；覆盖 1440／768／390／320px、Space、独立保存、失败与草稿、诊断切换、Escape／放弃确认及无横溢。`git diff --check` 通过；Impeccable detect 对本轮两设置组件和局部 CSS 输出空问题数组。首次组件语义／动画断言及本轮 Escape 测试监听问题已修正重验；早期浏览器还执行 alignment.spec.ts，三项均在未修改账号页查找已移除 `.inline-setting` 超时，本轮未修复或宣称这三项通过。构建保留既有大包告警（共享 JS 1145.23kB／gzip 370.61kB），后端保留 Starlette 弃用提示；未运行后端全量、真实读屏、200% 放大或移动硬件验证。
+- 部署生效：从隔离构建发布到本机 frontend/dist，先核对双端口旧入口与目录一致，备份旧入口、保留旧 assets、复制新哈希资源并原子替换 index.html；8781／8000 入口均 200 且摘要等于新构建。实际双端口各在 1440 和 320px 打开项目 3 的发布审查并展开说明，核实合并前开关已开启、说明分支 test、弹窗与整页无横溢、无页面报错、无 API 写入尝试，已目视隔离桌面／窄屏及实际窄屏截图。未重启 API／Worker／monitor、未改业务配置或触发真实 OCR／GitLab／飞书；未核实其他外部代理地址，未确认真实新 MR 已触发。
+- 关联文件或证据：docs/configuration-guide.md、docs/frontend-interaction-checks.md；/tmp/ocr-publication-settings-browser-final、/tmp/ocr-publication-settings-live-evidence.json、/tmp/ocr-publication-settings-live-8781-320.png；受控本地 .local-data/backups/PI-20261113-006/20261113-171752 保存旧入口及发布摘要；只读 SQLite 定向查询仅提取本项目非敏感配置、计数与最近投递分类。
+- 遗留与下一步：刷新即可看到本机新版页面；用户需在 GitLab Settings → Webhooks 检查 Merge request events，并创建目标分支为 test 的 MR 后查看合并前审查队列。当前开启配置不要求重新打开合并后开关，不在本轮替用户创建或更新真实 MR。累计两条主动记录，收尾实际执行指定只读同步核验并等待 monitor 一轮复查；如存在来源冲突或未同步，在最终答复说明，不改写历史、不强制导入、不扩展聊天授权。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+
+### PI-20261113-006｜交付同步核验状态（追加进展）
+
+- 记录日期：2026-11-13（北京时间）。
+- 类型与进展：页面优化已交付；同步健康受既有来源冲突阻塞。
+- 现象或目标：核对本轮主动追加的受理与收尾是否已进入平台页面，并区分页面同步与 monitor 健康。
+- 原因或分析：第一次 minimum-entries=2 核验返回 sync_pending、state_mismatch、monitor_not_recent_or_error；随后的同命令核验确认页面 #45、版本 2，来源两条已对应，仅剩 monitor_not_recent_or_error。只读查询 maintenance.last_error_code=source_conflict，未覆盖冲突来源或人工页面。
+- 处理与改进：保留既有历史，向用户明确“本轮记录已导入，整体同步健康未通过”；本条追加后按累计三条再核验。另通过 GitLab 官方 Webhook events 文档交叉核对 MR 新建／更新事件类型，与本地接收端的 open／reopen／update 处理一致。
+- 代码修改：业务代码无新增变更，本次仅追加同步进展；前述局部改造保持。
+- 本地验证：实际两次运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261113-006 --minimum-entries 2`，均退出 1；第二次仅 monitor 健康错误。此前 29 项后端、279 项前端、18 项最终浏览器通过的范围及旧账号页三项失败边界不变。
+- 部署生效：本机 8781／8000 新版静态资源及四组只读浏览器核验维持已确认；无新部署、配置写入或真实 MR 评审。
+- 关联文件或证据：只读 improvement_log_check 输出、improvement_maintenance 指定两字段、GitLab 官方 Webhook events 文档；不保存凭据或完整外部响应。
+- 遗留与下一步：本条按 minimum-entries=3 再查后在最终答复报告；既有 source_conflict 未解决，不宣称台账健康闭环，不扩展聊天采集范围。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

@@ -563,3 +563,29 @@ npx playwright test e2e/qualityTrendTooltip.spec.ts e2e/overview.spec.ts \
 ```
 
 结果：lint、TypeScript、隔离构建及 diff 检查通过，组件 15 项、浏览器 20 项通过；新增单日占比分母含未评价、零样本、不均匀每日样本先求和、90 天 13 组与末组跨年日期验证。保留整列命中、键盘、触屏和首页五档视口回归。已目视 90 天区间占比提示与触屏截图；提示数量及比例清楚，构建保留既有大包告警。未运行后端全量、真实移动设备或真实读屏；本机静态发布、双端口实际接口核对及台账同步状态另记本编号收尾。
+
+### 发布审查分区与自动触发说明（2026-11-13，PI-20261113-006）
+
+本分区沿用仓库编辑窗口的草稿和离开保护，局部开关、输入、按钮、保存反馈和折叠说明使用 Ant Design。GitLab 行内评论自动保存，合并前审查手动保存；主开关与 MR 描述选项分行，背景路径可空、多于三份或重复时提示，保存错误保留草稿。说明包含 MR 事件订阅、目标分支、接收开关、模型及 Worker 条件，诊断入口切换保留草稿。
+
+实际运行的检查入口：
+
+```sh
+.venv/bin/pytest -q backend/tests/test_premerge.py backend/tests/test_webhook.py
+.venv/bin/ruff check backend/tests/test_premerge.py
+npm --prefix frontend test
+npm --prefix frontend run lint
+cd frontend
+npx tsc -b
+npx vite build --outDir /tmp/ocr-publication-settings-dist --emptyOutDir
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+OCR_BROWSER_FRONTEND_DIST=/tmp/ocr-publication-settings-dist \
+npx playwright test e2e/publicationSettings.spec.ts e2e/optimization.spec.ts \
+  --output /tmp/ocr-publication-settings-browser-final
+cd ..
+git diff --check
+```
+
+本轮结果：后端专项 29 项、前端 44 文件／279 项、最终浏览器 18 项通过；lint、Ruff、TypeScript、隔离构建及差异空白检查通过。浏览器覆盖 1440／768／390／320px，验证开关分行、键盘 Space、独立保存、分区切换与草稿、读取失败恢复、关闭放弃确认、输入规范化和无横向溢出。仅使用临时服务、合成配置和临时 SQLite，不调用真实 OCR、GitLab 或飞书。构建保留共享 JS 超过 500kB 告警；后端保留 Starlette 弃用提示。
+
+失败历史：首次组件检查中，说明 Alert 默认即时告警语义干扰错误定位，改为 note；折叠说明的动画需等可见后断言。首次浏览器 14 passed／7 failed：其中 4 项为本轮测试焦点停在折叠触发器，Escape 未发起离开确认导致后续一次性监听残留，已聚焦关闭按钮并显式等待确认事件后重验通过；另 3 项是既有 alignment.spec.ts 在未修改的账号页查找已移除的 `.inline-setting` 截图容器超时，本轮未修改该测试或声称其通过。最终命令不包含这三项旧账号页检查。已目视桌面和 320px 设置／帮助截图。真实读屏、200% 放大及移动硬件未验证；本机静态发布、实际端口核对与台账同步另见本编号收尾。

@@ -1,5 +1,7 @@
 /** @description GitLab 行内发布单独授权，默认关闭且不会改动飞书投递。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Switch, Tag } from "antd";
+import { useId } from "react";
 
 import { apiRequest } from "../api/client";
 import { useDraftStatus } from "../ui/useConfigurationDraft";
@@ -13,8 +15,27 @@ export function GitLabPublicationSetting({ token, repositoryId, onStatusChange }
   /** 自动保存期间阻止外层关闭。 */ onStatusChange?: (status: DraftStatus) => void;
 }) {
   const client = useQueryClient();
+  const fieldId = useId();
   const query = useQuery({ queryKey: ["gitlab-publication", repositoryId], queryFn: () => apiRequest<{ enabled: boolean }>(token, `/api/repositories/${repositoryId}/gitlab-publication`) });
-  const save = useMutation({ mutationFn: (enabled: boolean) => apiRequest(token, `/api/repositories/${repositoryId}/gitlab-publication`, { method: "PUT", body: JSON.stringify({ enabled }) }), onSuccess: () => void client.invalidateQueries({ queryKey: ["gitlab-publication", repositoryId] }) });
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => apiRequest<{ enabled: boolean }>(token, `/api/repositories/${repositoryId}/gitlab-publication`, { method: "PUT", body: JSON.stringify({ enabled }) }),
+    onSuccess: (result) => {
+      // 服务端确认后立即更新显示，避免异步重取期间开关短暂回弹。
+      client.setQueryData(["gitlab-publication", repositoryId], result);
+      void client.invalidateQueries({ queryKey: ["gitlab-publication", repositoryId] });
+    },
+  });
   useDraftStatus(false, save.isPending, onStatusChange);
-  return <section className="section"><div className="section-head"><h3>GitLab 行内评论</h3></div><QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} /><label className="checkbox-label"><input type="checkbox" checked={query.data?.enabled ?? false} disabled={save.isPending || !query.data} onChange={(event) => save.mutate(event.target.checked)} />向 MR 发布可定位的评审发现</label><small>修改后自动保存。</small>{save.isPending && <p role="status">保存中…</p>}{save.error && <p className="form-error" role="alert">保存失败：{save.error.message}；请重新操作开关。</p>}{save.isSuccess && <p className="form-success" role="status">行内评论配置已保存</p>}</section>;
+  return <section className="section repository-publication-setting">
+    <div className="publication-section-heading"><h3>GitLab 行内评论</h3><Tag>自动保存</Tag></div>
+    <p className="publication-section-description">将合并后评审中可定位的发现发布到 MR，需项目令牌具备创建 discussion 的权限。</p>
+    <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
+    <div className="publication-toggle-row">
+      <div><label htmlFor={fieldId}>向 MR 发布可定位的评审发现</label><p id={`${fieldId}-help`}>修改后自动保存；此开关不发布合并前审查结果。</p></div>
+      <Switch id={fieldId} aria-label="向 MR 发布可定位的评审发现" aria-describedby={`${fieldId}-help`} checked={query.data?.enabled ?? false} disabled={save.isPending || !query.data} loading={save.isPending} onChange={(enabled) => save.mutate(enabled)} />
+    </div>
+    {save.isPending && <p className="publication-save-status" role="status">正在保存行内评论配置…</p>}
+    {save.error && <Alert type="error" showIcon title={`保存失败：${save.error.message}`} description="配置未确认更新，请重新操作开关。" />}
+    {save.isSuccess && <p className="publication-save-status" role="status">行内评论配置已保存</p>}
+  </section>;
 }
