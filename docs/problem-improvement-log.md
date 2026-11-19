@@ -11588,3 +11588,63 @@
 - 关联文件或证据：docs/review-agent-pilot-proposal.md。
 - 遗留与下一步：形成开工基线、第一批交付、试点及回退条件，收尾核对同步。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜实施清单、首批演示与既有回归基线已整理
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：实施规划已交付，业务开发待开始。
+- 关联记录：本编号前九条记录。
+- 现象或目标：明确现在已有的结果、开工动作、各期验收和推广条件。
+- 原因或分析：当前 Git 范围准备、模型配置及 OCR 执行在 Worker 的同一流程内，宜先隔离演示输入与结果协议，再接入现有队列。
+- 处理与改进：扩展试点建议书，列出现有代码入口、四个顺序工作包、首批开发动作与合成夹具、真实端点验证、人工评价与局部回退。第一阶段估时已包含最小图试验。
+- 代码修改：本轮只改试点建议书与台账，无业务代码或依赖变动。
+- 本地验证：实际执行 `.venv/bin/python -m pytest -q backend/tests/test_review_snapshot.py backend/tests/test_unified_git_ranges.py backend/tests/test_unified_reviews.py backend/tests/test_worker_scheduler.py backend/tests/test_review_conclusions.py`，57 项通过，1 个 Starlette TestClient 弃用警告。`git diff --check -- docs/problem-improvement-log.md` 与 `.venv/bin/python -` 文档检查通过，覆盖实施入口、四个工作包、五个测试路径和新增段落行尾。范围仅既有行为基线与文档，未验证新 Agent 或真实模型。
+- 部署生效：未部署，未启用试点。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md 的“实施工作包与验收清单”。
+- 遗留与下一步：实施从临时仓库、假模型与差异块读取开始；开跑真实试点前再落实项目、模型、费用和人工评价人。按本编号累计十条只读核对同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜阶段一开工：实现可回放的双评审原型
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：按用户要求实施阶段一。
+- 关联记录：本编号实施清单与首批演示。
+- 现象或目标：在隔离环境用临时 Git、临时 SQLite、OCR 替身和假模型演示完整评审流程与异常流转。
+- 原因或分析：需要先验证固定输入、独立结果、差异块覆盖、去重和单侧重跑，再评估真实模型接入。
+- 处理与改进：先核对项目规范和可复用代码，再完成契约、最小图、持久化和可重复执行的演示。
+- 代码修改：开工登记时仅追加台账。
+- 本地验证：已执行 `git status --short` 和 `rg --files --hidden -g AGENTS.md -g '!.git'`；本轮业务测试尚未运行。
+- 部署生效：未部署。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md 的工作包 1。
+- 遗留与下一步：交付代码、演示和自动化结果后追加台账并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜阶段一完成：双评审原型、状态演示与回归验证
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：阶段一代码和本地演示完成，阶段二待实施。
+- 关联记录：本编号开工登记和实施清单。
+- 现象或目标：用户要求开始第一阶段并看到两路评审的完整流转。
+- 原因或分析：合成输入可先验证固定范围、真实覆盖、状态隔离和版本历史；真实模型的正确性需要下一阶段验证。
+- 处理与改进：使用完整 Git SHA 生成差异清单，LangGraph 调用脚本模型请求和检查差异页，SQLite 原子保存两路尝试和比较版本。演示包含有无幂等保护、长差异超时、读取预算不足和单侧重跑。长差异三版共用 OCR 尝试 5，Agent 尝试 6、7、8 对应失败、部分完成、完整结束，实审分别 0/25、5/25、25/25。最后一版定位新侧第 24 行。重复请求未产生新比较。
+- 代码修改：新增隔离的 backend/ocr_manager/review_prototype、5 项专项测试、阶段一运行手册及其入口；开发依赖锁入 LangGraph 和本地 tracing 控制所用 LangSmith。没有修改现有 Worker、正式 OCR 执行、前端、投递或业务数据库结构。
+- 本地验证：实际运行 `uv lock --check`、`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`.venv/bin/python -m pytest -q`、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 和 `git diff --check`。全量后端 856 项通过、1 项跳过，含 5 项阶段一专项。实际运行 `uv run --locked --offline python -m ocr_manager.review_prototype.demo` 并用 `sqlite3 -readonly` 查询五组比较，确认旧比较保留及三版复用 OCR。相对文档引用、入口和行尾检查通过。没有调用真实模型、OCR、MCP 或外部投递。
+- 部署生效：未部署。原型本地运行，使用单次演示专属临时 SQLite。
+- 关联文件或证据：docs/review-agent-phase1-walkthrough.md；原型模块、专项测试及本轮离线演示产物。
+- 遗留与下一步：阶段二接入 Worker 和一个经验证的实际模型，处理跨进程恢复与真实调用费用；当前原型手动单侧重跑会从新尝试开头开始。按本编号累计十二条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜确认阶段一页面范围并补充双评审回放
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：确认现有产品页面未改动，已补充会话中的阶段一回放。
+- 关联记录：本编号阶段一完成记录和试点建议书工作包 3。
+- 现象或目标：用户询问为何页面没有变化，希望直接看到两路评审的运行结果。
+- 原因或分析：阶段一交付独立的命令行原型；正式对比页属于工作包 3。
+- 处理与改进：从实际本地演示报告提取同一长差异的三个历史比较版本，展示固定 OCR 尝试与三次 Agent 尝试的状态、交付和核对覆盖、证据与节点轨迹。数据来自合成 OCR 和脚本模型。
+- 代码修改：新增会话回放，仓库内本轮仅追加台账；业务代码和应用页面未修改。
+- 本地验证：执行 `python3 <可视化技能目录>/scripts/render.py --force <回放片段> <临时预览>` 生成本地预览，以 `node <临时目录>/check.mjs` 驱动 Chrome 检查 736 和 320 像素宽度下的版本切换、固定 OCR 尝试、覆盖、证据行、节点和横向溢出。初检发现证据侧标识映射错误，修复后通过。验证范围为本地预览内容和交互，实际应用及会话宿主显示未做验证。
+- 部署生效：未部署；回放使用既有本地演示结果。
+- 关联文件或证据：docs/review-agent-phase1-walkthrough.md、阶段一报告的比较 3 至 5。
+- 遗留与下一步：正式产品页按工作包 3 实施。按本编号累计十三条只读核对台账与本地页面数据源。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
