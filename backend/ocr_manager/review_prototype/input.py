@@ -1,4 +1,4 @@
-"""冻结临时 Git 仓库的差异并提供分页取证，不读取分支当前内容或运行待审代码。"""
+"""冻结 Git 对象差异并提供分页取证，不读取分支当前内容或运行待审代码。"""
 
 from __future__ import annotations
 
@@ -7,11 +7,14 @@ import json
 import os
 import re
 import subprocess
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
 from unidiff import PatchSet
+
+from ocr_manager.range_preflight import EMPTY_TREE, read_git_objects
 
 Side = Literal["base", "head"]
 
@@ -105,17 +108,22 @@ def freeze_input(
     rule_digest: str, context_digest: str,
 ) -> ReviewInput:
     """仅接受完整提交标识；固定文件清单、差异块和排除路径。"""
-    # 1. 先确认两个标识都是提交对象，拒绝分支名、标签和缩写。
+    deadline = time.monotonic() + 10
+    # 1. 只接受完整对象标识；首个提交可使用已有预检记录的空树基准。
     for sha in (base_sha, head_sha):
         if not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", sha):
             raise ValueError("需要完整提交 SHA")
-        if git(root, "cat-file", "-t", sha).strip() != "commit":
+        expected = b"tree" if sha == base_sha == EMPTY_TREE else b"commit"
+        if read_git_objects(root, ["cat-file", "-t", sha], deadline, 32).strip() != expected:
             raise ValueError("评审范围必须引用提交")
     # 2. 用实际差异生成永久编号；无文本差异的条目保留在排除清单。
-    patch = PatchSet(git(
-        root, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color",
-        "--src-prefix=a/", "--dst-prefix=b/", "--unified=3", base_sha, head_sha, "--",
-    ))
+    raw = read_git_objects(
+        root, ["-c", "core.quotePath=false", "diff", "--no-ext-diff", "--no-textconv",
+               "--no-renames", "--no-color", "--src-prefix=a/", "--dst-prefix=b/",
+               "--unified=3", base_sha, head_sha, "--"],
+        deadline, 2 * 1024 * 1024,
+    )
+    patch = PatchSet(raw.decode("utf-8"))
     hunks: list[DiffHunk] = []
     excluded: list[str] = []
     for file in patch:

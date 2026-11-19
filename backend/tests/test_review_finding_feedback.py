@@ -13,7 +13,7 @@ from ocr_manager.config import Settings
 from ocr_manager.review_finding_feedback import FindingFeedbackVersion, write_feedback
 from ocr_manager.review_recovery_domain import RecoveryConflict
 from ocr_manager.review_recovery_store import cancel, claim, enqueue, finish
-from ocr_manager.storage import Store
+from ocr_manager.storage import SCHEMA_VERSION, Store
 from schema_fixtures import remove_finding_schema
 from test_auth import create_user, enable_users, login
 from test_review_conclusions import recovered as recovered
@@ -370,7 +370,7 @@ def test_schema51_adds_ignore_feedback_and_preserves_legacy_repair(
         db.execute("PRAGMA user_version=50")
     store.migrate()
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 54
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         verdict = db.execute(
             "SELECT verdict FROM review_finding_feedback WHERE finding_id='j1:a1:c0'").fetchone()[0]
         assert verdict == "fixed"

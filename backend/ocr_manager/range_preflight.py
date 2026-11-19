@@ -33,10 +33,12 @@ def input_policy(enabled: bool = False) -> dict[str, Any]:
     return policy
 
 
-def _git(root: Path, args: list[str], deadline: float, limit: int) -> bytes:
+def read_git_objects(root: Path, args: list[str], deadline: float, limit: int) -> bytes:
+    """读取受控 Git 对象，使用调用方截止时间及字节上限，并遵守 Worker 执行栅栏。"""
     env = {key: value for key, value in os.environ.items()
            if key in {"PATH", "TMPDIR", "LANG", "LC_ALL"}}
-    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_NO_REPLACE_OBJECTS="1")
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+               GIT_NO_REPLACE_OBJECTS="1", GIT_NO_LAZY_FETCH="1")
     command = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", *args]
     with execution_group() as group, subprocess.Popen(
                           command, cwd=root, env=env, stdout=subprocess.PIPE,
@@ -90,12 +92,14 @@ def inspect_range(checkout: Path, head: str, base: str | None = None,
         ):
             raise ValueError("范围 SHA 无效")
         if base is None:
-            parents = _git(checkout, ["rev-list", "--parents", "-n", "1", head],
-                           deadline, 2048).decode().split()
+            parents = read_git_objects(checkout, ["rev-list", "--parents", "-n", "1", head],
+                                       deadline, 2048).decode().split()
             base = parents[1] if len(parents) > 1 else EMPTY_TREE
         report["base_sha"] = base
-        raw = _git(checkout, ["diff", "--raw", "--no-renames", "--no-ext-diff", "--no-textconv",
-                             "--abbrev=40", "-z", base, head, "--"], deadline, 2 * 1024 * 1024)
+        raw = read_git_objects(
+            checkout, ["diff", "--raw", "--no-renames", "--no-ext-diff", "--no-textconv",
+                       "--abbrev=40", "-z", base, head, "--"], deadline, 2 * 1024 * 1024,
+        )
         entries = raw.split(b"\0")[:-1]
         if len(entries) % 2:
             raise ValueError("范围路径结构无效")
@@ -114,7 +118,7 @@ def inspect_range(checkout: Path, head: str, base: str | None = None,
             ):
                 report["unconfirmed_count"] += 1
                 continue
-            sizes = [int(_git(checkout, ["cat-file", "-s", oid], deadline, 32))
+            sizes = [int(read_git_objects(checkout, ["cat-file", "-s", oid], deadline, 32))
                      for oid in (old, new)]
             if max(sizes) > INPUT_POLICY["max_blob_bytes"] or (
                 report["bytes_read"] + sum(sizes) > INPUT_POLICY["max_total_bytes"]
@@ -122,8 +126,10 @@ def inspect_range(checkout: Path, head: str, base: str | None = None,
                 report["unconfirmed_count"] += 1
                 report["status"] = "limited"
                 continue
-            before, after = [_git(checkout, ["cat-file", "blob", oid], deadline,
-                                  INPUT_POLICY["max_blob_bytes"]) for oid in (old, new)]
+            before, after = [
+                read_git_objects(checkout, ["cat-file", "blob", oid], deadline,
+                                 INPUT_POLICY["max_blob_bytes"]) for oid in (old, new)
+            ]
             report["bytes_read"] += sum(sizes)
             report["checked_count"] += 1
             if b"\0" in before or b"\0" in after:

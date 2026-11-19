@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.agent_review_migration import AGENT_REVIEW_MIGRATION
 from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.attempt_migration import ATTEMPT_MIGRATION
@@ -53,7 +54,7 @@ from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
 from ocr_manager.unified_review_migration import MIGRATION as UNIFIED_REVIEW_MIGRATION
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -378,6 +379,7 @@ class Store:
                 (52, ONBOARDING_MIGRATION),
                 (53, UNIFIED_REVIEW_MIGRATION),
                 (54, MULTIBRANCH_MIGRATION),
+                (55, AGENT_REVIEW_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -2033,6 +2035,16 @@ class Store:
                 status=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'failed' END,
                 error_code='worker_interrupted',finished_at=CURRENT_TIMESTAMP
                 WHERE status='running'""")
+            # 已记账且已校验的页才可续读；有未确认调用时留终态，禁止自动重复发送。
+            db.execute("""UPDATE agent_reviews SET status='queued'
+                WHERE status='running' AND cancel_requested=0 AND completed_pages=(
+                  SELECT COUNT(*) FROM agent_review_calls c WHERE c.agent_review_id=agent_reviews.id
+                ) AND NOT EXISTS (SELECT 1 FROM agent_review_calls c
+                    WHERE c.agent_review_id=agent_reviews.id AND c.status='unknown')""")
+            db.execute("""UPDATE agent_reviews SET
+                status=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'failed' END,
+                reason=CASE WHEN cancel_requested=1 THEN 'cancelled' ELSE 'worker_interrupted' END,
+                finished_at=CURRENT_TIMESTAMP WHERE status='running'""")
             # 合并前结果仅在当前版本有效；重启不恢复旧版本，当前运行任务有限重试。
             premerge_running = db.execute("""SELECT id,attempts,execution_policy
                 FROM premerge_reviews WHERE status='running'""").fetchall()

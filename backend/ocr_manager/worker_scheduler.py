@@ -57,6 +57,8 @@ class WorkerScheduler:
 
     def __init__(self, store: Store, settings: Settings) -> None:
         from ocr_manager import worker
+        from ocr_manager.agent_review_store import claim as claim_agent
+        from ocr_manager.agent_review_worker import execute as execute_agent
         from ocr_manager.checks import run_connection_check
         from ocr_manager.publications import next_publication
         from ocr_manager.repository_discovery import claim_discovery, execute_discovery
@@ -83,7 +85,9 @@ class WorkerScheduler:
             "model": [Action("review", self._claim_job, self._review),
                       action("review_recovery", self._claim_recovery, execute_recovery),
                       action("model_check", lambda: store.next_connection_check(("model",)),
-                             run_connection_check)],
+                             run_connection_check),
+                      Action("agent_review", lambda: claim_agent(store),
+                             lambda task: execute_agent(store, settings, int(task["id"])))],
             "ingress": [action("repository_discovery", lambda: claim_discovery(store),
                                execute_discovery),
                         action("event", self._claim_event, worker.expand_event),
@@ -219,9 +223,13 @@ class WorkerScheduler:
             if lane.future is not None or (model and (
                     lane.slot_index > self.capacity or running >= self.capacity)):
                 continue
+            # 影子评审只使用正式模型类型都无法领取时的空余槽位。
+            primary_count = len(lane.actions) - int(model)
             cursor = self.model_cursor if model else lane.cursor
-            for offset in range(len(lane.actions)):
-                index = (cursor + offset) % len(lane.actions)
+            indices = [(cursor + offset) % primary_count for offset in range(primary_count)]
+            if model:
+                indices.append(primary_count)
+            for index in indices:
                 action = lane.actions[index]
                 task = action.claim()
                 if task is None:
@@ -230,7 +238,8 @@ class WorkerScheduler:
                 lane.future = lane.executor.submit(self._execute, action.execute, task)
                 lane.cursor = (index + 1) % len(lane.actions)
                 if model:
-                    self.model_cursor = lane.cursor
+                    if index < primary_count:
+                        self.model_cursor = (index + 1) % primary_count
                     running += 1
                 handled = True
                 break

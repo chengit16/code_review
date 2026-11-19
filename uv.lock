@@ -751,6 +751,8 @@ dependencies = [
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "langgraph" },
+    { name = "langsmith" },
     { name = "unidiff" },
     { name = "uvicorn" },
 ]
@@ -764,8 +766,6 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "langgraph" },
-    { name = "langsmith" },
     { name = "types-unidiff" },
 ]
 
@@ -774,6 +774,8 @@ requires-dist = [
     { name = "cryptography", specifier = ">=45,<47" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "langgraph", specifier = ">=1,<2" },
+    { name = "langsmith", specifier = ">=0.4,<1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.17,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<10" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
@@ -783,11 +785,7 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "langgraph", specifier = ">=1,<2" },
-    { name = "langsmith", specifier = ">=0.4,<1" },
-    { name = "types-unidiff", specifier = ">=0.7.0.20260727" },
-]
+dev = [{ name = "types-unidiff", specifier = ">=0.7.0.20260727" }]
 
 [[package]]
 name = "orjson"

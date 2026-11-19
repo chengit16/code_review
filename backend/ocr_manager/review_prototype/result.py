@@ -52,12 +52,12 @@ class Step:
 
 @dataclass(frozen=True)
 class ReviewResult:
-    """引擎运行的终态事实；替身无付费调用，费用在演示中记为零。"""
+    """引擎运行的终态事实；替身费用为零，真实端点未定价时金额为空。"""
 
     status: TerminalState
     reason: str
     coverage: tuple[HunkCoverage, ...]
     findings: tuple[Finding, ...] = ()
     steps: tuple[Step, ...] = ()
-    cost_minor_units: int = 0
+    cost_minor_units: int | None = 0
     schema_version: int = 1

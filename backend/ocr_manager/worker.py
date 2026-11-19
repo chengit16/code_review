@@ -743,6 +743,12 @@ def run_once(
         with artifact_lock(settings.data_dir, job["id"], blocking=True):
             review_job(store, settings, job)
         return True, int(job["repository_id"])
+    from ocr_manager.agent_review_store import claim as claim_agent
+    from ocr_manager.agent_review_worker import execute as execute_agent
+
+    if agent := claim_agent(store):
+        execute_agent(store, settings, agent["id"])
+        return True, agent["repository_id"]
     return False, last_repository_id
 
 
@@ -1048,6 +1054,8 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop_worker)
     signal.signal(signal.SIGINT, stop_worker)
     settings = load_settings()
+    if settings.agent_review_error:
+        LOGGER.warning("Agent 影子评审未启用：%s", settings.agent_review_error)
     with worker_lock(settings.data_dir):
         store = Store(settings.data_dir / "app.db")
         store.migrate()

@@ -11648,3 +11648,63 @@
 - 关联文件或证据：docs/review-agent-phase1-walkthrough.md、阶段一报告的比较 3 至 5。
 - 遗留与下一步：正式产品页按工作包 3 实施。按本编号累计十三条只读核对台账与本地页面数据源。
 - 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜明确第二阶段的开工顺序和验收产物
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：第二阶段的开工顺序已明确，待实施。
+- 关联记录：本编号的阶段一完成记录、阶段一回放和试点建议书工作包 2 至 4。
+- 现象或目标：用户确认阶段一回放后，询问下一步做什么以及会看到什么结果。
+- 原因或分析：阶段一已验证原型运行与结果留存；正式任务调度、故障隔离和真实模型能力仍待验证。
+- 处理与改进：建议先实现手动触发、冻结提交和规则、独立 Worker 任务及 SQLite 结果，然后确认模型端点和预算，用合成正反例与长差异跑真实模型。第二阶段验收交付可回放的运行记录；正式双评审页和人工裁定仍按第三阶段实施。
+- 代码修改：本轮仅追加台账，未开始第二阶段代码。
+- 本地验证：实际使用 `sed -n '93,150p' docs/review-agent-pilot-proposal.md` 和 `tail -37 docs/problem-improvement-log.md` 核对阶段范围与上一轮结论，使用 `rg -c '^### PI-20261116-002｜' docs/problem-improvement-log.md` 核对追加前为十三条。仅核对文档，未运行业务或模型测试。
+- 部署生效：未部署。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md、docs/review-agent-phase1-walkthrough.md。
+- 遗留与下一步：先完成单条任务的 Worker 和持久化接入；真实模型调用前明确端点、允许发送的代码范围与预算。按本编号累计十四条只读核对同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"planned","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜阶段二开工：接入独立评审任务与模型
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：按用户要求开始第二阶段。
+- 关联记录：本编号的第二阶段开工顺序及试点建议书工作包 2。
+- 现象或目标：从隔离原型推进到现有 Worker、持久化和一个可验证的真实模型端点。
+- 原因或分析：需确认两路同范围关联、任务隔离和重跑，再验证模型评审及费用记录。
+- 处理与改进：先核对现有任务执行、数据库迁移和模型接入入口，在本地测试环境实现与验证。
+- 代码修改：开工登记时仅追加台账。
+- 本地验证：已执行 `git status --short` 和 `rg --files --hidden -g AGENTS.md -g '!.git'`；业务检查尚未运行。
+- 部署生效：未部署。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md、docs/review-agent-phase1-walkthrough.md。
+- 遗留与下一步：确认支持的任务范围、现有端点能力及试点授权条件，实施后追加证据并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜阶段二 Worker 接入已验证，真实端点待验
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：完成本地业务队列接入与回归；真实模型验收受配置和预算缺失阻塞。
+- 关联记录：本编号阶段二开工及工作包 2。
+- 现象或目标：用独立 Worker 按固定范围评审，保存两路结果、历史版本、调用轨迹及凭据隔离证据。
+- 原因或分析：原型使用独立临时库和假模型；正式链路需要沿用模型池、调度优先级和初审结果版本。当前运行环境和已知本机私有配置没有独立 Agent 端点及密钥，未调用外部模型。
+- 处理与改进：新增默认关闭的本机手动入口、SQLite v55 独立任务和调用表、固定 Git 取证、LangGraph 页检查点及 Chat Completions 适配器。正式任务优先。未知调用按预留额度计入后续重跑预算，重启不自动重发。环回演示三个比较共享 OCR #1，Agent 分别超时、部分完成、完整完成，覆盖为 0/25、5/25、25/25，末次定位 orders.py 新侧第 24 行，仅初审有飞书投递记录。全量初检发现离线清理工具仅接受 v54；补齐 v55 在途校验和级联核对后回归通过。
+- 代码修改：新增 Agent CLI、配置、存储、模型适配、Worker 用例、迁移、验证及运行手册，复用现有模型调度、Git 对象读取和 LangGraph；修改旧库迁移断言及历史清理兼容。应用前端未修改。
+- 本地验证：实际运行 `.venv/bin/python -m pytest -q -r s`，最终 869 项通过、1 项跳过（外部 OCR 探针未配置）。实际运行 `.venv/bin/python -m pytest -q -s --basetemp <临时演示目录> backend/tests/test_agent_review_worker.py::test_scheduler_timeout_partial_and_single_side_rerun backend/tests/test_review_history_cleanup.py`，11 项通过并导出三份合成比较，另以 `python3 - <报告路径>` 核对固定 SHA、三版 OCR 复用、覆盖及行号。`uv lock --check --offline`、`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract`、CLI `--help` 和 `git diff --check` 通过。外部模型兼容、评审准确性及真实费用未验证。
+- 部署生效：未部署，测试数据库已迁移，当前业务库未执行本次迁移。正式评审页面未更新。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、backend/tests/test_agent_review_worker.py、隔离演示 JSON。
+- 遗留与下一步：选定真实端点和模型，确认试点发送范围及调用预算后，用合成正反例与长差异做真实验收，再推进对比页。按本编号累计十六条只读核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜明确真实模型试跑所需输入
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：给出阶段二真实模型试跑准备清单，待确认端点和预算。
+- 关联记录：本编号的阶段二接入与待验记录。
+- 现象或目标：用户询问下一步需要自己做哪些准备。
+- 原因或分析：真实试跑须有与现有适配器匹配的模型端点和预算，凭据应留在本机受限配置。首轮合成样例无需授权发送真实仓库代码。
+- 处理与改进：核对运行手册和配置入口，明确用户确认供应商或端点、模型、试跑金额及通过本机配置录入密钥；其余隔离环境准备、合成样例、执行和报告核对由实施方完成。实际金额以供应商账单为准，适配器按调用数与 Token 阈值约束。
+- 代码修改：仅追加台账，业务代码未修改。
+- 本地验证：实际执行 `sed -n '36,73p' docs/review-agent-phase2-walkthrough.md` 及 `rg` 核对配置、预算入口和追加前条数。未调用真实模型或重运行业务套件。
+- 部署生效：未部署，未改现有私有配置和业务库 schema。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、backend/ocr_manager/agent_review_config.py。
+- 遗留与下一步：确认试跑端点、模型和预算后以本机隔离实例执行三个合成用例；按本编号累计十七条只读核对同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}

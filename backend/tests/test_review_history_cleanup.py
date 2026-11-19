@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from ocr_manager.review_history_cleanup import apply_cleanup, plan_cleanup
-from ocr_manager.storage import Store
+from ocr_manager.storage import SCHEMA_VERSION, Store
 
 CUTOFF = "2026-11-08 16:00:00"
 
@@ -71,7 +71,7 @@ def test_cleanup_preserves_midnight_jobs_and_all_other_tables(database: sqlite3.
     assert database.execute("SELECT count(*) FROM merge_events").fetchone()[0] == 2
     assert database.execute("SELECT count(*) FROM job_identity").fetchone()[0] == 2
     assert database.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert database.execute("PRAGMA user_version").fetchone()[0] == 54
+    assert database.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     assert apply_cleanup(database, plan_cleanup(database, CUTOFF))["deleted_jobs"] == 0
 
 
@@ -139,3 +139,24 @@ def test_wrong_schema_rejected_without_migration(database: sqlite3.Connection) -
     with pytest.raises(ValueError, match="schema 54"):
         plan_cleanup(database, CUTOFF)
     assert database.execute("PRAGMA user_version").fetchone()[0] == 49
+
+
+def test_cleanup_cascades_only_old_agent_comparisons(database: sqlite3.Connection) -> None:
+    """影子任务在途时拒绝清理，完成后只删除被清理任务的比较和调用。"""
+
+    database.execute("""INSERT INTO agent_reviews
+        (id,job_id,source_attempt_id,request_key,base_sha,head_sha,ocr_config_hash,
+         context_digest,model_snapshot)
+        SELECT job_id,job_id,id,'request','base','head','config','context','{}'
+        FROM review_attempts""")
+    database.execute("""INSERT INTO agent_review_calls
+        (id,agent_review_id,hunk_id,page_offset,reserved_tokens)
+        VALUES ('old',1,1,0,512),('retained',2,1,0,512)""")
+    database.commit()
+    with pytest.raises(ValueError, match="agent_reviews 存在在途"):
+        plan_cleanup(database, CUTOFF)
+    database.execute("UPDATE agent_reviews SET status='complete'")
+    database.commit()
+    apply_cleanup(database, plan_cleanup(database, CUTOFF))
+    assert database.execute("SELECT id FROM agent_reviews").fetchall() == [(2,)]
+    assert database.execute("SELECT id FROM agent_review_calls").fetchall() == [("retained",)]

@@ -13,7 +13,7 @@ from ocr_manager import repository_discovery
 from ocr_manager.config import Settings
 from ocr_manager.premerge import enqueue_premerge
 from ocr_manager.repository_discovery import claim_discovery, execute_discovery
-from ocr_manager.storage import Store
+from ocr_manager.storage import SCHEMA_VERSION, Store
 from test_webhook import merge_payload
 
 ADMIN = {"X-Admin-Token": "test-admin-token"}
@@ -214,7 +214,7 @@ def test_v53_migration_keeps_history_and_moves_merge_subscription(tmp_path: Path
     assert json.loads(repo["target_branches"]) == ["release/test"]
     assert repo["enable_merge_requests"] == 0 and repo["enable_default_branch_pushes"] == 1
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 54
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert not db.execute("PRAGMA foreign_key_check").fetchall()
         assert db.execute("SELECT COUNT(*) FROM review_jobs").fetchone()[0] == 0

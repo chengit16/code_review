@@ -37,8 +37,9 @@ def _tables(db: sqlite3.Connection) -> list[str]:
 def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     if datetime.strptime(cutoff, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S") != cutoff:
         raise ValueError("清理边界必须是规范 UTC 时间")
-    if db.execute("PRAGMA user_version").fetchone()[0] != 54:
-        raise ValueError("仅支持已核对的 schema 54，不自动迁移")
+    version = db.execute("PRAGMA user_version").fetchone()[0]
+    if version not in {54, 55}:
+        raise ValueError("仅支持已核对的 schema 54 或 55，不自动迁移")
     if db.execute("PRAGMA foreign_key_check").fetchall():
         raise ValueError("现有外键不完整，拒绝清理")
     active = {
@@ -57,6 +58,8 @@ def _validate(db: sqlite3.Connection, cutoff: str) -> None:
         "alert_deliveries": "status IN ('pending','sending')",
         "worker_execution_slots": "state='running'",
     }
+    if version == 55:
+        active["agent_reviews"] = "status IN ('queued','running')"
     for table, predicate in active.items():
         if db.execute(f'SELECT 1 FROM "{table}" WHERE {predicate} LIMIT 1').fetchone():
             raise ValueError(f"{table} 存在在途或待处理记录，拒绝清理")
@@ -114,7 +117,7 @@ def _expected(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, str]:
         "gitlab_publications", "review_stage_timings", "review_recoveries",
         "review_recovery_aggregates", "review_effective_conclusions",
         "review_recovery_deliveries", "review_historical_diagnostics",
-        "review_recovery_authorizations", "review_event_links",
+        "review_recovery_authorizations", "review_event_links", "agent_reviews",
     ), by_job)
     filters.update({
         "review_jobs": "id NOT IN (SELECT id FROM cleanup_jobs)",
@@ -123,6 +126,9 @@ def _expected(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, str]:
         "review_issue_occurrences": f"{by_job} AND issue_id NOT IN (SELECT id FROM cleanup_issues)",
         "review_finding_feedback": "finding_id NOT IN (SELECT finding_id FROM cleanup_findings)",
         "review_recovery_budget_evidence": "recovery_id NOT IN (SELECT id FROM cleanup_recoveries)",
+        # 影子记录随初审来源级联；其余 Agent 结果和调用账目必须逐条保留。
+        "agent_review_calls": "agent_review_id NOT IN (SELECT id FROM agent_reviews "
+        "WHERE job_id IN (SELECT id FROM cleanup_jobs))",
     })
     expected = {table: _digest(db, table, filters.get(table, "1")) for table in _tables(db)}
     rows = [list(row) for row in db.execute('SELECT * FROM merged_review_ranges')]

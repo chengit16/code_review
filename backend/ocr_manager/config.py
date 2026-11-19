@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ocr_manager.agent_review_config import AgentReviewConfig, load_agent_config
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -37,6 +39,8 @@ class Settings:
     improvement_log_path: str = ""
     review_recovery_max_batches: int = 3
     review_recovery_max_total_tokens: int = 100_000
+    agent_review: AgentReviewConfig | None = None
+    agent_review_error: str | None = None
 
     @property
     def webhook_base_url(self) -> str:
@@ -139,6 +143,12 @@ def load_settings() -> Settings:
         raise RuntimeError("补审批次数和总预算必须是整数") from error
     if not 1 <= recovery_batches <= 10 or not 1 <= recovery_tokens <= 100_000_000:
         raise RuntimeError("补审批次上限为 1 至 10，总 Token 上限须为正数")
+    # 影子配置错误只关闭 Agent；正常初审、管理端和监控仍启动。
+    agent_review, agent_review_error = None, None
+    try:
+        agent_review = load_agent_config(setting)
+    except ValueError as error:
+        agent_review_error = str(error)
     return Settings(
         data_dir=Path(setting("OCR_APP_DATA_DIR", ".local-data")).resolve(),
         admin_token=admin_token,
@@ -161,4 +171,6 @@ def load_settings() -> Settings:
         improvement_log_path=setting("OCR_APP_IMPROVEMENT_LOG_PATH"),
         review_recovery_max_batches=recovery_batches,
         review_recovery_max_total_tokens=recovery_tokens,
+        agent_review=agent_review,
+        agent_review_error=agent_review_error,
     )

@@ -61,6 +61,8 @@ BUSY_MODEL_REPOSITORIES = """
  JOIN review_jobs j ON j.id=b.job_id WHERE b.status='running'
  UNION SELECT repository_id FROM connection_checks
  WHERE kind='model' AND status='running' AND repository_id IS NOT NULL
+ UNION SELECT j.repository_id FROM agent_reviews a
+ JOIN review_jobs j ON j.id=a.job_id WHERE a.status='running'
 """
 
 

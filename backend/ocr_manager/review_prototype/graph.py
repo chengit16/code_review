@@ -25,7 +25,7 @@ class ReadRequest:
 
 
 class PageModel(Protocol):
-    """模型适配边界；原型使用脚本化响应，工具执行权仍由图持有。"""
+    """一次读取和单页推理的模型边界；工具执行权仍由图持有。"""
 
     def request_diff(self, available: ReadRequest) -> ReadRequest: ...
 
@@ -44,6 +44,25 @@ class GraphState(TypedDict):
     reason: str
 
 
+@dataclass(frozen=True)
+class AgentProgress:
+    """可持久化的已核对页进度，不带待发送、未返回或未验证的差异数据。"""
+
+    coverage: tuple[HunkCoverage, ...]
+    findings: tuple[Finding, ...]
+    steps: tuple[Step, ...]
+    reads: int
+    hunk_index: int
+
+
+class ModelPageFailure(Exception):
+    """适配器已记录的终止原因，只允许稳定业务码进入图轨迹。"""
+
+    def __init__(self, reason: Literal["model_budget", "model_unavailable", "model_response"]):
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _validate(page: DiffPage, findings: tuple[Finding, ...]) -> None:
     for finding in findings:
         evidence = finding.evidence
@@ -59,7 +78,8 @@ def _validate(page: DiffPage, findings: tuple[Finding, ...]) -> None:
 
 def run_agent(
     snapshot: ReviewInput, model: PageModel, *, page_lines: int, max_reads: int,
-    trace: Trace | None = None,
+    trace: Trace | None = None, resume: AgentProgress | None = None,
+    checkpoint: Callable[[AgentProgress], None] | None = None,
 ) -> ReviewResult:
     """运行有限读取和校验。保留超时、无效证据及预算停止时的真实覆盖。"""
     if min(page_lines, max_reads) < 1:
@@ -117,6 +137,11 @@ def run_agent(
             findings = model.inspect(page)
         except TimeoutError:
             return {"reason": "model_timeout", "steps": event(steps, "failed", "模型调用超时")}
+        except ModelPageFailure as error:
+            return {
+                "reason": error.reason,
+                "steps": event(steps, "stopped", error.reason),
+            }
         try:
             _validate(page, findings)
         except ValueError:
@@ -124,16 +149,22 @@ def run_agent(
         index = state["hunk_index"]
         coverage = state["coverage"]
         updated = replace(coverage[index], reviewed_end=page.end)
-        return {
-            "coverage": (*coverage[:index], updated, *coverage[index + 1:]),
-            "hunk_index": index + (page.next_offset is None),
-            "findings": (*state["findings"], *findings),
-            "steps": event(steps, "verified", f"本页已核对，保留 {len(findings)} 条发现"),
-        }
+        progress = AgentProgress(
+            (*coverage[:index], updated, *coverage[index + 1:]),
+            (*state["findings"], *findings),
+            event(steps, "verified", f"本页已核对，保留 {len(findings)} 条发现"),
+            state["reads"], index + (page.next_offset is None),
+        )
+        if checkpoint:
+            checkpoint(progress)
+        return {"coverage": progress.coverage, "hunk_index": progress.hunk_index,
+                "findings": progress.findings, "steps": progress.steps}
 
     def start(state: GraphState) -> dict[str, object]:
         return {"steps": event(
-            state["steps"], "start", f"冻结范围包含 {len(snapshot.hunks)} 个差异块",
+            state["steps"], "resume" if resume else "start",
+            f"从已核对的 {state['reads']} 页继续" if resume
+            else f"冻结范围包含 {len(snapshot.hunks)} 个差异块",
         )}
 
     def finish(state: GraphState) -> dict[str, object]:
@@ -162,10 +193,13 @@ def run_agent(
     graph.add_conditional_edges("inspect", route)
     graph.add_edge("finish", END)
     initial: GraphState = {
-        "coverage": tuple(HunkCoverage(h.hunk_id, len(h.lines)) for h in snapshot.hunks),
-        "findings": (), "steps": (), "reads": 0, "hunk_index": 0, "page": None, "reason": "",
+        "coverage": (resume.coverage if resume else
+                     tuple(HunkCoverage(h.hunk_id, len(h.lines)) for h in snapshot.hunks)),
+        "findings": resume.findings if resume else (), "steps": resume.steps if resume else (),
+        "reads": resume.reads if resume else 0, "hunk_index": resume.hunk_index if resume else 0,
+        "page": None, "reason": "",
     }
-    # 2. 禁止继承外部 tracing 配置；所有事件仅供本地演示。
+    # 2. 禁止继承外部 tracing 配置；差异和运行事件只交给当前调用方。
     with tracing_context(enabled=False):
         final = graph.compile().invoke(initial, {"recursion_limit": 2 * max_reads + 6})
     # 3. 预算停止与异常分别落在部分完成、失败等明确结果上。
@@ -175,7 +209,7 @@ def run_agent(
         status = "complete"
     elif reason == "no_text_diff":
         status = "skipped"
-    elif reason == "read_budget":
+    elif reason in {"read_budget", "model_budget"}:
         status = "partial"
     else:
         status = "failed"
