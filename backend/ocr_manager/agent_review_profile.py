@@ -41,8 +41,13 @@ def resolve_model(
     ciphertext = profile["api_key_ciphertext"]
     if not ciphertext:
         raise ValueError("项目模型缺少已保存的凭据")
+    # zt 按固定差异清单逐页完成，保留单次 HTTP 超时和取消检查。
+    bounded = profile["name"] != "zt"
     return replace(
         config, model=model, endpoint=endpoint,
         profile_reference=(int(profile["id"]), int(profile["version"])),
+        enforce_token_budget=bounded,
+        max_reads=config.max_reads if bounded else None,
+        timeout_seconds=config.timeout_seconds if bounded else None,
         api_key=SecretBox(master_key).decrypt(ciphertext) if master_key is not None else "",
     )

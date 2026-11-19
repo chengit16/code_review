@@ -10,6 +10,7 @@ from ocr_manager.agent_comparison_contracts import (
     ComparisonCreate,
     ComparisonCreated,
     ComparisonIndex,
+    ComparisonPilotUpdate,
     CurationSnapshot,
     CurationUpdate,
 )
@@ -20,6 +21,7 @@ from ocr_manager.agent_comparisons import (
     create_comparison,
     save_curation,
 )
+from ocr_manager.agent_pilot import PilotConflict, set_task_pilot
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
 
@@ -66,6 +68,20 @@ def register_agent_comparison_api(app: FastAPI, store: Store, settings: Settings
             raise HTTPException(404, str(error)) from error
         except ComparisonConflict as error:
             raise HTTPException(409, {"code": error.code, "message": str(error)}) from error
+
+    @app.put(f"{PATH}/pilot", dependencies=[access], status_code=204)
+    def update_pilot(job_id: int, payload: ComparisonPilotUpdate, request: Request) -> Response:
+        """保存本仓授权，Worker 仅处理随后单独确认的评审任务。"""
+
+        try:
+            set_task_pilot(
+                store, settings, job_id, payload.enabled, request.state.identity["username"],
+            )
+        except LookupError as error:
+            raise HTTPException(404, str(error)) from error
+        except PilotConflict as error:
+            raise HTTPException(409, {"code": error.code, "message": str(error)}) from error
+        return Response(status_code=204)
 
     @app.put(f"{PATH}/{{comparison_id}}/curation", dependencies=[access])
     def update(job_id: int, comparison_id: int, payload: CurationUpdate,

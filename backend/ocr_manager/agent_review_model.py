@@ -21,6 +21,7 @@ from ocr_manager.storage import Store
 
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_RESPONSE_BYTES = 128 * 1024
+HTTP_TIMEOUT_SECONDS = 20.0
 
 
 class ModelCandidate(BaseModel):
@@ -68,7 +69,7 @@ class ChatPageModel:
 
     def __init__(
         self, store: Store, run_id: int, config: AgentReviewConfig, client: httpx.Client,
-        *, deadline: float,
+        *, deadline: float | None,
     ) -> None:
         self.store, self.run_id, self.config, self.client = store, run_id, config, client
         self.deadline = deadline
@@ -77,14 +78,16 @@ class ChatPageModel:
         """将本地图允许的下一页交给受限工具，继续前检查取消和截止时间。"""
 
         check_cancellation()
-        self._remaining()
+        self._io_timeout()
         return available
 
-    def _remaining(self) -> float:
+    def _io_timeout(self) -> float:
+        if self.deadline is None:
+            return HTTP_TIMEOUT_SECONDS
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError()
-        return remaining
+        return min(HTTP_TIMEOUT_SECONDS, remaining)
 
     def _response(self, payload: bytes, call_id: str) -> object:
         headers = {"Content-Type": "application/json", "Accept-Encoding": "identity",
@@ -95,13 +98,13 @@ class ChatPageModel:
         try:
             with self.client.stream(
                 "POST", self.config.endpoint, content=payload, headers=headers,
-                timeout=httpx.Timeout(min(20.0, self._remaining())),
+                timeout=httpx.Timeout(self._io_timeout()),
                 follow_redirects=False,
             ) as response:
                 response.raise_for_status()
                 for chunk in response.iter_raw():
                     check_cancellation()
-                    self._remaining()
+                    self._io_timeout()
                     if len(data) + len(chunk) > MAX_RESPONSE_BYTES:
                         raise ModelPageFailure("model_response")
                     data.extend(chunk)
@@ -114,25 +117,31 @@ class ChatPageModel:
     def inspect(self, page: DiffPage) -> tuple[Finding, ...]:
         """把受限差异作为数据发送；无账目、无有效候选或中断时停止当前尝试。"""
 
-        # 1. Tokenizer 因端点而异，以请求字节数加封装余量保守预留。
+        # 1. 限额模式保守预留输出用量；豁免模式仍登记每次请求，保留未知费用的恢复语义。
         config = self.config
-        payload = json.dumps({
+        request: dict[str, object] = {
             "model": config.model,
             "messages": [
                 {"role": "system", "content": POLICY},
                 {"role": "user", "content": json.dumps(asdict(page), ensure_ascii=False)},
             ],
             "response_format": {"type": "json_object"},
-            config.output_limit_field: config.max_output_tokens,
-        }, ensure_ascii=False, separators=(",", ":")).encode()
-        reserved = len(payload) + 128 + config.max_output_tokens
+        }
+        if config.enforce_token_budget:
+            request[config.output_limit_field] = config.max_output_tokens
+        payload = json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode()
+        reserved = len(payload) + 128
+        if config.enforce_token_budget:
+            reserved += config.max_output_tokens
         check_cancellation()
-        self._remaining()
+        self._io_timeout()
         if len(payload) > MAX_REQUEST_BYTES:
             raise ModelPageFailure("model_budget")
         call_id = reserve_call(
             self.store, self.run_id, page.hunk_id, page.start,
-            reserved, config.max_reads, config.max_total_tokens, config.max_source_tokens,
+            reserved, config.max_reads,
+            config.max_total_tokens if config.enforce_token_budget else None,
+            config.max_source_tokens if config.enforce_token_budget else None,
         )
         if call_id is None:
             check_cancellation()
@@ -155,7 +164,9 @@ class ChatPageModel:
             record_usage(
                 self.store, call_id, usage.prompt_tokens, usage.completion_tokens, provider_model,
             )
-            if usage.total_tokens > reserved or usage.completion_tokens > config.max_output_tokens:
+            if config.enforce_token_budget and (
+                usage.total_tokens > reserved or usage.completion_tokens > config.max_output_tokens
+            ):
                 raise ModelPageFailure("model_budget")
 
             # 3. 用量和质量独立。即使响应被截断，也保留返回的计费计数。

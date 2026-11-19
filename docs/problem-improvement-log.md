@@ -11933,3 +11933,183 @@
 - 关联文件或证据：docs/deployment.md、docs/review-agent-phase3-walkthrough.md。
 - 遗留与下一步：核对进程入口和配置，完成备份、恢复演练、空闲切换和真实页面验收。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜第三阶段已发布至本机并验收任务详情
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：本机发布完成，正式管理台双评审入口已通过只读浏览器验收。
+- 关联记录：本编号第三阶段开发验证、发布建议及本轮发布受理。
+- 现象或目标：在本机实际使用的 8781 管理台发布第三阶段，并协调共用业务库的 8000、Worker 与 monitor。
+- 原因或分析：原运行库为 v54，工作区代码目标为 v56。进程配置未包含 Agent 试点设置。切换前队列、投递及子进程检查为空闲。
+- 处理与改进：保留私有配置，停两个 API 后停止 Worker 与 monitor，制作最终成对备份并对副本完成恢复演练。保存原前端产物，安装已构建静态资源，启动 API 完成迁移和只读核验，再启动第二 API、单 Worker 与单 monitor。
+- 代码修改：业务实现沿用第三阶段交付，本轮新增台账，已发布对应前后端。本机临时部署和只读验收脚本保存在 Git 忽略的备份目录。
+- 本地验证：实际执行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.backup` 的备份和 `--drill-from` 模式，对在线预检备份与停机最终备份分别验证 v54→v56、完整性及凭据解密。执行 `npm --prefix frontend run build -- --outDir` 生成隔离产物，已有共享包体积提示。执行 `.venv/bin/python .local-data/backups/agent-phase3-20261119/deploy.py` 比较迁移前后统计、确认健康和静态入口匹配构建。执行 `node .local-data/backups/agent-phase3-20261119/live-check.cjs`，通过 1440px 和 390px 任务 609 真实页面核验，任务旧详情及新比较接口均成功，显示仅 OCR 和试点关闭，无页面异常和横向溢出。浏览器只允许本机 GET 和 HEAD。`git diff --check` 通过。本轮未重复运行上一轮全量测试。
+- 部署生效：本机 8781 与 8000 健康，Worker 运行，monitor 已验证同步受理记录。正式库 schema 56，完整性通过、外键错误 0。迁移前后 209 条评审任务、210 条评审尝试、598 条事件和 207 条通知均保留，通知状态一致。Agent 任务及调用数均为 0，Agent 试点保持关闭。本轮未发起真实模型、OCR、飞书或 GitLab 验收请求。
+- 关联文件或证据：`.local-data/backups/agent-phase3-20261119/` 下 `final`、`drills`、`frontend-before`、`deploy-result.json`、`live-check.json`。
+- 遗留与下一步：正式页面可打开任务 609 的双评审区。真实 MR 对照仍待确认发送范围和 `zt` 预算后单仓试点。按累计三十三条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261116-002｜核对单仓 Agent 试点的配置和人工启动入口
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已核对当前发布版本的试点配置、页面入队和停用方式，待选仓及完成预算校准。
+- 关联记录：本编号第三阶段本机发布、`zt` 首轮真实请求及阶段二合成补测。
+- 现象或目标：说明如何将一个已接入仓库加入 Agent 试点，并对一条有固定范围的 OCR 初审手动追加 Agent 结果。
+- 原因或分析：Agent 仓库名单是进程启动配置。项目模型复用按项目指定优先于全局，页面只负责管理员确认后入队。`zt` 首轮合成请求回执总用量 19036，超过单页预留 2508，已记账但未进行内容校验。提高单次总额度不能覆盖独立的单页预留校验。
+- 处理与改进：明确先选内部仓库 ID、核对模型及可发送范围、校准单页预留并合成验证，再向本机私有配置加入项目模型来源及单仓名单，空闲时重启共享配置服务。进入已完成且保存固定 Git 范围的任务，点击「运行 Agent」及「确认入队」。试点先手动执行，不启动自动触发或接入 MCP。
+- 代码修改：本轮仅追加台账。
+- 本地验证：执行 `rg`、`sed` 核对配置加载、模型继承、预算保护、Worker 和界面按钮；以 `curl --max-time 4 -fsS http://127.0.0.1:8781/api/health` 及 `.venv/bin/python -` 只读查询任务、仓库列表和任务 609 的比较接口。服务健康，比较接口返回试点未启用，仓库列表含内部 ID 与 GitLab 项目 ID。未触发写请求、业务测试或模型调用。`git diff --check` 通过。
+- 部署生效：第三阶段沿用已发布的本机状态，本轮未改运行配置、未启用试点仓库或重启服务。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、docs/review-agent-phase3-walkthrough.md、backend/ocr_manager/agent_review_model.py、frontend/src/pages/agentComparison/AgentComparisonPanel.tsx。
+- 遗留与下一步：确定拟试点仓库和模型端点用量口径，准备有限预算的校准及合成验收。按累计三十四条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261119-001｜受理：在管理台启用单仓 Agent 试点
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：用户希望省去手改两项私有配置，开始实现管理入口。
+- 关联记录：PI-20261116-002 第三阶段本机发布和试点配置核对。
+- 现象或目标：从管理台为单个仓库启用试点，复用已生效的模型，再按任务手动入队。
+- 原因或分析：当前允许发送代码的仓库名单依赖私有 JSON 及进程重启，管理员日常操作成本较高。
+- 处理与改进：拟将管理员的单仓授权持久化，继续由任务级确认触发模型调用，并验证关闭试点、并发和旧配置兼容。
+- 代码修改：受理时仅追加台账。
+- 本地验证：已执行 `git status --short` 并阅读项目规范，尚未执行本轮业务验证。
+- 部署生效：本轮尚未发布，上一版本继续运行。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、docs/review-agent-phase3-walkthrough.md。
+- 遗留与下一步：实现并验证授权、页面操作和 Worker 一致性。收尾追加实际结果并只读核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261119-001｜已发布管理台仓库试点开关
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：管理台授权、项目模型复用与手动入队已实现，发布至本机并核验页面。
+- 关联记录：本编号受理及 PI-20261116-002 第三阶段发布。
+- 现象或目标：管理员在已有任务中直接启用所属试点仓库，省去编辑私有 JSON 和为每次授权重启服务。
+- 原因或分析：运维名单只在启动时加载。新增 SQLite 授权后，API、CLI 和 Worker 可实时读取同一份仓库授权，旧运维配置继续有效。
+- 处理与改进：任务详情使用 Ant Design 确认所属仓库，启用时校验项目模型档案，仅保存授权。管理员另行确认才入队。入队与关闭共用 SQLite 写锁，存在排队或运行时等待结束后关闭。历史比较与裁定维持可读。
+- 代码修改：新增 v57 仓库试点授权表、管理接口和页面入口，更新 Worker 及 CLI 的授权读取、OpenAPI、运行手册与专项测试。
+- 本地验证：实际执行 `.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract`、`git diff --check`，均通过。`.venv/bin/python -m pytest -q -r s` 876 通过、外部 CLI 探针跳过 1 项。`npm --prefix frontend test -- --maxWorkers 2` 283 通过，前端 lint 与隔离构建通过，仍有既有大包提醒。Playwright `e2e/agentPilot.spec.ts` 通过 1 项，真实隔离界面完成启用、查看入队确认、刷新与关闭，`e2e/agentComparison.spec.ts` 原比较回归通过 2 项。后端专项覆盖权限、授权与入队分离、旧配置、真实 Worker 采用模拟回执以及关闭后的旧记录。备份工具对在线备份和停机成对备份分别完成 v56→v57 恢复演练，完整性及凭据解密通过。
+- 部署生效：执行 `.venv/bin/python .local-data/backups/agent-pilot-ui-20261119/deploy.py`，确认数据库 v57、完整性通过、外键错误 0、既有业务表计数及状态一致，8781 与 8000 健康且 Worker 运行。执行 `node .local-data/backups/agent-pilot-ui-20261119/live-check.cjs`，任务 617 在 1440px 和 390px 均可打开启用确认弹窗，关闭弹窗后仍显示试点未启用。所有实际仓库保持关闭，私有配置内容一致，本轮无真实 Agent 请求或通知测试。
+- 关联文件或证据：docs/review-agent-phase3-walkthrough.md、backend/tests/test_agent_pilot.py、frontend/e2e/agentPilot.spec.ts；隔离证据 `.local-data/backups/agent-pilot-ui-20261119/`。
+- 遗留与下一步：管理员可从选定任务手动授权仓库。真实 `zt` MR 开跑前仍需完成单页预算校准。按累计两条执行只读台账核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261119-002｜受理：首次真实 Agent 评审响应校验失败
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：收到截图，开始只读排查任务与模型调用记录。
+- 关联记录：PI-20261119-001 管理台试点开关及 PI-20261116-002 双评审实现。
+- 现象或目标：截图显示 Agent 失败，已交付 37 条差异、核对 0/200，模型回执输入 1306、输出 512 Token，页面显示模型响应未通过校验。
+- 原因或分析：尚未读取本次运行的数据库记录，需区分输出截断、用量护栏、输出格式及证据校验。
+- 处理与改进：先按截图用量匹配实际尝试，核对固定范围、模型快照边界、调用台账和错误映射。
+- 代码修改：受理时仅追加台账。
+- 本地验证：已执行 `git status --short` 并读取调用台账结构，尚未核验本次运行数据。
+- 部署生效：沿用本机已发布版本，此次尚未变更。
+- 关联文件或证据：用户截图、backend/ocr_manager/agent_review_migration.py。
+- 遗留与下一步：定位可证实原因及证据边界，追加结论并核验同步。
+- 同步状态：{"kind":"problem","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"unknown"}
+
+### PI-20261119-002｜定位 Agent 首页响应校验失败与输出上限
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：定位到首个模型页面在用量记账后校验失败。输出截断是最符合已知事实的原因，网关终止码未保留，尚不能确认具体校验分支。
+- 关联记录：本编号受理记录及 PI-20261119-001 管理台试点发布。
+- 现象或目标：查明截图所示 37 条已交付、0/200 条已核对和「模型响应未通过校验」。
+- 原因或分析：任务 616 的比较 1 和 2 均只有一次调用，都是差异块 1、偏移 0，模型回执 `deepseek-v4.1-flash-1017`。两次均记账输入 1306、输出 512，共 1818 Token，低于该页预留 5270，且输出等于冻结上限 512。保存原因 `model_response`，已核对页为零。终止码、原始 JSON 和具体证据校验分支未持久化，截断、损坏 JSON 和其他内容格式失败共用终态码。
+- 处理与改进：只读匹配请求与业务记录，核对适配器先记账后校验的执行顺序。用合成响应验证输出恰等于上限时仍可正常接受完整结果，截断和损坏 JSON 则产生相同错误。阿里 OCR 初审已完成，投递记录为已发送。
+- 代码修改：本轮仅追加台账，未修改评审逻辑或模型配置。
+- 本地验证：执行 `.venv/bin/python -` 用只读 SQLite 对照尝试、冻结预算、调用账、覆盖和 OCR 状态；查询 `GET /api/jobs/616/agent-comparisons/2` 返回 200，`/api/health` 正常。执行 `PYTHONPATH=backend .venv/bin/python -` 用 HTTP MockTransport 校验截断、损坏 JSON、正常结束三种结果，初次合成页太短触发预留校验，改用足够长度的合成页后通过。`git diff --check` 通过。未调用真实模型或重跑业务任务。
+- 部署生效：本机沿用已发布版本。本轮仅诊断，未部署修复或变更运行配置。
+- 关联文件或证据：任务 616 比较 1、2，backend/ocr_manager/agent_review_model.py、backend/ocr_manager/agent_review_migration.py。
+- 遗留与下一步：如需确认历史截断，需对应网关请求的终止码。后续可区分安全的终止原因并给页输出留足预算，用隔离响应验证后再决定是否重跑。按累计两条执行只读台账核验。
+- 同步状态：{"kind":"problem","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261119-003｜受理：Agent 部分完成时无问题反馈入口
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：收到截图，开始排查预算停止、发现留存和人工处理入口。
+- 关联记录：PI-20261116-002 的 `zt` 合成预算记录和第三阶段对比页，以及 PI-20261119-002 的独立响应校验诊断。
+- 现象或目标：截图显示 Agent 部分完成、已交付 29 条、已核对 0/327、模型达到预算限制。用户询问为何没有问题反馈，以及是否留待后续阶段。
+- 原因或分析：目前只能辨认页面状态，需匹配真实调用并核对裁定与问题流转的实现范围。
+- 处理与改进：只读检查任务、调用、已有发现及页面入口。同步核对阶段计划的验收边界。
+- 代码修改：受理时仅追加台账。
+- 本地验证：已执行 `git status --short`，尚未核验本次运行数据。
+- 部署生效：沿用本机已发布版本，本轮尚未变更。
+- 关联文件或证据：用户截图、第三阶段运行手册与试点建议书。
+- 遗留与下一步：确认停止分支、是否有可裁定的发现以及已交付和待实施的处理动作，追加结论并核验同步。
+- 同步状态：{"kind":"problem","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"unknown"}
+
+### PI-20261119-003｜确认单页用量超预留与人工处理范围
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：确认任务 611 的比较 5 在第一页模型回执记账后触发预算保护，现无 Agent 发现可裁定。核对现有人工裁定与正式问题跟进的边界。
+- 关联记录：本编号受理、PI-20261116-002 的 `zt` 首轮预算诊断、PI-20261119-002 的响应校验诊断。
+- 现象或目标：解释为何已交付部分差异，Agent 仍显示 0/327 且没有问题反馈。
+- 原因或分析：任务 611 使用项目档案 `zt`，比较 5 只有一条已记账调用，回执 `gpt-6.1-sol` 输入 19833、输出 9，合计 19842，超过该页预留 5650。单次总门槛为 64000、输出上限 512，实测触发点是回执超过单页预留。适配器在解析候选之前结束，首块已交付 29、核对 0、保存 Agent 发现 0。本次显示部分完成是已有交付，实际没有通过核对的页面。
+- 处理与改进：核对当前比较 API 和正式页面。OCR 初审已完成，包含 1 条发现及 1 条待处理的问题记录。管理员在双评审中可查看证据并裁定这条 OCR 发现，也可补录人工发现。比较裁定保存在比较版本下，Agent 发现进入正式问题跟进不属于当前实现或工作包 4 的自动行为。
+- 代码修改：本轮仅追加台账，业务代码和配置未改动。
+- 本地验证：执行 `.venv/bin/python -` 只读查询 SQLite 和 `GET /api/jobs/611/agent-comparisons/5`，接口返回 200。执行 `PYTHONPATH=backend .venv/bin/python -` 使用 HTTP MockTransport 模拟同用量回执，验证先记账并停止在候选校验前。执行 `node` 通过 Chromium 只读打开任务 611，确认预算文案、Agent 空状态、OCR 裁定弹窗与补录入口；拦截本机非 GET 和其他地址，未保存裁定。`git diff --check` 通过。
+- 部署生效：沿用当前本机版本，本轮未部署改动、未重跑任务或调用真实模型。
+- 关联文件或证据：任务 611 比较 5、backend/ocr_manager/agent_review_model.py、frontend/src/pages/agentComparison/ComparisonWorkspace.tsx、docs/review-agent-pilot-proposal.md。
+- 遗留与下一步：先校准 `zt` 的单页用量预留及整次预算，确认能产出有效结果并进行人工裁定。若需正式跟进，可明确需求后增加经人工确认的采纳动作。按累计两条执行只读台账核验。
+- 同步状态：{"kind":"problem","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261119-003｜开始解除 zt 的 Agent Token 预算限制
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：收到用户明确要求，开始处理同一事项的预算限制。
+- 关联记录：本编号任务 611 比较 5 的单页用量超预留诊断。
+- 现象或目标：项目模型档案 `zt` 运行 Agent 时，不受应用侧 Token 预算限制。
+- 原因或分析：历史运行已确认单页用量超预留导致停止，需同时核对整次预算和请求输出上限。
+- 处理与改进：检查模型快照、请求构建、记账及终态，限定改动范围并回归验证。
+- 代码修改：本条记录追加时尚未修改业务代码。
+- 本地验证：已执行 `git status --short`，识别现有试点功能改动；尚未运行本轮业务验证。
+- 部署生效：尚未部署。
+- 关联文件或证据：backend/ocr_manager/agent_review_model.py、任务 611 比较 5。
+- 遗留与下一步：实现并验证 `zt` 预算豁免，核对本机生效条件。
+- 同步状态：{"kind":"problem","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261119-003｜已在本机解除 zt 的 Agent Token 预算限制
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：实现、验证并发布 `zt` 档案的新 Agent 执行策略。
+- 关联记录：本编号任务 611 比较 5 的预算诊断及本轮受理。
+- 现象或目标：应用侧 Token 上限不再使 `zt` 的新 Agent 尝试因预算停止。
+- 原因或分析：原逻辑发送输出 Token 上限，发送前校验单次及同一 OCR 版本累计预算，回执后还会比对单页预留与输出上限。
+- 处理与改进：复用名称为 `zt` 的项目模型档案时，新尝试冻结预算豁免，调用不指定输出 Token 上限，也跳过上述 Token 门槛。仍登记供应商回执、校验证据、保留取消、页数、超时及未知账目保护。先前入队的快照按原预算执行，其他档案与阿里 OCR 路径沿用原逻辑。
+- 代码修改：更新 Agent 配置、模型档案解析、调用与记账适配器、Worker 及回归测试，补充阶段二运行说明。无数据库迁移或私有配置写入。
+- 本地验证：执行 `.venv/bin/python -m pytest -q backend/tests/test_agent_review_worker.py backend/tests/test_agent_pilot.py -k agent`，17 项通过，覆盖旧快照停止、新尝试接收 19842 Token 回执及超原输出和累计预算后继续分页。执行 `.venv/bin/python -m pytest -q backend/tests/test_agent_comparison_api.py`，3 项通过。`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager` 和 `git diff --check` 通过。模拟端点未发起真实调用。
+- 部署生效：执行 `.venv/bin/python .local-data/backups/agent-zt-token-20261119/restart.py`，空闲时重启本机 8781、8000 与 Worker。健康检查及新 Worker 心跳通过，业务状态和表计数一致，schema 仍为 57，私有配置一致，monitor 在运行。用正式服务配置和只读数据库确认任务 611 的新入队快照免除 Token 预算，试点仍启用，既有比较 5 可读且没有新增尝试。本轮未调用真实模型或重跑任务。
+- 关联文件或证据：backend/ocr_manager/agent_review_model.py、backend/tests/test_agent_review_worker.py、docs/review-agent-phase2-walkthrough.md、.local-data/backups/agent-zt-token-20261119/restart-result.json。
+- 遗留与下一步：真实评审进度待手动重跑后验证。按现有差异清单需 15 页，当前一次最多 8 页且总时限为 90 秒。按累计四条执行只读同步核验。
+- 同步状态：{"kind":"problem","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261119-003｜开始解除 zt 运行页数与总时限并验证任务 611
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：收到用户要求，继续处理任务 611 未覆盖问题，并准备真实单侧重跑。
+- 关联记录：本编号 `zt` Token 预算解除与比较 5 历史诊断。
+- 现象或目标：允许 `zt` 的 Agent 尝试核对固定范围内的全部页面，取消当前 8 页和 90 秒总时限。
+- 原因或分析：任务 611 清单需 15 页，Token 门槛解除后仍受读取上限和总时限约束。
+- 处理与改进：先核对配置快照、图终止和 Worker 调度，验证新行为并在本机单独重跑 Agent，观察真实覆盖及发现。
+- 代码修改：受理时尚未修改本轮业务代码。
+- 本地验证：执行 `git status --short`，尚未执行本轮验证。
+- 部署生效：上一轮 Token 预算规则已部署，本轮页数与时限尚未调整。
+- 关联文件或证据：任务 611 比较 5、backend/ocr_manager/agent_review_worker.py、backend/ocr_manager/review_prototype/graph.py。
+- 遗留与下一步：实现并验证、重启空闲服务、跟踪新比较的终态并同步台账。
+- 同步状态：{"kind":"problem","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261119-003｜已放开 zt 单次页数和总时限并完整重跑 611
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：本机已更新，任务 611 的 Agent 比较 7 完整运行并保存了双路结果。
+- 关联记录：本编号受理、历史比较 5 的 Token 限制与比较 6 的页数限制。
+- 现象或目标：比较 6 核对 8 页、193/327 条后停止，需让新版本核对全部固定差异。
+- 原因或分析：该运行的 Token 门槛已解除，`read_budget` 由原 8 页规则触发。总时限和页数是两个独立限制。
+- 处理与改进：`zt` 新任务不设置单次页数上限或总时限，图按冻结差异计算执行步数，保留单次 HTTP 超时和取消。已保存的两种历史快照仍按各自入队策略执行。比较 7 复用同一 OCR 初审，仅执行 Agent。核对 OCR 样式发现对应的新增行属于 Agent 已核对页面，Agent 当前提示重点为可靠性且请求未附带 OCR 项目规则。
+- 代码修改：更新模型配置、快照兼容、执行截止检查、页数校验与图执行、运行说明及回归测试。未修改数据库结构或私有配置。
+- 本地验证：执行 `.venv/bin/python -m pytest -q backend/tests/test_agent_review_worker.py backend/tests/test_agent_pilot.py backend/tests/test_agent_comparison_api.py`，20 项通过。专项验证两版历史快照、超额回执及超过原 90 秒的新尝试继续核对超过 8 页。`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`git diff --check` 通过。
+- 部署生效：执行 `.venv/bin/python .local-data/backups/agent-zt-scope-20261119/restart.py`，本机 8781、8000 与 Worker 已重启，健康检查、心跳和历史计数检查通过。通过 `curl` 向 `/api/jobs/611/agent-comparisons` 单侧入队获比较 7，随后用只读 SQLite 轮询及 `GET /api/jobs/611/agent-comparisons/7` 验证实际终态。Agent 在 48.9 秒内核对 15/15 页和 327/327 条差异，0 条发现，15 次调用均已记账，输入 290417、输出 223 Token。阿里 OCR 同一初审版本完成 4/4 文件，保留 1 条样式发现。执行 `PYTHONPATH=backend .venv/bin/python -` 只读重构固定 Git 差异并校验输入身份与对应行的覆盖。本轮实际未跨 90 秒，解除总时限已通过快照与超 90 秒合成测试核实。
+- 关联文件或证据：任务 611 比较 7、backend/ocr_manager/agent_review_profile.py、backend/ocr_manager/review_prototype/graph.py、.local-data/backups/agent-zt-scope-20261119/restart-result.json。
+- 遗留与下一步：用户可查看比较 7 并裁定 OCR 样式发现。用同一项目规则衡量两路发现能力尚待另行验证。按累计六条执行只读同步核验。
+- 同步状态：{"kind":"problem","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

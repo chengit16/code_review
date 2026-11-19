@@ -11,11 +11,14 @@ from ocr_manager.agent_comparison_contracts import (
     ComparisonCreate,
     ComparisonCuration,
     ComparisonIndex,
+    ComparisonPilot,
     ComparisonSummary,
     CurationSnapshot,
     CurationUpdate,
 )
 from ocr_manager.agent_comparison_results import agent_result, ocr_result, suggest_matches
+from ocr_manager.agent_pilot import can_manage_pilot, repository_agent_config
+from ocr_manager.agent_review_config import AgentReviewConfig
 from ocr_manager.agent_review_profile import resolve_model
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
@@ -37,8 +40,14 @@ def comparison_index(store: Store, settings: Settings, job_id: int,
 
     with store.connection() as db:
         db.execute("BEGIN")
-        if db.execute("SELECT 1 FROM review_jobs WHERE id=?", (job_id,)).fetchone() is None:
+        repository = db.execute("""SELECT r.id,r.name,r.enabled FROM review_jobs j
+            JOIN repositories r ON r.id=j.repository_id WHERE j.id=?""", (job_id,)).fetchone()
+        if repository is None:
             raise LookupError("任务不存在")
+        config = repository_agent_config(db, settings, repository["id"])
+        pilot = ComparisonPilot(repository_name=repository["name"], enabled=config is not None,
+            manageable=(bool(repository["enabled"]) or config is not None)
+            and can_manage_pilot(settings, repository["id"]))
         source = queue.current_source(db, job_id)
         active = db.execute("""SELECT id FROM agent_reviews WHERE job_id=?
             AND status IN ('queued','running')""", (job_id,)).fetchone()
@@ -52,20 +61,22 @@ def comparison_index(store: Store, settings: Settings, job_id: int,
     return ComparisonIndex(current_source_attempt=source["attempts"] if source else None,
         previous_id=previous["id"] if previous else None,
         active_id=active["id"] if active else None,
-        unavailable_reason=_unavailable(settings, source, active is not None),
+        pilot=pilot,
+        unavailable_reason=_unavailable(config, source, active is not None),
         items=[ComparisonSummary.model_validate(dict(row)) for row in rows[:limit]],
         next_before_id=rows[limit - 1]["id"] if len(rows) > limit else None)
 
 
-def _unavailable(settings: Settings, source: sqlite3.Row | None, active: bool) -> str | None:
+def _unavailable(config: AgentReviewConfig | None, source: sqlite3.Row | None,
+                 active: bool) -> str | None:
     if active:
         return "已有 Agent 评审排队或运行中"
-    if settings.agent_review is None:
+    if config is None:
         return "Agent 试点尚未启用"
     if source is None or source["status"] not in queue.TERMINAL_OCR or source["superseded"]:
         return "需要当前且已结束的 OCR 初审"
-    if not source["enabled"] or source["repository_id"] not in settings.agent_review.repositories:
-        return "该仓库尚未加入 Agent 试点"
+    if not source["enabled"]:
+        return "请先启用该仓库"
     try:
         queue.source_range(source)
     except ValueError:
@@ -83,15 +94,17 @@ def create_comparison(store: Store, settings: Settings, job_id: int, body: Compa
         existing = db.execute("""SELECT a.id,a.previous_id,o.attempt_number FROM agent_reviews a
             JOIN review_attempts o ON o.id=a.source_attempt_id
             WHERE a.job_id=? AND a.request_key=?""", (job_id, body.request_key)).fetchone()
+        repository_id = int(row["repository_id"])
+        config = repository_agent_config(db, settings, repository_id)
     if existing:
         if (existing["previous_id"] == body.previous_id
                 and existing["attempt_number"] == body.source_attempt):
             return int(existing["id"])
         raise ComparisonConflict("request_key_mismatch", "同一请求键已用于其他评审版本")
-    if settings.agent_review is None:
+    if config is None:
         raise ComparisonConflict("agent_disabled", "Agent 试点尚未启用")
     try:
-        config = resolve_model(store, settings.agent_review, int(row["repository_id"]))
+        config = resolve_model(store, config, repository_id)
         return queue.enqueue(store, config, job_id, body.request_key, body.previous_id,
                              source_attempt=body.source_attempt)
     except ValueError as error:

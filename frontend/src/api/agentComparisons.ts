@@ -13,10 +13,17 @@ export interface ComparisonSummary {
   created_at: string;
   finished_at: string | null;
 }
+/** 任务所属仓库的当前授权；管理资格还需叠加管理员权限。 */
+export interface ComparisonPilot {
+  repository_name: string;
+  enabled: boolean;
+  manageable: boolean;
+}
 export interface ComparisonIndex {
   current_source_attempt: number | null;
   previous_id: number | null;
   active_id: number | null;
+  pilot: ComparisonPilot;
   unavailable_reason: string | null;
   items: ComparisonSummary[];
   next_before_id: number | null;
@@ -97,6 +104,13 @@ export function getAgentComparison(token: string, jobId: number, id: number, ver
 export function createAgentComparison(token: string, jobId: number, body: ComparisonCreate) {
   return apiRequest<{ id: number }>(token, `/api/jobs/${jobId}/agent-comparisons`, {
     method: "POST", body: JSON.stringify(body),
+  });
+}
+
+/** 保存任务所属仓库的试点授权，模型任务需要另行确认。 */
+export function updateAgentPilot(token: string, jobId: number, enabled: boolean) {
+  return apiRequest<void>(token, `/api/jobs/${jobId}/agent-comparisons/pilot`, {
+    method: "PUT", body: JSON.stringify({ enabled }),
   });
 }
 

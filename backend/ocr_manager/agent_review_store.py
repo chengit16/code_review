@@ -10,6 +10,7 @@ from dataclasses import asdict
 from typing import Literal, cast
 from uuid import uuid4
 
+from ocr_manager.agent_pilot import managed_pilot_enabled
 from ocr_manager.agent_review_config import AgentReviewConfig
 from ocr_manager.review_prototype.graph import AgentProgress
 from ocr_manager.review_prototype.input import ReviewInput
@@ -62,6 +63,8 @@ def enqueue(
             raise ValueError("OCR 尝试已更新，请核对新的初审版本")
         if not source["enabled"] or source["repository_id"] not in config.repositories:
             raise ValueError("仓库未获准运行 Agent")
+        if config.managed_pilot and not managed_pilot_enabled(db, source["repository_id"]):
+            raise ValueError("仓库的 Agent 试点已关闭")
         base, head = source_range(source)
         latest = db.execute("""SELECT id,status FROM agent_reviews
             WHERE source_attempt_id=? ORDER BY id DESC LIMIT 1""", (source["attempt_id"],)
@@ -207,7 +210,7 @@ def finish(
 
 def reserve_call(
     store: Store, run_id: int, hunk_id: int, offset: int, tokens: int,
-    max_reads: int, max_tokens: int, max_source_tokens: int,
+    max_reads: int | None, max_tokens: int | None, max_source_tokens: int | None,
 ) -> str | None:
     """先登记可能产生费用的调用；同一页只准发送一次，未知账目阻止下一次调用。"""
 
@@ -218,7 +221,7 @@ def reserve_call(
             return None
         if not source_is_current(source):
             return None
-        # 同一 OCR 版本预算覆盖单侧重跑，未知请求按原预留占用后续额度。
+        # 启用 Token 门槛时，同一 OCR 版本的未知请求按原预留占用后续额度。
         usage = db.execute("""WITH charges AS (
               SELECT a.id,c.status,CASE WHEN c.status='recorded'
                 THEN c.prompt_tokens+c.completion_tokens ELSE c.reserved_tokens END AS tokens
@@ -230,8 +233,11 @@ def reserve_call(
               MAX(status='unknown') FILTER(WHERE id=?) AS unknown
               FROM charges""", (source["source_attempt_id"], run_id, run_id, run_id)).fetchone()
         if (
-            usage["calls"] >= max_reads or usage["run_tokens"] + tokens > max_tokens
-            or usage["source_tokens"] + tokens > max_source_tokens or usage["unknown"]
+            usage["unknown"]
+            or (max_reads is not None and usage["calls"] >= max_reads)
+            or (max_tokens is not None and usage["run_tokens"] + tokens > max_tokens)
+            or (max_source_tokens is not None
+                and usage["source_tokens"] + tokens > max_source_tokens)
         ):
             return None
         identifier = uuid4().hex

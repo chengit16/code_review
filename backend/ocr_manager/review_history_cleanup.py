@@ -38,7 +38,7 @@ def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     if datetime.strptime(cutoff, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S") != cutoff:
         raise ValueError("清理边界必须是规范 UTC 时间")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {54, 55, 56}:
+    if version not in {54, 55, 56, 57}:
         raise ValueError("仅支持已核对的 schema 54 至 56，不自动迁移")
     if db.execute("PRAGMA foreign_key_check").fetchall():
         raise ValueError("现有外键不完整，拒绝清理")

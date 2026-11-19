@@ -38,12 +38,28 @@ class ComparisonSummary(BaseModel):
     finished_at: str | None
 
 
+class ComparisonPilot(BaseModel):
+    """当前任务所属仓库的试点状态与页面管理资格。"""
+
+    repository_name: str
+    enabled: bool
+    manageable: bool
+
+
+class ComparisonPilotUpdate(BaseModel):
+    """管理员仅可修改任务所属仓库的试点开关。"""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    enabled: bool
+
+
 class ComparisonIndex(BaseModel):
     """返回当前可运行来源与按稳定编号倒序分页的历史。"""
 
     current_source_attempt: int | None
     previous_id: int | None
     active_id: int | None
+    pilot: ComparisonPilot
     unavailable_reason: str | None
     items: list[ComparisonSummary]
     next_before_id: int | None

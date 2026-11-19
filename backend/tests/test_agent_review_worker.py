@@ -491,3 +491,67 @@ def test_project_model_rejects_overrides_and_unsafe_endpoint(pilot: tuple[Store,
     assert store.activate_model_profile(identifier)
     with pytest.raises(ValueError, match="Agent 端点协议"):
         resolve_model(store, config, 1, master_key=settings.master_key)
+
+
+def test_zt_review_checks_all_pages_without_run_budgets(
+    pilot: tuple[Store, Settings], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """两个历史策略按原快照执行，新尝试越过旧总时限并核对全部页面。"""
+
+    store, settings = pilot
+    profile_id = store.add_model_profile(
+        "zt", "openai", "synthetic-zt", "https://models.example.test/v1",
+        SecretBox(settings.master_key).encrypt("synthetic-zt-key"),
+    )
+    assert store.activate_model_profile(profile_id)
+    config = replace(
+        config_for(settings), model_source="project", page_lines=2,
+        max_total_tokens=25_000, max_source_tokens=25_000,
+    )
+    settings = replace(settings, agent_review=config)
+    resolved = resolve_model(store, config, 1)
+    token_only = replace(resolved, max_reads=8, timeout_seconds=90)
+    legacy = queue.enqueue(store, replace(token_only, enforce_token_budget=True), 1, "zt-legacy")
+    requests: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        output = 9 if len(requests) <= 10 else 600
+        body = json.dumps({
+            "choices": [{"finish_reason": "stop", "message": {"content": '{"findings":[]}'}}],
+            "usage": {"prompt_tokens": 19_833, "completion_tokens": output,
+                      "total_tokens": 19_833 + output},
+        })
+        return httpx.Response(200, stream=httpx.ByteStream(body.encode()))
+
+    monkeypatch.setattr("ocr_manager.agent_review_worker.httpx.HTTPTransport",
+                        lambda **_kwargs: httpx.MockTransport(respond))
+    assert queue.claim(store)
+    execute(store, settings, legacy)
+    old = agent_state(store, legacy)
+    assert old["reason"] == "model_budget"
+    assert old["result"]["coverage"][0]["reviewed_end"] == 0
+    assert requests[0]["max_completion_tokens"] == 512
+
+    limited = queue.enqueue(store, token_only, 1, "zt-token-only", legacy)
+    assert queue.claim(store)
+    execute(store, settings, limited)
+    older = agent_state(store, limited)
+    assert older["reason"] == "read_budget"
+    assert older["result"]["coverage"][0]["reviewed_end"] == 16
+
+    current = queue.enqueue(store, resolved, 1, "zt-unlimited", limited)
+    assert queue.claim(store)
+    with store.connection() as db:
+        db.execute("UPDATE agent_reviews SET started_at=datetime('now','-120 seconds') WHERE id=?",
+                   (current,))
+    execute(store, settings, current)
+    result = agent_state(store, current)
+    assert result["status"] == "complete"
+    assert result["config"]["enforce_token_budget"] is False
+    assert result["config"]["max_reads"] is None and result["config"]["timeout_seconds"] is None
+    assert result["result"]["coverage"][0]["reviewed_end"] == 25
+    assert len(requests) == 22
+    assert all("max_completion_tokens" not in item and "max_tokens" not in item
+               for item in requests[1:])
+    assert [call["completion_tokens"] for call in result["calls"]] == [9, *([600] * 12)]

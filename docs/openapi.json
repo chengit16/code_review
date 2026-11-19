@@ -860,6 +860,9 @@
             ],
             "title": "Next Before Id"
           },
+          "pilot": {
+            "$ref": "#/components/schemas/ComparisonPilot"
+          },
           "previous_id": {
             "anyOf": [
               {
@@ -887,11 +890,51 @@
           "current_source_attempt",
           "previous_id",
           "active_id",
+          "pilot",
           "unavailable_reason",
           "items",
           "next_before_id"
         ],
         "title": "ComparisonIndex",
+        "type": "object"
+      },
+      "ComparisonPilot": {
+        "description": "当前任务所属仓库的试点状态与页面管理资格。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "manageable": {
+            "title": "Manageable",
+            "type": "boolean"
+          },
+          "repository_name": {
+            "title": "Repository Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_name",
+          "enabled",
+          "manageable"
+        ],
+        "title": "ComparisonPilot",
+        "type": "object"
+      },
+      "ComparisonPilotUpdate": {
+        "additionalProperties": false,
+        "description": "管理员仅可修改任务所属仓库的试点开关。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ComparisonPilotUpdate",
         "type": "object"
       },
       "ComparisonSummary": {
@@ -9051,6 +9094,49 @@
           }
         },
         "summary": "Create"
+      }
+    },
+    "/api/jobs/{job_id}/agent-comparisons/pilot": {
+      "put": {
+        "description": "保存本仓授权，Worker 仅处理随后单独确认的评审任务。",
+        "operationId": "update_pilot_api_jobs__job_id__agent_comparisons_pilot_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonPilotUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Pilot"
       }
     },
     "/api/jobs/{job_id}/agent-comparisons/{comparison_id}": {

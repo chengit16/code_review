@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ocr_manager.agent_comparison_migration import AGENT_COMPARISON_MIGRATION
+from ocr_manager.agent_pilot_migration import AGENT_PILOT_MIGRATION
 from ocr_manager.agent_review_migration import AGENT_REVIEW_MIGRATION
 from ocr_manager.alert_migration import ALERT_MIGRATION
 from ocr_manager.artifact_lock import artifact_lock
@@ -55,7 +56,7 @@ from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
 from ocr_manager.unified_review_migration import MIGRATION as UNIFIED_REVIEW_MIGRATION
 
-SCHEMA_VERSION = 56
+SCHEMA_VERSION = 57
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -382,6 +383,7 @@ class Store:
                 (54, MULTIBRANCH_MIGRATION),
                 (55, AGENT_REVIEW_MIGRATION),
                 (56, AGENT_COMPARISON_MIGRATION),
+                (57, AGENT_PILOT_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:

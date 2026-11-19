@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 from unidiff.errors import UnidiffParseError
 
 from ocr_manager import agent_review_store as queue
+from ocr_manager.agent_pilot import repository_agent_config
 from ocr_manager.agent_review_model import ChatPageModel
 from ocr_manager.agent_review_profile import resolve_model
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
@@ -57,13 +58,15 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
     run = queue.load_run(store, run_id)
     if run is None or run["status"] != "running":
         return
-    config = settings.agent_review
-    if config is None or run["repository_id"] not in config.repositories:
+    with store.connection() as db:
+        config = repository_agent_config(db, settings, run["repository_id"])
+    if config is None:
         queue.finish(
             store, run_id, reason="model_config_invalid" if settings.agent_review_error
             else "not_enabled",
         )
         return
+    configured = config
     try:
         config = resolve_model(
             store, config, run["repository_id"], master_key=settings.master_key,
@@ -72,12 +75,22 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
         queue.finish(store, run_id, reason="model_config_invalid")
         return
     if run["model_snapshot"] != config.snapshot():
-        queue.finish(store, run_id, reason="model_config_changed")
-        return
+        # 两版历史快照仍按入队时的页数、总时限和 Token 策略执行。
+        previous = replace(config, max_reads=configured.max_reads,
+                           timeout_seconds=configured.timeout_seconds)
+        original = replace(previous, enforce_token_budget=True)
+        for candidate in (previous, original):
+            if run["model_snapshot"] == candidate.snapshot():
+                config = candidate
+                break
+        else:
+            queue.finish(store, run_id, reason="model_config_changed")
+            return
     if not queue.source_is_current(run):
         queue.finish(store, run_id, reason="source_changed")
         return
-    deadline = time.monotonic() + config.timeout_seconds - float(run["elapsed_seconds"])
+    deadline = (time.monotonic() + config.timeout_seconds - float(run["elapsed_seconds"])
+                if config.timeout_seconds is not None else None)
 
     def save(progress: AgentProgress) -> None:
         if not queue.checkpoint(store, run_id, progress):

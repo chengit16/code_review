@@ -1,7 +1,7 @@
 /** @description 任务详情的双评审入口。地址记住选择，后台变更不会替换正在复核的历史版本。 */
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, App, Button, Modal, Select, Skeleton, Tag } from "antd";
+import { Alert, App, Button, Modal, Select, Skeleton, Space, Tag } from "antd";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -11,6 +11,7 @@ import { ApiError } from "../../api/client";
 import { createCommandId } from "../../api/commandId";
 import { formatTime } from "../../ui/format";
 
+import { AgentPilotControl } from "./AgentPilotControl";
 import { ComparisonEditDialog } from "./ComparisonEditDialog";
 import { ComparisonWorkspace } from "./ComparisonWorkspace";
 import type { ComparisonEdit } from "./comparisonEdits";
@@ -72,16 +73,19 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
   return <section id="job-agent-comparison" className="job-detail-region agent-comparison" aria-labelledby="job-agent-comparison-title">
     <div className="agent-comparison-main-heading">
       <div><h2 id="job-agent-comparison-title">双评审对比</h2><p>阿里 OCR 初审与自建 Agent</p></div>
-      {canEdit && current && <Button type="primary" disabled={!canRun} onClick={() => {
-        if (current.current_source_attempt === null) return;
-        enqueue.reset();
-        try {
-          setDraft({ source_attempt: current.current_source_attempt, previous_id: current.previous_id,
-            request_key: createCommandId() });
-        } catch (error) {
-          void message.error(error instanceof Error ? error.message : "无法生成本次请求标识");
-        }
-      }}>{current.previous_id === null ? "运行 Agent" : "重跑 Agent"}</Button>}
+      {canEdit && current && <Space wrap>
+        {current.pilot.enabled && <Button type="primary" disabled={!canRun} onClick={() => {
+          if (current.current_source_attempt === null) return;
+          enqueue.reset();
+          try {
+            setDraft({ source_attempt: current.current_source_attempt, previous_id: current.previous_id,
+              request_key: createCommandId() });
+          } catch (error) {
+            void message.error(error instanceof Error ? error.message : "无法生成本次请求标识");
+          }
+        }}>{current.previous_id === null ? "运行 Agent" : "重跑 Agent"}</Button>}
+        {current.pilot.manageable && <AgentPilotControl token={token} jobId={jobId} pilot={current.pilot} />}
+      </Space>}
     </div>
     {index.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
     {index.error && <Alert type="error" showIcon title={index.error.message}

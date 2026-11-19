@@ -77,13 +77,17 @@ def _validate(page: DiffPage, findings: tuple[Finding, ...]) -> None:
 
 
 def run_agent(
-    snapshot: ReviewInput, model: PageModel, *, page_lines: int, max_reads: int,
+    snapshot: ReviewInput, model: PageModel, *, page_lines: int, max_reads: int | None,
     trace: Trace | None = None, resume: AgentProgress | None = None,
     checkpoint: Callable[[AgentProgress], None] | None = None,
 ) -> ReviewResult:
     """运行有限读取和校验。保留超时、无效证据及预算停止时的真实覆盖。"""
-    if min(page_lines, max_reads) < 1:
+    if page_lines < 1 or (max_reads is not None and max_reads < 1):
         raise ValueError("需要正数读取预算和分页大小")
+    # 无配置页数门槛时，用冻结输入的实际页数约束图的执行步数。
+    read_limit = max_reads if max_reads is not None else sum(
+        (len(hunk.lines) + page_lines - 1) // page_lines for hunk in snapshot.hunks
+    )
 
     def event(steps: tuple[Step, ...], stage: str, detail: str) -> tuple[Step, ...]:
         step = Step(stage, detail)
@@ -92,7 +96,7 @@ def run_agent(
         return (*steps, step)
 
     def route(state: GraphState) -> Destination:
-        if state["reason"] or state["reads"] >= max_reads:
+        if state["reason"] or state["reads"] >= read_limit:
             return "finish"
         return "read" if state["hunk_index"] < len(state["coverage"]) else "finish"
 
@@ -201,7 +205,7 @@ def run_agent(
     }
     # 2. 禁止继承外部 tracing 配置；差异和运行事件只交给当前调用方。
     with tracing_context(enabled=False):
-        final = graph.compile().invoke(initial, {"recursion_limit": 2 * max_reads + 6})
+        final = graph.compile().invoke(initial, {"recursion_limit": 2 * read_limit + 6})
     # 3. 预算停止与异常分别落在部分完成、失败等明确结果上。
     reason = final["reason"]
     status: Literal["complete", "partial", "failed", "skipped"]

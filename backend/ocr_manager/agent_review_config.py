@@ -21,33 +21,37 @@ side（base 或 head）、line（该侧的正整数行号）。只引用本页�
 
 @dataclass(frozen=True)
 class AgentReviewConfig:
-    """只允许显式加入试点的项目发送差异，预算为单次尝试上限。"""
+    """只允许显式加入试点的项目发送差异，Token 预算按模型档案生效。"""
 
     endpoint: str
     model: str
     repositories: frozenset[int]
     api_key: str = field(repr=False)
-    max_reads: int = 8
+    max_reads: int | None = 8
     max_output_tokens: int = 512
     max_total_tokens: int = 64_000
     max_source_tokens: int = 128_000
-    timeout_seconds: int = 90
+    timeout_seconds: int | None = 90
     page_lines: int = 40
     model_source: Literal["dedicated", "project"] = "dedicated"
     profile_reference: tuple[int, int] | None = None
     output_limit_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
+    managed_pilot: bool = False
+    enforce_token_budget: bool = True
 
     def snapshot(self) -> str:
         """冻结执行参数与 Skill 版本，凭据可安全轮换而不影响身份。"""
 
         values = asdict(self)
-        for key in ("api_key", "repositories"):
+        for key in ("api_key", "repositories", "managed_pilot"):
             del values[key]
         # 旧独立端点任务保留原快照格式，默认配置升级后仍可执行。
         if self.model_source == "dedicated":
             del values["model_source"], values["profile_reference"]
         if self.output_limit_field == "max_completion_tokens":
             del values["output_limit_field"]
+        if self.enforce_token_budget:
+            del values["enforce_token_budget"]
         values["skill_sha256"] = hashlib.sha256(POLICY.encode()).hexdigest()
         return json.dumps(values, sort_keys=True)
 
