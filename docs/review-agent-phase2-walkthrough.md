@@ -37,11 +37,17 @@ uv sync --locked --inexact
 
 先在独立测试实例验证。确认端点、允许发送的仓库与代码范围、单次和总调用预算后，再设置以下私有配置。现有服务配置文件需要由当前运行用户持有且权限不超过 `0600`，模型凭据不得提交到仓库或写入命令参数。
 
+复用现有项目模型时，将 `OCR_APP_AGENT_MODEL_SOURCE` 设为 `project` 并配置试点仓库 ID。模型、HTTPS API 根地址和密钥从项目当前生效的配置取得，项目覆盖优先于全局启用配置。Agent 入队冻结档案 ID 和版本，Worker 执行时才解密。档案变更后，已排队任务将显示配置变化，需按新配置创建尝试。现有模型的历史 OCR 结果可能来自较早配置，比较时需核对两侧设置。
+
+现有模型复用其供应商账户和额度，Agent 的调用、预算和评审结果仍单独记录。首轮先用合成输入确认网关能返回 JSON 与用量。使用独立端点时保持 `dedicated`，再设置对应的模型、端点和密钥。
+
 | 配置键 | 用途 |
 | --- | --- |
+| `OCR_APP_AGENT_MODEL_SOURCE` | 默认 `dedicated`。设为 `project` 时复用项目模型，省略下列三个独立端点字段。 |
 | `OCR_APP_AGENT_ENDPOINT` | 完整的 `/chat/completions` 端点。外部端点使用 HTTPS，环回测试可用 `127.0.0.1` 或 `::1` 的 HTTP。未设置或 Agent 配置错误时关闭影子运行。 |
-| `OCR_APP_AGENT_MODEL` | 端点接受的模型标识。供应商需要支持 JSON 对象结果、`max_completion_tokens` 和用量回执。 |
+| `OCR_APP_AGENT_MODEL` | 端点接受的模型标识。端点需要支持 JSON 对象结果与用量回执。 |
 | `OCR_APP_AGENT_API_KEY` | Agent 专用密钥；外部端点必填。 |
+| `OCR_APP_AGENT_OUTPUT_LIMIT_FIELD` | 默认 `max_completion_tokens`。确认网关使用 `max_tokens` 时可显式调整。 |
 | `OCR_APP_AGENT_REPOSITORIES` | 允许发送差异的内部仓库 ID，多个使用逗号分隔。 |
 | `OCR_APP_AGENT_MAX_READS` | 单次最多处理的页数，默认 8。 |
 | `OCR_APP_AGENT_PAGE_LINES` | 每页最多交付的差异记录，默认 40。 |

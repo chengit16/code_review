@@ -11708,3 +11708,168 @@
 - 关联文件或证据：docs/review-agent-phase2-walkthrough.md、backend/ocr_manager/agent_review_config.py。
 - 遗留与下一步：确认试跑端点、模型和预算后以本机隔离实例执行三个合成用例；按本编号累计十七条只读核对同步。
 - 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜继续实施：复用项目现有模型配置
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已受理，核对并接入现有模型配置。
+- 关联记录：本编号的阶段二接入与试跑准备记录。
+- 现象或目标：用户希望直接使用当前项目模型，减少重复填模型地址和凭据的步骤。
+- 原因或分析：只读检查确认现有启用配置具有加密凭据和自定义 HTTPS API 根地址；Agent 此前只能单独配置端点。网关的 JSON 响应和用量契约仍需实际验收。
+- 处理与改进：增加显式复用模式，按项目有效模型读取相同配置，冻结配置版本并保留 Agent 独立用量和发送范围约束。
+- 代码修改：开工时仅追加台账。
+- 本地验证：已通过只读 SQLite 查询核对模型类型、凭据有无、接口地址形状及覆盖配置，未解密或发送现有凭据，未运行新实现。
+- 部署生效：未部署。
+- 关联文件或证据：backend/ocr_manager/worker.py、backend/ocr_manager/agent_review_config.py、docs/review-agent-phase2-walkthrough.md。
+- 遗留与下一步：完成版本核验、凭据隔离测试与配置说明，收尾核对同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜项目模型复用入口已接入，等待合成试跑
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：复用模式通过本地验证，实际网关待验。
+- 关联记录：本编号的复用模型受理和阶段二运行手册。
+- 现象或目标：Agent 使用项目现有模型和凭据配置，避免再次选型及录入密钥。
+- 原因或分析：当前启用配置使用自定义 HTTPS API 根地址并已有持久化的加密凭据；配额账户可复用，调用用量需要分开记账。
+- 处理与改进：增加显式 `OCR_APP_AGENT_MODEL_SOURCE=project`。复用项目有效模型选择，入队固定档案 ID 与版本，Worker 执行时才解密，并拒绝档案变更导致的隐式切换。独立端点仍为默认模式；两种输出上限字段按配置择一。
+- 代码修改：增加模型档案解析用例及相应 CLI、Worker、配置和测试。数据库结构与应用前端未改动。
+- 本地验证：实际运行 `.venv/bin/python -m pytest -q backend/tests/test_agent_review_worker.py backend/tests/test_worker_flow.py backend/tests/test_setup_workflows.py backend/tests/test_document_configuration.py`，55 项通过。最终执行 `.venv/bin/python -m pytest -q backend/tests/test_agent_review_worker.py -k 'project_model or invalid_agent_settings'`，3 项通过，覆盖版本、请求头与报告隔离、非 HTTPS 拒绝和配置错误隔离。`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 和 `git diff --check` 通过。使用合成模型档案和模拟传输，未调用已配置的真实网关。
+- 部署生效：未部署；仅只读核对当前配置元数据，未改业务库、当前私有配置或启用模式。
+- 关联文件或证据：backend/ocr_manager/agent_review_profile.py、backend/tests/test_agent_review_worker.py、docs/review-agent-phase2-walkthrough.md。
+- 遗留与下一步：使用现有模型额度前确认首轮预算，以合成用例验证真实网关输出与用量。按累计十九条只读核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜核对切换到 zt 后的实际配置
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已核对本机全局模型、仓库覆盖和近期执行快照。切换后的真实调用待验证。
+- 关联记录：本编号的项目模型复用与阶段二试跑记录。
+- 现象或目标：用户修改模型配置后，询问当前是否使用 `zt`。
+- 原因或分析：`zt` 是档案名称，对应模型标识 `gpt-6.1-sol`。仓库覆盖优先于全局配置，已完成任务保留原执行快照。
+- 处理与改进：确认全局档案于北京时间 14:48:41 更新为 `zt`。`equity_platform` 和 `OMS` 继承全局档案，`seakoi_app_rn` 和 `digitizing_web` 仍绑定「公司」档案，模型为 `deepseek-v4.1-flash-1017`。最近三条已完成 OCR 任务的模型快照均早于切换，未看到切换后使用 `zt` 的完成记录。
+- 代码修改：本轮仅追加台账。
+- 本地验证：使用 Python `sqlite3` 以 `mode=ro` 打开 `.local-data/local/app.db`，核对启用档案、仓库绑定、近期完成任务快照及数据库版本，并检查本机 Agent 配置的启用状态。未读取凭据值或发起模型调用。
+- 部署生效：本机业务库已保存全局 `zt` 配置，仍为 schema 54，未见 Agent 任务表或已启用的 Agent 模型配置。阶段二复用模式未部署，`zt` 真实调用成功未验证。
+- 关联文件或证据：本机业务库的模型档案、仓库绑定及 OCR 任务执行快照，docs/review-agent-phase2-walkthrough.md。
+- 遗留与下一步：后续以切换后继承全局配置的已完成任务快照确认实际调用。按累计二十条只读核验台账同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜明确 zt 合成试跑的首轮范围
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已明确首轮真实网关试跑与后续合成验收的范围，尚未发起调用。
+- 关联记录：本编号的项目模型复用、阶段二试跑准备与 `zt` 配置核对记录。
+- 现象或目标：用户询问当前是否应开始合成试跑，以及自己需要完成哪些操作。
+- 原因或分析：本地脚本模型已验证链路，仍需用真实 `zt` 请求核对模型回执、JSON、Token 用量及 Agent 结果落库。现有全局模型档案可复用，合成 OCR 记录可作为双结果留存的基线。
+- 处理与改进：建议使用隔离实例与临时 Git、SQLite，复用 `zt` 档案提交一条合成差异，先限制为一次真实请求和 512 个请求输出 Token。首条通过后，再以明确的幂等正反例和多页差异核对误报、漏报、证据和覆盖。用户只需确认首条真实请求可以使用现有账号额度。
+- 代码修改：本轮仅追加台账。
+- 本地验证：实际执行 `git status --short`、`rg -c '^### PI-20261116-002｜' docs/problem-improvement-log.md` 和 `sed`、`rg` 核对阶段二手册、合成夹具、网关适配器与预算设置。范围为代码与文档核对，未重跑业务测试或访问模型网关。
+- 部署生效：本轮未部署、未迁移业务库、未更改模型配置。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、backend/ocr_manager/review_prototype/demo.py、backend/ocr_manager/agent_review_model.py。
+- 遗留与下一步：确认首条真实请求的额度使用后执行隔离试跑，保留回执、覆盖和双结果报告。按累计二十一条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜开始 zt 首次合成试跑
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：用户确认允许使用 `zt` 额度发起一次合成试跑，已受理。
+- 关联记录：本编号的 `zt` 配置核对和首轮范围。
+- 现象或目标：用真实 `zt` 模型请求验证合成差异的 Agent 评审回执、用量和两路结果留存。
+- 原因或分析：本地脚本模型链路已有验证，真实网关兼容性待验。
+- 处理与改进：拟隔离 Git 和 SQLite，用预置合成 OCR 记录及项目模型复用路径。约束为最多一次请求，单次输出上限 512 Token。
+- 代码修改：开始时仅追加台账。
+- 本地验证：已执行 `git status --short`，查阅现有合成任务夹具和 Agent 命令入口，尚未发送请求。
+- 部署生效：未部署；真实试跑初始状态为未运行。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md、backend/tests/test_agent_review_worker.py、backend/ocr_manager/agent_review_cli.py。
+- 遗留与下一步：建立隔离数据库，验证实际解析为 `zt` 后发送一次合成请求，核对落库并追加试跑结论。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜zt 真实请求返回，用量超出预留
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：完成一次获准的真实模型试跑。已验证模型连通、用量记账和两路留存，评审结论校验受预算保护阻断。
+- 关联记录：本编号的首轮范围与试跑开始记录。
+- 现象或目标：验证 `zt` 是否能处理一个虚构订单重试差异，并保存与合成 OCR 初审关联的 Agent 报告。
+- 原因或分析：网关返回 HTTP 200，模型回执为 `gpt-6.1-sol`。记录输入 18943、输出 93、合计 19036 Token，超过应用预留的 2508 Token。实际输出在请求上限 512 Token 以内。适配器先记账再触发 `model_budget`，未执行评审内容 JSON 和证据行校验。网关输入计数的构成未确认，货币费用未查询。
+- 处理与改进：用临时 Git、SQLite v55 和真实 Worker 调度。只发送一次，一页 `orders.py` 共十条差异记录。合成 OCR 初审第 1 次原始版本与 Agent 第 1 次尝试同存于比较报告，Agent 状态为 `partial`，送达 10/10、核对 0/10。仅有一条已记账的 Agent 调用。没有调用真实 OCR、飞书或 GitLab，未重发。
+- 代码修改：本轮仅追加台账。隔离试跑脚本和去除端点信息的比较报告保存在 Git 忽略的本机目录。
+- 本地验证：执行 `PYTHONPATH=backend .venv/bin/python .local-data/agent-zt-pilot.K7bcwU/run_once.py` 完成预检，首轮预检的合成仓库鉴权值违反 SQLite 约束，修正临时夹具后通过。追加 `--send` 运行唯一真实请求。随后用 `.venv/bin/python -` 核对报告中的请求次数、模型、用量、覆盖和 OCR 版本，以及业务库仍为 schema 54；本轮隔离库 `PRAGMA quick_check` 为 `ok`。`git diff --check` 通过。评审正确性与网关实际扣费未验证。
+- 部署生效：未部署，现有业务库及模型配置未改动。试跑在独立临时实例完成。
+- 关联文件或证据：本机 `.local-data/agent-zt-pilot.K7bcwU/comparison.json`、backend/ocr_manager/agent_review_model.py 的调用预留与回执检查。
+- 遗留与下一步：核对 `zt` 输入 Token 的计量口径，并使预留与平台用量匹配，再决定是否发起新的合成请求。按累计二十三条只读核验台账同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"blocked","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜开始不设 Token 上限的 zt 合成重跑
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已受理用户要求，准备在隔离实例重跑一次。
+- 关联记录：本编号的 `zt` 首次真实网关试跑和用量超出预留记录。
+- 现象或目标：复用上轮合成差异，临时移除请求输出 Token 上限与 Agent Token 预算拦截，观察评审 JSON 和证据验证是否完成。
+- 原因或分析：上次总用量 19036 Token 超过 2508 Token 预留，流程在解析评审内容前停止。
+- 处理与改进：保持一次请求、合成 Git 与 OCR 夹具、正常用量记录，试跑覆盖只在当前进程生效。网关仍按自身规则运行。
+- 代码修改：开工时仅追加台账。
+- 本地验证：已执行 `git status --short`，核对上轮报告和 Agent 请求、事前预留、事后用量检查入口。尚未发起重跑请求。
+- 部署生效：未部署，业务配置未修改。
+- 关联文件或证据：backend/ocr_manager/agent_review_model.py、backend/ocr_manager/agent_review_store.py、上轮合成比较报告。
+- 遗留与下一步：用回执夹具验证本地覆盖后，发起一次真实重跑，保存独立报告并追加结论。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜zt 不设 Token 上限的合成重跑通过
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：单页合成样例通过真实网关、结构化评审、证据校验和双结果保存。
+- 关联记录：本编号的首轮真实试跑、用量超出预留和重跑开始记录。
+- 现象或目标：检验移除预算拦截后，`zt` 能否读取合成订单差异并识别重试重复登记。
+- 原因或分析：新请求省略两个输出 Token 字段，当前试跑进程跳过事后 Token 预算判断，并将事前 Token 预算放宽至 SQLite 整数上限。保留一次调用约束、用量回执校验与证据校验。网关回执输入 18943、输出 101、总计 19044 Token。首次与重跑的输入计数相同，输入计量构成与实际扣费未确认。
+- 处理与改进：重建相同内容的合成差异与同内容 OCR 夹具，临时提交 SHA 重新生成。唯一一条真实请求返回 HTTP 200、`finish_reason=stop` 和 `gpt-6.1-sol`。Agent 状态 `complete`，送达与核对均 10/10，确认 `orders.py` 新侧第 2 行无条件追加订单号，在响应丢失后重试时可导致重复登记。两份本机报告分别保留初次与重跑结果。未调用真实 OCR 或触发真实投递。
+- 代码修改：本轮仅追加台账。隔离脚本与去除端点信息的报告存于 Git 忽略的本机目录。
+- 本地验证：执行 `PYTHONPATH=backend .venv/bin/python .local-data/agent-zt-rerun.Lho0pJ/run_once.py --self-check`，合成高用量回执通过。执行同一命令改为 `--send`，发送唯一真实请求。随后用 `.venv/bin/python -` 比较两份 JSON，核对模型、调用数、完整覆盖、合成 OCR 一致、用量及业务库 schema 54，隔离库 `PRAGMA quick_check` 为 `ok`。`git diff --check` 通过。验证范围为单个合成缺陷样例。
+- 部署生效：未部署，业务库、运行配置及正式预算策略未修改。
+- 关联文件或证据：本机 `.local-data/agent-zt-rerun.Lho0pJ/comparison.json` 和 `.local-data/agent-zt-pilot.K7bcwU/comparison.json`。
+- 遗留与下一步：继续验收有保护的对照与多页差异。正式启用前核对并校准 `zt` 的预算预留。按累计二十五条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜明确阶段二补测和阶段三开工顺序
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已给出优先验收项与下一阶段顺序，尚未发起新的模型调用。
+- 关联记录：本编号的 `zt` 合成重跑结果及试点建议书工作包 2 至 4。
+- 现象或目标：用户询问单页真实样例通过后的下一步。
+- 原因或分析：已证实 `zt` 可以完成单页已知缺陷的评审。仍缺有保护对照的误报检查，以及真实模型的多页覆盖和尾页证据；生产预算预留尚未校准。
+- 处理与改进：建议先用带可见幂等保护的单页对照，验收为成功完成且不报告重复登记；再用两页差异，将自足的缺陷证据放在尾页，核对两页覆盖和证据行。两项最多三次真实请求，逐项验证。之后进入阶段三，提供任务详情中的双评审比较、证据、人工裁定和单侧重跑历史；真实仓库试点前再处理正式预算并确认发送范围。
+- 代码修改：本轮仅追加台账。
+- 本地验证：实际执行 `rg`、`sed` 和 `git status --short`，核对试点建议书、阶段二手册、前轮台账和未提交改动。本轮未访问模型端点或重跑业务测试。
+- 部署生效：本轮未部署，未改业务库和运行配置。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md 工作包 2 至 4、docs/review-agent-phase2-walkthrough.md。
+- 遗留与下一步：确认下一组真实合成调用后执行对照和多页验收，保存各次结果与网关用量。按累计二十六条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜开始 zt 合成对照和两页验收
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：用户确认继续，已受理阶段二的两组补测。
+- 关联记录：本编号的阶段二补测计划和单页缺陷样例重跑。
+- 现象或目标：验证模型在有幂等保护时不会误报，以及两页同一差异块完整覆盖并定位尾页证据。
+- 原因或分析：单页已知缺陷样例通过，误报和真实网关分页仍缺验证。
+- 处理与改进：先准备合成样例和本地验收，单页通过才执行两页样例，至多调用三次。沿用隔离试跑的 Token 覆盖与用量记录。
+- 代码修改：开工时仅追加台账。
+- 本地验证：已执行 `git status --short`，查阅上轮隔离试跑脚本和本编号条目。尚未发起本轮请求。
+- 部署生效：未部署，业务配置未修改。
+- 关联文件或证据：docs/review-agent-phase2-walkthrough.md 和本编号的试跑报告。
+- 遗留与下一步：验证合成代码的行为，执行真实网关验收和报告核对，追加结果并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜zt 合成对照与两页尾部证据验收通过
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：阶段二的两项真实模型补测通过，已具备开始双评审对比页的合成样例。
+- 关联记录：本编号的阶段二补测计划、单页缺陷样例重跑和本轮受理记录。
+- 现象或目标：确认保留幂等保护时无误报，且同一差异块分页后能覆盖全部差异并定位尾页缺陷。
+- 原因或分析：先在本地执行合成样例确认响应丢失后的写入次数，有保护时一次，去掉保护时两次。两页样例的第一页是正常状态显示代码，第二页完整包含去重判断删除和重试触发条件。
+- 处理与改进：复用 `zt` 进行了三次请求，均为 HTTP 200、`finish_reason=stop`，模型回执均为 `gpt-6.1-sol`。保护对照核对 9/9、零发现，回执 18924 Token。两页分别覆盖差异位置 0 至 19、20 至 29，合计核对 30/30，报告 `orders.py` 新版第 22 行的无条件追加，回执分别为 19183 和 19019 Token。本轮合计输入 56995、输出 131、共 57126 Token。两份报告各自同时保存预置 OCR 和真实 Agent 结果。一次请求的对照通过后才启动分页样例。
+- 代码修改：本轮仅追加台账。两项样例、试跑脚本和报告保存在 Git 忽略的本机目录。
+- 本地验证：执行 `PYTHONPATH=backend .venv/bin/python .local-data/agent-zt-acceptance.NAQ6il/acceptance.py --self-check protected` 与 `--self-check tail-page`，两个离线检查通过。依次运行同一脚本的 `--send protected` 和 `--send tail-page`，共发出三次真实请求。执行 `PYTHONPATH=backend .venv/bin/python -` 核对两份 JSON、用量、两路结果、偏移、证据行和 schema 54，两个隔离库 `PRAGMA quick_check` 为 `ok`。`git diff --check` 通过。本轮覆盖两个合成场景，未验证真实 OCR、实际扣费或生产用量策略。
+- 部署生效：未部署，业务库、生产配置及预算策略未修改。试跑覆盖仅在隔离进程生效，没有触发飞书或 GitLab 投递。
+- 关联文件或证据：本机 `.local-data/agent-zt-acceptance.NAQ6il/protected.json` 与 `.local-data/agent-zt-acceptance.NAQ6il/tail-page.json`。
+- 遗留与下一步：按试点建议书工作包 3 进入结果读取接口和任务详情对比页。真实 MR 试点前校准网关用量预留并确认可发送范围。按累计二十八条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}

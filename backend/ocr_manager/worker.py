@@ -106,12 +106,7 @@ def review_settings(
     """从启用的模型配置读取评审参数；测试注入的 Settings 只用于隔离验证。"""
 
     limits = get_limits(store, repository_id)
-    profile_id = limits["model_profile_id"]
-    profile = (
-        next((item for item in store.list_model_profiles() if item["id"] == profile_id), None)
-        if profile_id
-        else store.get_model_profile()
-    )
+    profile = store.get_model_profile(repository_id)
     if profile is None:
         if settings.ocr_model and settings.ocr_api_key:
             return apply_limits(settings, limits), 0
@@ -144,11 +139,7 @@ def configuration_snapshot(
     model_settings, model_version = review_settings(store, settings, repository_id)
     project_limits = get_limits(store, repository_id)
     profile_id = project_limits["model_profile_id"]
-    profile = (
-        next((item for item in store.list_model_profiles() if item["id"] == profile_id), None)
-        if profile_id
-        else store.get_model_profile()
-    )
+    profile = store.get_model_profile(repository_id)
     command = shutil.which(settings.ocr_command)
     command_fingerprint: dict[str, Any] = {"name": settings.ocr_command}
     if command:

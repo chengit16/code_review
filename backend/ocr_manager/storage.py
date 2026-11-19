@@ -1367,11 +1367,13 @@ class Store:
             )
             return cursor.rowcount == 1
 
-    def get_model_profile(self) -> dict[str, Any] | None:
-        """内部读取当前启用模型；旧单模型记录在迁移时复制到新配置表。"""
+    def get_model_profile(self, repository_id: int | None = None) -> dict[str, Any] | None:
+        """项目显式指定的模型优先，其余继承全局启用模型。"""
 
         with self.connection() as db:
-            row = db.execute("SELECT * FROM model_profiles WHERE enabled=1").fetchone()
+            row = db.execute("""SELECT * FROM model_profiles WHERE id=COALESCE(
+                (SELECT model_profile_id FROM project_review_limits WHERE repository_id=?),
+                (SELECT id FROM model_profiles WHERE enabled=1))""", (repository_id,)).fetchone()
             return dict(row) if row else None
 
     def list_model_profiles(self) -> list[dict[str, Any]]:

@@ -10,12 +10,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from ocr_manager import agent_review_store as queue
 from ocr_manager import worker
 from ocr_manager.agent_review_cli import main as agent_cli
 from ocr_manager.agent_review_config import AgentReviewConfig, load_agent_config
+from ocr_manager.agent_review_profile import resolve_model
 from ocr_manager.agent_review_worker import execute
 from ocr_manager.config import Settings, load_settings
 from ocr_manager.gitlab import GitLabClient
@@ -398,3 +400,94 @@ def test_invalid_agent_settings_leave_ocr_settings_available(
     loaded = load_settings()
     assert loaded.admin_token == settings.admin_token
     assert loaded.agent_review is None and loaded.agent_review_error
+
+
+def test_project_model_resolves_same_profile_as_ocr_and_pins_version(
+    pilot: tuple[Store, Settings], monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """复用项目覆盖版本，入队不解密，发送只用冻结端点，配置变化时拒绝调用。"""
+
+    store, settings = pilot
+    secret = "synthetic-pilot-project-key"
+    ciphertext = SecretBox(settings.master_key).encrypt(secret)
+    default = store.add_model_profile("合成默认", "openai", "default-model", "", ciphertext)
+    assert store.activate_model_profile(default)
+    assert store.get_model_profile(1)["id"] == default
+    override = store.add_model_profile(
+        "合成项目覆盖", "openai", "gateway-review-model", "https://models.example.test/v1",
+        ciphertext,
+    )
+    with store.connection() as db:
+        db.execute("INSERT INTO project_review_limits(repository_id,model_profile_id) VALUES(1,?)",
+                   (override,))
+    values = {"OCR_APP_AGENT_MODEL_SOURCE": "project", "OCR_APP_AGENT_REPOSITORIES": "1",
+              "OCR_APP_AGENT_OUTPUT_LIMIT_FIELD": "max_tokens"}
+    config = load_agent_config(lambda key, default: values.get(key, default))
+    assert config
+    selected = resolve_model(store, config, 1)
+    assert selected.api_key == "" and selected.profile_reference == (override, 1)
+    ocr_settings, _version = worker.review_settings(store, settings, 1)
+    assert ocr_settings.ocr_model == selected.model
+    assert ocr_settings.ocr_api_key == secret
+
+    monkeypatch.setattr("ocr_manager.agent_review_cli.load_settings",
+                        lambda: replace(settings, agent_review=config))
+    monkeypatch.setattr(sys, "argv", [
+        "agent_review_cli", "enqueue", "--job-id", "1", "--request-key", "reuse-profile",
+    ])
+    agent_cli()
+    identifier = json.loads(capsys.readouterr().out)["id"]
+    calls: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        assert request.headers["authorization"] == f"Bearer {secret}"
+        payload = json.loads(request.content)
+        assert payload["model"] == "gateway-review-model"
+        assert payload["max_tokens"] == config.max_output_tokens
+        assert "max_completion_tokens" not in payload
+        body = json.dumps({
+            "model": "gateway-review-model",
+            "choices": [{"finish_reason": "stop", "message": {"content": '{"findings":[]}'}}],
+            "usage": {"prompt_tokens": 40, "completion_tokens": 10, "total_tokens": 50},
+        })
+        return httpx.Response(200, stream=httpx.ByteStream(body.encode()))
+
+    monkeypatch.setattr("ocr_manager.agent_review_worker.httpx.HTTPTransport",
+                        lambda **_kwargs: httpx.MockTransport(respond))
+    assert queue.claim(store)
+    execute(store, replace(settings, agent_review=config), identifier)
+    agent = agent_state(store, identifier)
+    assert agent["status"] == "complete"
+    assert agent["config"]["profile_reference"] == [override, 1]
+    assert calls == ["https://models.example.test/v1/chat/completions"]
+    report = json.dumps(queue.report(store, identifier))
+    assert secret not in report and ciphertext not in report
+
+    second = queue.enqueue(store, selected, 1, "reuse-changed", identifier)
+    assert store.update_model_profile(override, {"base_url": "https://other.example.test/v1"})
+    assert queue.claim(store)
+    execute(store, replace(settings, agent_review=config), second)
+    assert agent_state(store, second)["reason"] == "model_config_changed"
+    assert len(calls) == 1
+
+
+def test_project_model_rejects_overrides_and_unsafe_endpoint(pilot: tuple[Store, Settings]) -> None:
+    """项目模式不得混用独立凭据，也不会向配置中的明文 HTTP 发出项目凭据。"""
+
+    store, settings = pilot
+    values = {"OCR_APP_AGENT_MODEL_SOURCE": "project", "OCR_APP_AGENT_REPOSITORIES": "1",
+              "OCR_APP_AGENT_API_KEY": "synthetic-dedicated-credential"}
+    with pytest.raises(ValueError, match="移除"):
+        load_agent_config(lambda key, default: values.get(key, default))
+    del values["OCR_APP_AGENT_API_KEY"]
+    config = load_agent_config(lambda key, default: values.get(key, default))
+    assert config
+    identifier = store.add_model_profile(
+        "合成配置", "openai", "synthetic-model", "http://127.0.0.1/v1",
+        SecretBox(settings.master_key).encrypt("synthetic-project-credential"),
+    )
+    assert store.activate_model_profile(identifier)
+    with pytest.raises(ValueError, match="Agent 端点协议"):
+        resolve_model(store, config, 1, master_key=settings.master_key)

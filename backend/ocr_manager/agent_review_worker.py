@@ -13,6 +13,7 @@ from unidiff.errors import UnidiffParseError
 
 from ocr_manager import agent_review_store as queue
 from ocr_manager.agent_review_model import ChatPageModel
+from ocr_manager.agent_review_profile import resolve_model
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.config import Settings
 from ocr_manager.gitlab import GitLabClient
@@ -62,6 +63,13 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
             store, run_id, reason="model_config_invalid" if settings.agent_review_error
             else "not_enabled",
         )
+        return
+    try:
+        config = resolve_model(
+            store, config, run["repository_id"], master_key=settings.master_key,
+        )
+    except (InvalidToken, ValueError):
+        queue.finish(store, run_id, reason="model_config_invalid")
         return
     if run["model_snapshot"] != config.snapshot():
         queue.finish(store, run_id, reason="model_config_changed")

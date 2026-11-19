@@ -36,6 +36,8 @@ def enqueue(
 
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,100}", request_key):
         raise ValueError("请求键须为 1 到 100 个 ASCII 字母、数字或 ._:-")
+    if config.model_source == "project" and config.profile_reference is None:
+        raise ValueError("入队前须解析项目的模型配置版本")
     snapshot = config.snapshot()
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")

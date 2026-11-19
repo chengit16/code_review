@@ -123,7 +123,7 @@ class ChatPageModel:
                 {"role": "user", "content": json.dumps(asdict(page), ensure_ascii=False)},
             ],
             "response_format": {"type": "json_object"},
-            "max_completion_tokens": config.max_output_tokens,
+            config.output_limit_field: config.max_output_tokens,
         }, ensure_ascii=False, separators=(",", ":")).encode()
         reserved = len(payload) + 128 + config.max_output_tokens
         check_cancellation()

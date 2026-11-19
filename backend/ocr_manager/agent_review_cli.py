@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from ocr_manager.agent_review_profile import resolve_model
 from ocr_manager.agent_review_store import cancel, enqueue, report
 from ocr_manager.config import load_settings
 from ocr_manager.storage import SCHEMA_VERSION, Store
@@ -32,10 +33,18 @@ def main() -> None:
             parser.error("业务数据库版本不匹配，请先在受控实例完成迁移")
     try:
         if args.command == "enqueue":
-            if settings.agent_review is None:
+            config = settings.agent_review
+            if config is None:
                 parser.error(settings.agent_review_error or "未启用 Agent 试点")
+            if config.model_source == "project":
+                with store.connection() as db:
+                    job = db.execute("SELECT repository_id FROM review_jobs WHERE id=?",
+                                     (args.job_id,)).fetchone()
+                if job is None:
+                    parser.error("任务不存在")
+                config = resolve_model(store, config, int(job["repository_id"]))
             value: object = {"id": enqueue(
-                store, settings.agent_review, args.job_id, args.request_key, args.previous_id,
+                store, config, args.job_id, args.request_key, args.previous_id,
             )}
         elif args.command == "report":
             value = report(store, args.id)
