@@ -18,19 +18,23 @@ def task_view_clause(view: str | None) -> str | None:
     """快捷视图与首页共用口径；同一输入被后续完整评审覆盖后不再算未恢复异常。"""
 
     if view == "active":
-        return ("j.status IN ('queued','running') OR EXISTS (SELECT 1 FROM "
-                "review_recoveries b WHERE b.job_id=j.id AND b.status IN ('queued','running'))")
+        return (
+            "j.superseded=0 AND (j.status IN ('queued','running') OR EXISTS (SELECT 1 FROM "
+            "review_recoveries b WHERE b.job_id=j.id AND b.status IN ('queued','running')))"
+        )
     if view == "notification_failed":
-        return ("EXISTS (SELECT 1 FROM notification_deliveries d "
-                "WHERE d.job_id=j.id AND d.status='failed') OR EXISTS (SELECT 1 FROM "
-                "review_recovery_deliveries s WHERE s.job_id=j.id AND s.source_attempt=j.attempts "
-                "AND j.status='partial' AND s.status='failed')")
+        return (
+            "j.superseded=0 AND (EXISTS (SELECT 1 FROM notification_deliveries d "
+            "WHERE d.job_id=j.id AND d.status='failed') OR EXISTS (SELECT 1 FROM "
+            "review_recovery_deliveries s WHERE s.job_id=j.id AND s.source_attempt=j.attempts "
+            "AND j.status='partial' AND s.status='failed'))"
+        )
     if view == "attention":
-        return f"""{status_sql()} IN ('failed','partial') AND NOT EXISTS (
+        return f"""j.superseded=0 AND {status_sql()} IN ('failed','partial') AND NOT EXISTS (
             SELECT 1 FROM review_jobs n WHERE n.repository_id=j.repository_id
             AND n.mr_iid=j.mr_iid AND n.commit_sha=j.commit_sha
             AND COALESCE(n.base_sha,'')=COALESCE(j.base_sha,'')
-            AND n.id>j.id AND {status_sql('n')}='complete')"""
+            AND n.id>j.id AND {status_sql("n")}='complete')"""
     return None
 
 
@@ -42,24 +46,38 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
     view = task_view_clause(filters.get("view"))
     if view:
         clauses.append(f"({view})")
-    for field in ("repository_id", "status", "target_branch", "mr_iid"):
+    for field in ("repository_id", "status", "target_branch", "mr_iid", "source"):
         if filters.get(field) is not None:
             clauses.append(f"{'f.list_status' if field == 'status' else f'j.{field}'}=?")
             values.append(filters[field])
     issue_state = filters.get("issue_state")
-    issue_clauses = {"open": "f.open_count>0", "resolved": "f.resolved=1",
-                     "none": "f.no_findings=1", "unknown": "f.unknown=1"}
+    issue_clauses = {
+        "open": "f.open_count>0",
+        "resolved": "f.resolved=1",
+        "none": "f.no_findings=1",
+        "unknown": "f.unknown=1",
+    }
     if issue_state in issue_clauses:
         clauses.append(issue_clauses[issue_state])
     feedback_state = filters.get("feedback_state")
     if feedback_state in {"pending", "handled"}:
         # 与首页、发现列表共用有效主身份；任务自身不受首页日期窗口限制。
-        condition = ("SUM(verdict IS NULL)>0" if feedback_state == "pending"
-                     else "SUM(verdict IS NULL)=0")
-        clauses.append(f"j.id IN ({QUALITY_CTE} SELECT job_id FROM scoped "
-                       f"GROUP BY job_id HAVING {condition})")
-        values.extend((None, None, "1970-01-01 00:00:00", "9999-12-31 00:00:00",
-                       "1970-01-01 00:00:00", "9999-12-31 00:00:00"))
+        condition = (
+            "SUM(verdict IS NULL)>0" if feedback_state == "pending" else "SUM(verdict IS NULL)=0"
+        )
+        clauses.append(
+            f"j.id IN ({QUALITY_CTE} SELECT job_id FROM scoped GROUP BY job_id HAVING {condition})"
+        )
+        values.extend(
+            (
+                None,
+                None,
+                "1970-01-01 00:00:00",
+                "9999-12-31 00:00:00",
+                "1970-01-01 00:00:00",
+                "9999-12-31 00:00:00",
+            )
+        )
     if filters.get("notification_failed"):
         clauses.append(f"({task_view_clause('notification_failed')})")
     if filters.get("sha"):
@@ -80,12 +98,16 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
     with store.connection() as db:
         # 数量和数据在同一读事务内，避免 Worker 更新时出现自相矛盾的分页结果。
         db.execute("BEGIN")
-        total = db.execute(f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
-            JOIN task_facts f ON f.job_id=j.id{where}""", values).fetchone()[0]
+        total = db.execute(
+            f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
+            JOIN task_facts f ON f.job_id=j.id{where}""",
+            values,
+        ).fetchone()[0]
         rows = db.execute(
             f"""{TASK_FACTS_CTE} SELECT j.id, j.repository_id, j.event_id,
             j.mr_iid, j.commit_sha, j.commit_author,
-            j.ordinal, j.target_branch, j.status, j.error, j.attempts,
+            j.source,j.mr_state,j.superseded,j.ordinal,j.target_branch,j.status,
+            j.error,j.attempts,
             j.failure_stage, j.started_at, j.created_at, j.finished_at,
             j.usage_json, j.config_snapshot,
             CASE WHEN json_valid(j.scope_json) THEN
@@ -119,8 +141,14 @@ def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int
         enrich_jobs(db, items)
         attach_task_facts(db, items)
         status_counts = _status_counts(db, filters)
-        return {"items": items, "total": total, "page": page, "page_size": page_size,
-                "status_counts": status_counts, "feedback_counts": _feedback_counts(db, filters)}
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "status_counts": status_counts,
+            "feedback_counts": _feedback_counts(db, filters),
+        }
 
 
 def _feedback_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[str, int]:
@@ -130,8 +158,11 @@ def _feedback_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[st
     for state in ("pending", "handled"):
         clauses, values = _job_filters(filters | {"feedback_state": state})
         where = " AND ".join(clauses)
-        counts[state] = db.execute(f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
-            JOIN task_facts f ON f.job_id=j.id WHERE {where}""", values).fetchone()[0]
+        counts[state] = db.execute(
+            f"""{TASK_FACTS_CTE} SELECT COUNT(*) FROM review_jobs j
+            JOIN task_facts f ON f.job_id=j.id WHERE {where}""",
+            values,
+        ).fetchone()[0]
     return counts
 
 
@@ -144,11 +175,15 @@ def _status_counts(db: sqlite3.Connection, filters: dict[str, Any]) -> dict[str,
         base.pop("view", None)
     clauses, values = _job_filters(base)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    rows = db.execute(f"""{TASK_FACTS_CTE} SELECT f.list_status AS state,COUNT(*) AS count
+    rows = db.execute(
+        f"""{TASK_FACTS_CTE} SELECT f.list_status AS state,COUNT(*) AS count
         FROM review_jobs j JOIN task_facts f ON f.job_id=j.id{where} GROUP BY f.list_status""",
-        values)
-    counts = {key: 0 for key in ("queued", "running", "complete", "partial", "failed",
-                                "skipped", "cancelled")}
+        values,
+    )
+    counts = {
+        key: 0
+        for key in ("queued", "running", "complete", "partial", "failed", "skipped", "cancelled")
+    }
     for row in rows:
         if row["state"] in counts:
             counts[row["state"]] = row["count"]
@@ -181,18 +216,25 @@ def set_job_stage(store: Store, job_id: int, stage: str) -> None:
     """阶段先持久化，进程中断后仍能定位最后执行步骤。"""
 
     with store.connection() as db:
-        job = db.execute("SELECT attempts,status,failure_stage FROM review_jobs WHERE id=?",
-                         (job_id,)).fetchone()
+        job = db.execute(
+            "SELECT attempts,status,failure_stage FROM review_jobs WHERE id=?", (job_id,)
+        ).fetchone()
         if not job or job["status"] != "running":
             return
-        current = db.execute("SELECT stage FROM review_stage_timings WHERE job_id=? "
-                             "AND finished_at IS NULL", (job_id,)).fetchone()
+        current = db.execute(
+            "SELECT stage FROM review_stage_timings WHERE job_id=? AND finished_at IS NULL",
+            (job_id,),
+        ).fetchone()
         if current is None or current["stage"] != stage:
-            db.execute("UPDATE review_stage_timings SET finished_at=CURRENT_TIMESTAMP "
-                       "WHERE job_id=? AND finished_at IS NULL", (job_id,))
-            db.execute("INSERT INTO review_stage_timings(job_id,attempt_number,stage) "
-                       "VALUES(?,?,?)",
-                       (job_id, job["attempts"], stage))
+            db.execute(
+                "UPDATE review_stage_timings SET finished_at=CURRENT_TIMESTAMP "
+                "WHERE job_id=? AND finished_at IS NULL",
+                (job_id,),
+            )
+            db.execute(
+                "INSERT INTO review_stage_timings(job_id,attempt_number,stage) VALUES(?,?,?)",
+                (job_id, job["attempts"], stage),
+            )
         db.execute("UPDATE review_jobs SET failure_stage=? WHERE id=?", (stage, job_id))
 
 
@@ -205,10 +247,22 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
     preview = result.get("preview") or {}
     snapshot = public_snapshot(job.get("config_snapshot"))
     report: dict[str, Any] = {
-        "job": {key: job.get(key) for key in (
-            "id", "repository_id", "mr_iid", "commit_sha", "target_branch", "status",
-            "failure_stage", "error", "attempts", "created_at", "finished_at",
-        )},
+        "job": {
+            key: job.get(key)
+            for key in (
+                "id",
+                "repository_id",
+                "mr_iid",
+                "commit_sha",
+                "target_branch",
+                "status",
+                "failure_stage",
+                "error",
+                "attempts",
+                "created_at",
+                "finished_at",
+            )
+        },
         "comments": result.get("comments", []),
         "effective_status": job.get("effective_status", job.get("status")),
         "effective_conclusion": job.get("effective_document"),
@@ -221,32 +275,77 @@ def report_projection(job: dict[str, Any]) -> dict[str, Any]:
         "diagnostic": result.get("diagnostic"),
         "retry_summary": result.get("retry_summary"),
         "failure_analysis": result.get("failure_analysis"),
-        "stage_timings": [{key: stage.get(key) for key in (
-            "attempt_number", "stage", "started_at", "finished_at")}
-            for stage in job.get("stage_timings", [])],
+        "stage_timings": [
+            {
+                key: stage.get(key)
+                for key in ("attempt_number", "stage", "started_at", "finished_at")
+            }
+            for stage in job.get("stage_timings", [])
+        ],
         "usage": result.get("usage"),
         "estimated_cost": estimate_cost(result.get("usage"), snapshot),
-        "coverage": {key: len(coverage.get(key) or []) for key in (
-            "selected", "completed", "reused", "failed", "waived",
-        )},
-        "files": [{key: item.get(key) for key in ("path", "will_review", "exclude_reason")}
-                  for item in preview.get("files", []) if isinstance(item, dict)],
+        "coverage": {
+            key: len(coverage.get(key) or [])
+            for key in (
+                "selected",
+                "completed",
+                "reused",
+                "failed",
+                "waived",
+            )
+        },
+        "files": [
+            {key: item.get(key) for key in ("path", "will_review", "exclude_reason")}
+            for item in preview.get("files", [])
+            if isinstance(item, dict)
+        ],
         "changed_files": json.loads(job["changed_files"]) if job.get("changed_files") else [],
-        "attempts": [{key: item.get(key) for key in (
-            "attempt_number", "status", "error", "failure_stage", "started_at", "finished_at",
-            "scheduled_at", "retry_ready_at", "reason_code",
-        )} for item in job["attempt_history"]],
+        "attempts": [
+            {
+                key: item.get(key)
+                for key in (
+                    "attempt_number",
+                    "status",
+                    "error",
+                    "failure_stage",
+                    "started_at",
+                    "finished_at",
+                    "scheduled_at",
+                    "retry_ready_at",
+                    "reason_code",
+                )
+            }
+            for item in job["attempt_history"]
+        ],
         "delivery": job.get("delivery"),
         "configuration": snapshot,
     }
     effective = job.get("effective_document")
     if effective:
-        report["initial_review"] = {"status": job["status"], **{key: report[key] for key in (
-            "comments", "coverage", "reason", "diagnostic", "retry_summary", "failure_analysis",
-            "usage", "estimated_cost")}}
-        report["reason"] = {"code": job["effective_status"], "message": (
-            "当前有效覆盖已完成；初审故障证据单独保留" if job["effective_status"] == "complete"
-            else "补审后仍有失败覆盖；初审故障证据单独保留")}
+        report["initial_review"] = {
+            "status": job["status"],
+            **{
+                key: report[key]
+                for key in (
+                    "comments",
+                    "coverage",
+                    "reason",
+                    "diagnostic",
+                    "retry_summary",
+                    "failure_analysis",
+                    "usage",
+                    "estimated_cost",
+                )
+            },
+        }
+        report["reason"] = {
+            "code": job["effective_status"],
+            "message": (
+                "当前有效覆盖已完成；初审故障证据单独保留"
+                if job["effective_status"] == "complete"
+                else "补审后仍有失败覆盖；初审故障证据单独保留"
+            ),
+        }
         report["diagnostic"] = report["retry_summary"] = report["failure_analysis"] = None
         report["usage_scope"] = "initial_attempt"
         report["version_execution_usage"] = effective["execution_usage"]
@@ -262,5 +361,6 @@ def public_snapshot(raw: str | dict[str, Any] | None) -> dict[str, Any] | None:
     snapshot = json.loads(raw) if isinstance(raw, str) else raw
     if not snapshot:
         return None
-    return snapshot | {"command": {key: value for key, value in snapshot["command"].items()
-                                   if key != "path"}}
+    return snapshot | {
+        "command": {key: value for key, value in snapshot["command"].items() if key != "path"}
+    }

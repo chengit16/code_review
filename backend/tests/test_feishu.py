@@ -254,7 +254,7 @@ def test_card_status_requires_complete_coverage(
     assert body["card"]["header"]["title"]["content"].startswith(title)
     assert body["card"]["header"]["template"] == color
     assert conclusion in card_text(body)
-    assert "默认分支 Push" in card_text(body)
+    assert "目标分支 Push" in card_text(body)
 
 
 def test_card_budget_exhaustion_cannot_be_green() -> None:

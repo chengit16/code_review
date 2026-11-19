@@ -82,7 +82,6 @@ class WorkerScheduler:
         groups = {
             "model": [Action("review", self._claim_job, self._review),
                       action("review_recovery", self._claim_recovery, execute_recovery),
-                      action("premerge", self._claim_premerge, worker.review_premerge),
                       action("model_check", lambda: store.next_connection_check(("model",)),
                              run_connection_check)],
             "ingress": [action("repository_discovery", lambda: claim_discovery(store),
@@ -168,7 +167,8 @@ class WorkerScheduler:
             with self.store.connection() as db:
                 valid = db.execute("""SELECT 1 FROM notification_deliveries d
                     JOIN review_jobs j ON j.id=d.job_id WHERE d.id=? AND d.status='sending'
-                    AND j.attempts=? AND j.status IN ('complete','partial','failed','skipped')""",
+                    AND j.attempts=? AND j.superseded=0
+                    AND j.status IN ('complete','partial','failed','skipped')""",
                                    (task["id"], task["review_attempt_number"])).fetchone()
             if valid:
                 deliver_notification(self.store, self.settings, task)
@@ -187,7 +187,7 @@ class WorkerScheduler:
             with self.store.connection() as db:
                 valid = db.execute("""SELECT 1 FROM gitlab_publications p
                     JOIN review_jobs j ON j.id=p.job_id WHERE p.id=? AND p.status='sending'
-                    AND j.attempts=? AND j.status IN ('complete','partial')""",
+                    AND j.attempts=? AND j.superseded=0 AND j.status IN ('complete','partial')""",
                                    (task["id"], task["attempt_number"])).fetchone()
             if valid:
                 publish_one(self.store, self.settings, task)

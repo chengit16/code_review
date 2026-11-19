@@ -1,6 +1,8 @@
 /** @description 验证项目草稿、逐项批量结果、分页和历史收纳；只读隔离服务，写入均使用合成响应。 */
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { mockRepositoryQuery } from "./unifiedFixture";
+test.beforeEach(async ({ page }) => { await mockRepositoryQuery(page); });
 
 async function openRepository(page: Page) {
   await page.goto("/repositories");
@@ -19,23 +21,23 @@ test("项目页签保留草稿，关闭及路由离开支持取消", async ({ pa
   await page.getByRole("button", { name: "编辑 验收任务项目" }).click();
   await page.getByRole("tab", { name: "评审参数" }).click();
   await page.getByLabel("超时（秒）").fill("321");
-  await page.getByRole("tab", { name: "发布审查" }).click();
+  await page.getByRole("tab", { name: "评审参数" }).click();
   await page.getByRole("textbox", { name: "仓库业务文档路径" }).fill("docs/unsaved.md");
   await page.getByRole("tab", { name: "基础接入" }).click();
-  await page.getByLabel("仓库名称").fill("未保存的项目名");
+  await page.getByLabel("仓库地址").fill("https://gitlab.example.test/team/unsaved.git");
   await page.getByRole("tab", { name: "评审参数" }).click();
   await expect(page.getByLabel("超时（秒）")).toHaveValue("321");
-  await page.getByRole("tab", { name: "发布审查" }).click();
+  await page.getByRole("tab", { name: "评审参数" }).click();
   await expect(page.getByRole("textbox", { name: "仓库业务文档路径" })).toHaveValue("docs/unsaved.md");
   await cancelDiscard(page, () => page.getByRole("button", { name: "关闭", exact: true }).click());
   await expect(page.getByRole("dialog")).toBeVisible();
   await cancelDiscard(page, () => page.goBack());
-  await expect(page).toHaveURL(/\/repositories\?repository=1&section=publication$/);
+  await expect(page).toHaveURL(/\/repositories\?repository=1&section=review$/);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "编辑 验收任务项目" }).click();
-  await expect(page.getByLabel("仓库名称")).toHaveValue("验收任务项目");
+  await expect(page.getByLabel("仓库地址")).toHaveValue("https://gitlab.example.test/team/fixture.git");
 });
 
 test("保存评审参数不会丢弃其他页签草稿，重新编辑不显示过期成功提示", async ({ page }) => {
@@ -45,7 +47,7 @@ test("保存评审参数不会丢弃其他页签草稿，重新编辑不显示�
     await route.fulfill({ json: limits });
   });
   await openRepository(page);
-  await page.getByLabel("仓库名称").fill("保留的基础草稿");
+  await page.getByLabel("仓库地址").fill("https://gitlab.example.test/team/draft.git");
   await page.getByRole("tab", { name: "评审参数" }).click();
   await page.getByLabel("超时（秒）").fill("456");
   await expect(page.getByRole("checkbox", { name: "自动过滤纯换行文件" })).not.toBeChecked();
@@ -57,7 +59,7 @@ test("保存评审参数不会丢弃其他页签草稿，重新编辑不显示�
   await page.getByLabel("超时（秒）").fill("457");
   await expect(page.getByText("评审参数已保存", { exact: true })).toHaveCount(0);
   await page.getByRole("tab", { name: "基础接入" }).click();
-  await expect(page.getByLabel("仓库名称")).toHaveValue("保留的基础草稿");
+  await expect(page.getByLabel("仓库地址")).toHaveValue("https://gitlab.example.test/team/draft.git");
   await cancelDiscard(page, () => page.getByRole("button", { name: "关闭", exact: true }).click());
 });
 
@@ -71,8 +73,8 @@ test("保存基础接入不关闭窗口或丢失评审参数草稿", async ({ pa
   await page.getByRole("tab", { name: "评审参数" }).click();
   await page.getByLabel("超时（秒）").fill("777");
   await page.getByRole("tab", { name: "基础接入" }).click();
-  await page.getByLabel("仓库名称").fill("合成保存名称");
-  await page.getByLabel("仓库路径", { exact: true }).fill("team/fixture");
+  await page.getByLabel("仓库地址").fill("https://gitlab.example.test/team/fixture.git");
+  await page.getByRole("checkbox", { name: "目标分支 Push 评审", exact: true }).check();
   await page.getByRole("button", { name: "保存基础接入" }).click();
   await expect(page.getByText("基础接入配置已保存", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "评审参数" }).click();
@@ -90,13 +92,14 @@ test("配置读取失败不能保存默认值，重新加载后才恢复操作",
     });
   }
   await openRepository(page);
-  await page.getByRole("tab", { name: "发布审查" }).click();
+  await page.getByRole("tab", { name: "结果发布" }).click();
   await expect(page.getByRole("alert").first()).toContainText("合成配置读取失败");
   await expect(page.getByRole("button", { name: "保存合并前配置" })).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "向 MR 发布可定位的评审发现" })).toBeDisabled();
   failed = false;
   await page.locator("section").filter({ has: page.getByRole("heading", { name: "GitLab 行内评论", exact: true }) }).getByRole("button", { name: "重新加载" }).click();
-  await page.locator("section").filter({ has: page.getByRole("heading", { name: "合并前审查", exact: true }) }).getByRole("button", { name: "重新加载" }).click();
+  await page.getByRole("tab", { name: "评审参数" }).click();
+  await page.locator("section").filter({ has: page.getByRole("heading", { name: "合并前审查背景", exact: true }) }).getByRole("button", { name: "重新加载" }).click();
   await expect(page.getByRole("textbox", { name: "仓库业务文档路径" })).toHaveValue("docs/saved.md");
   await expect(page.getByRole("button", { name: "保存合并前配置" })).toBeDisabled();
   expect(writes).toBe(0);
@@ -132,7 +135,7 @@ test("批量重审只取消成功项勾选，请求中锁定选择和筛选", as
   expect(submitted).toEqual([[901, 902]]);
 });
 
-for (const [path, endpoint] of [["/jobs", "task-search"], ["/issues", "review-issues"], ["/premerge", "premerge-search"]]) {
+for (const [path, endpoint] of [["/jobs", "task-search"], ["/issues", "review-issues"]]) {
   test(`${path} 支持条数和跳页，地址栏保留筛选`, async ({ page }) => {
     await page.route(`**/api/${endpoint}?*`, async (route) => {
       const params = new URL(route.request().url()).searchParams;
@@ -159,15 +162,12 @@ for (const [path, endpoint] of [["/jobs", "task-search"], ["/issues", "review-is
   });
 }
 
-test("高级筛选按需展开，条件标签可移除并保留每页条数", async ({ page }) => {
-  await page.goto("/jobs?page_size=50");
-  await expect(page.getByLabel("提交 SHA", { exact: true })).toBeHidden();
-  await page.getByText("更多筛选（提交、分支、时间）", { exact: true }).click();
-  await page.getByLabel("提交 SHA", { exact: true }).fill("abcd");
-  await page.getByLabel("分支", { exact: true }).fill("main");
+test("精简控件保留旧链接条件，标签可移除并保留每页条数", async ({ page }) => {
+  await page.goto("/jobs?page_size=50&sha=abcd&target_branch=main");
+  await expect(page.getByLabel("提交 SHA", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("分支", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "查询", exact: true }).click();
   await expect(page).toHaveURL(/page_size=50&sha=abcd&target_branch=main/);
-  await expect(page.getByLabel("提交 SHA", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "移除提交筛选" }).click();
   await expect(page).toHaveURL("/jobs?page_size=50&target_branch=main");
   await page.getByRole("button", { name: "清空筛选" }).click();
@@ -215,7 +215,7 @@ for (const width of [1280, 390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/jobs");
     await expect(page.getByRole("combobox", { name: "每页条数" })).toBeVisible();
-    await page.getByText("更多筛选（提交、分支、时间）", { exact: true }).click();
+
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/optimized-jobs-${width}.png`, fullPage: true });
     await openRepository(page);

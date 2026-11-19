@@ -78,7 +78,7 @@ test("HTTP 回调及令牌复制有降级路径，失败提示手动复制且不
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/repositories");
   expect(await page.evaluate(() => typeof navigator.clipboard)).toBe("undefined");
-  await page.locator(".webhook-callback").getByRole("button").click();
+  await page.locator(".repository-callback-panel").getByRole("button").click();
   await expect(page.getByRole("button", { name: "已复制", exact: true })).toBeVisible();
   // 使用合成令牌；不读取或污染用户真实业务令牌。
   await page.route("**/api/repositories/*/webhook-token", (route) => route.fulfill({ json: { webhook_token: "synthetic-http-token" } }));
@@ -96,7 +96,7 @@ test("HTTP 回调及令牌复制有降级路径，失败提示手动复制且不
   await copy.click();
   await expect(page.getByRole("alert")).toContainText("手动选择令牌");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await page.locator(".webhook-callback").getByRole("button").click();
+  await page.locator(".repository-callback-panel").getByRole("button").click();
   await expect(page.getByText("复制失败，请手动选择回调地址", { exact: true })).toBeVisible();
   expect(await page.locator('textarea[aria-label="临时复制内容"]').count()).toBe(0);
   expect(errors).toEqual([]);
@@ -119,13 +119,16 @@ test("没有新版取消和克隆 API 仍能保存规则，取消切换不丢草
   await page.getByRole("button", { name: "保存规则", exact: true }).click();
   await expect(page.getByText("审核规则已保存", { exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "审核内容", exact: true }).fill("尚未保存的修改");
-  page.once("dialog", (dialog) => dialog.dismiss());
+  const cancelledScope = page.waitForEvent("dialog").then((dialog) => dialog.dismiss());
   await page.getByRole("combobox", { name: "配置范围" }).click();
   await page.getByRole("option", { name: "验收任务项目", exact: true }).click();
+  await cancelledScope;
+  await expect(page).toHaveURL(/tab=rules$/);
   await expect(page.getByRole("textbox", { name: "审核内容", exact: true })).toHaveValue("尚未保存的修改");
-  page.once("dialog", (dialog) => dialog.accept());
+  const acceptedScope = page.waitForEvent("dialog").then((dialog) => dialog.accept());
   await page.getByRole("combobox", { name: "配置范围" }).click();
   await page.getByRole("option", { name: "验收任务项目", exact: true }).click();
+  await acceptedScope;
   await expect(page.getByRole("textbox", { name: "审核内容", exact: true })).toHaveCount(0);
   await page.getByRole("combobox", { name: "配置范围" }).click();
   await page.getByRole("option", { name: "全局规则", exact: true }).click();

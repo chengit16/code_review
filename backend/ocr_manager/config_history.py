@@ -116,7 +116,8 @@ def _public_revisions(rows: list[Any], kind: str) -> list[dict[str, Any]]:
         before = json.loads(row["before_json"] or "{}")
         after = json.loads(row["after_json"] or "{}")
         changes = []
-        fields = CONFIG_FIELDS[kind][1] + (PRICE_FIELDS if kind == "model_profile" else ())
+        fields = (CONFIG_FIELDS[kind][1] + (PRICE_FIELDS if kind == "model_profile" else ())
+                  + (("target_branches",) if kind == "repository" else ()))
         for field in fields:
             if before.get(field) == after.get(field):
                 continue
@@ -150,6 +151,8 @@ def restore_config(
         if values[field]:
             box.decrypt(values[field])
     if kind == "repository":
+        if isinstance(values.get("target_branches"), str):
+            values["target_branches"] = json.loads(values["target_branches"])
         if values.get("feishu_target_id") and not store.get_notification_target(
             values["feishu_target_id"]
         ):

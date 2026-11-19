@@ -23,6 +23,7 @@
 | [运行监控页重设计规划](operations-redesign-plan.md) | 用户已确认的四分区设计、执行槽与并发前置、数据口径及分阶段验收；业务页面待实施。 |
 | [全站体验重设计规划](whole-site-ux-redesign-plan.md) | 各主要页面的信息层级、状态表达和操作可发现性排查，以及分批实施与验证边界。 |
 | [全项目列表统一体验规划](global-list-redesign-plan.md) | 以紧凑任务列表为基准，盘点 11 类主列表与内嵌记录，明确逐页方案、数据缺口、分批迁移与验收边界；本轮仅规划，未实施或部署。 |
+| [统一评审任务与项目接入简化规划](unified-review-and-repository-setup-plan.md) | 重新规划：统一任务与飞书、同版本 MR／Push 复用规则、异常处理、新增编辑表单与远程分支搜索，以及分阶段验收；待实施。 |
 | [运行概览修复与信息层级优化](overview-repair-plan.md) | 数据优先首页与反馈质量、已忽略处置、项目/类别优化和样本下钻；含历史方案、隔离验证及未部署边界。 |
 | [任务列表精简与问题处理展示](task-list-redesign-plan.md) | 紧凑任务列表的字段、问题处置与数量口径，以及代码实施、本地验证和未部署边界。 |
 | [问题与改进台账](problem-improvement-log.md) | 持续记录问题、排查、解决办法和优化进展，分别标注代码修改、本地验证与部署生效状态。 |
@@ -36,6 +37,9 @@
 | [问题与改进第四阶段](improvements-phase4.md) | 问题与主题归档、恢复、版本历史、复盘口径与第 41 版迁移；不执行定时自动归档。 |
 | [项目完善实施路线](implementation-roadmap.md) | 第一至第四轮实施范围、原第十项归属与验收边界。 |
 | [评审稳定性与耗时优化方案](review-performance-plan.md) | 错误处理、输入保护、耗时诊断与调度优化的分阶段方案及当前状态。 |
+| [自研 Agent 与 OCR 双评审规划](dual-engine-review-agent-plan.md) | 同一输入下的双引擎独立运行、工具／Skill／MCP、结果留存、人工对比与分阶段验收；仅规划，待实施。 |
+| [自研代码评审 Agent 项目建议书](review-agent-pilot-proposal.md) | 项目决策入口，包含推荐路线、示例、首版验收、人工评价与试点推广条件。 |
+| [评审 Agent 框架选型与详细设计](review-agent-framework-design.md) | 比较全部自研、LangChain 与 LangGraph；明确推荐组合、节点、状态、Skill／MCP、恢复及技术验证；仅规划，待实施。 |
 | [评审优化第一阶段实施记录](review-performance-phase1.md) | 结果兼容、分类重试、超时诊断的本地实施与检查结果，以及升级和回滚边界。 |
 | [评审优化第二、三阶段实施记录](review-performance-phase23.md) | 范围预检、预算保护、耗时原因与历史成本、近七天指标；自动过滤关闭及版本 36 升级边界。 |
 | [评审优化第四阶段实施记录](review-performance-phase4.md) | 单协调器有界解耦、执行槽心跳、进程组栅栏、仓库轮转及版本 38 的本机生效边界。 |

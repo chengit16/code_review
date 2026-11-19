@@ -37,7 +37,6 @@ from ocr_manager.premerge import (
     description_digest,
     enqueue_premerge,
     finish_premerge,
-    next_premerge,
     premerge_is_current,
     premerge_policy,
 )
@@ -45,6 +44,7 @@ from ocr_manager.premerge_context import build_premerge_context
 from ocr_manager.project_limits import apply_limits, get_limits
 from ocr_manager.publications import next_publication, publish_one
 from ocr_manager.range_preflight import input_policy, inspect_range, save_preflight
+from ocr_manager.repository_branches import for_branch
 from ocr_manager.review_failures import (
     REVIEW_POLICY,
     classify_review_error,
@@ -107,15 +107,19 @@ def review_settings(
 
     limits = get_limits(store, repository_id)
     profile_id = limits["model_profile_id"]
-    profile = (next((item for item in store.list_model_profiles() if item["id"] == profile_id),
-                    None) if profile_id else store.get_model_profile())
+    profile = (
+        next((item for item in store.list_model_profiles() if item["id"] == profile_id), None)
+        if profile_id
+        else store.get_model_profile()
+    )
     if profile is None:
         if settings.ocr_model and settings.ocr_api_key:
             return apply_limits(settings, limits), 0
         raise ValueError("请先在管理台启用 Agent 模型")
     key = (
         SecretBox(settings.master_key).decrypt(profile["api_key_ciphertext"])
-        if profile["api_key_ciphertext"] else ""
+        if profile["api_key_ciphertext"]
+        else ""
     )
     return replace(
         apply_limits(settings, limits),
@@ -127,15 +131,24 @@ def review_settings(
 
 
 def configuration_snapshot(
-    store: Store, settings: Settings, rule_digest: str = "", repository_id: int | None = None
+    store: Store,
+    settings: Settings,
+    rule_digest: str = "",
+    repository_id: int | None = None,
+    premerge: bool = False,
+    context_hint: str | None = None,
+    premerge_version: int | None = None,
 ) -> dict[str, Any]:
     """按模型、OCR 安装文件及该提交规则记录配置事实，始终排除密钥。"""
 
     model_settings, model_version = review_settings(store, settings, repository_id)
     project_limits = get_limits(store, repository_id)
     profile_id = project_limits["model_profile_id"]
-    profile = (next((item for item in store.list_model_profiles() if item["id"] == profile_id),
-                    None) if profile_id else store.get_model_profile())
+    profile = (
+        next((item for item in store.list_model_profiles() if item["id"] == profile_id), None)
+        if profile_id
+        else store.get_model_profile()
+    )
     command = shutil.which(settings.ocr_command)
     command_fingerprint: dict[str, Any] = {"name": settings.ocr_command}
     if command:
@@ -151,40 +164,64 @@ def configuration_snapshot(
         if executable.name == "ocr.js" and package.is_file():
             package_data = json.loads(package.read_text(encoding="utf-8"))
             command_fingerprint["package_version"] = package_data.get("version")
-    return {
-            "provider": model_settings.ocr_provider,
-            "model": model_settings.ocr_model,
-            "base_url": model_settings.ocr_base_url,
-            "model_version": model_version,
-            "command": command_fingerprint,
-            "timeout_seconds": model_settings.ocr_timeout_seconds,
-            "review_language": model_settings.review_language,
-            "max_files": model_settings.ocr_max_files,
-            "max_tokens_budget": model_settings.ocr_max_tokens_budget,
-            "concurrency": model_settings.ocr_concurrency,
-            "effort": model_settings.ocr_effort,
-            "review_policy": REVIEW_POLICY.copy(),
-            "finding_policy_version": FINDING_POLICY_VERSION,
-            "input_policy": input_policy(bool(project_limits["newline_filter_enabled"])),
-            "model_profile_id": profile_id,
-            "pricing": pricing_snapshot(profile),
-            "rule_digest": rule_digest,
-            "global_rule": store.get_review_rule(None),
-            "project_rule": (
-                store.get_review_rule(repository_id) if repository_id is not None else None
-            ),
-            "notification_min_severity": (
-                store.get_project_policy(repository_id) if repository_id is not None else "medium"
-            ),
+    snapshot = {
+        "provider": model_settings.ocr_provider,
+        "model": model_settings.ocr_model,
+        "base_url": model_settings.ocr_base_url,
+        "model_version": model_version,
+        "command": command_fingerprint,
+        "timeout_seconds": model_settings.ocr_timeout_seconds,
+        "review_language": model_settings.review_language,
+        "max_files": model_settings.ocr_max_files,
+        "max_tokens_budget": model_settings.ocr_max_tokens_budget,
+        "concurrency": model_settings.ocr_concurrency,
+        "effort": model_settings.ocr_effort,
+        "review_policy": REVIEW_POLICY.copy(),
+        "finding_policy_version": FINDING_POLICY_VERSION,
+        "input_policy": input_policy(bool(project_limits["newline_filter_enabled"])),
+        "model_profile_id": profile_id,
+        "pricing": pricing_snapshot(profile),
+        "rule_digest": rule_digest,
+        "global_rule": store.get_review_rule(None),
+        "project_rule": (
+            store.get_review_rule(repository_id) if repository_id is not None else None
+        ),
+        "notification_min_severity": (
+            store.get_project_policy(repository_id) if repository_id is not None else "medium"
+        ),
+    }
+
+    if premerge:
+        with store.connection() as db:
+            context = db.execute(
+                "SELECT include_description,context_paths FROM premerge_settings "
+                "WHERE repository_id=?",
+                (repository_id,),
+            ).fetchone()
+        snapshot["premerge_input"] = {
+            **(dict(context) if context else {}),
+            "context_hint": context_hint,
+            "version_event_id": premerge_version,
         }
+    return snapshot
 
 
 def config_hash(
-    store: Store, settings: Settings, rule_digest: str = "", repository_id: int | None = None
+    store: Store,
+    settings: Settings,
+    rule_digest: str = "",
+    repository_id: int | None = None,
+    premerge: bool = False,
+    context_hint: str | None = None,
+    premerge_version: int | None = None,
 ) -> str:
     """对安全配置事实建立稳定摘要，仍作为任务去重与执行校验依据。"""
 
-    return snapshot_hash(configuration_snapshot(store, settings, rule_digest, repository_id))
+    return snapshot_hash(
+        configuration_snapshot(
+            store, settings, rule_digest, repository_id, premerge, context_hint, premerge_version
+        )
+    )
 
 
 def snapshot_hash(snapshot: dict[str, Any]) -> str:
@@ -210,6 +247,7 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         store.finish_event(event["id"], None, {}, "仓库配置已删除")
         return
     try:
+        repository = for_branch(repository, event.get("target_branch"))
         # 1. 从 GitLab 重新确认 MR，防止 webhook 内容或投递顺序决定审查范围。
         if repository["gitlab_token_ciphertext"]:
             repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
@@ -218,6 +256,13 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         gitlab = GitLabClient(
             repository["gitlab_url"], repository.get("gitlab_token") or settings.gitlab_api_token
         )
+        if event["mr_iid"] > 0 and not event.get("target_branch"):
+            # 手动补触发没有 webhook 分支证据，须读取 MR 后固定，不能默认为首选分支。
+            actual = gitlab.get_merge_request(repository["project_id"], event["mr_iid"])
+            repository = for_branch(repository, actual.get("target_branch"))
+            with store.connection() as db:
+                db.execute("UPDATE merge_events SET target_branch=? WHERE id=?",
+                           (repository["target_branch"], event["id"]))
         gitlab.check_access(
             repository["project_id"], repository["target_branch"], repository["remote_url"]
         )
@@ -226,12 +271,28 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
             git = GitRepository(settings.data_dir, repository)
             git.fetch()
             before_sha, after_sha = git.push_range(event["squash_sha"], event["merge_sha"])
-            digest = git.rule_digest(after_sha)
-            push_snapshot = {
-                after_sha: (config_hash(store, settings, digest, repository["id"]), digest)
-            }
+            from ocr_manager.merge_review_reuse import push_ranges
+
+            ranges, reused = (
+                ([(before_sha, after_sha)], [])
+                if event.get("force_full_review")
+                else push_ranges(store, event, repository, git, gitlab, before_sha, after_sha)
+            )
+            push_snapshots = {}
+            for _, head in ranges:
+                digest = git.rule_digest(head)
+                push_snapshots[head] = (
+                    config_hash(store, settings, digest, repository["id"]),
+                    digest,
+                )
             store.finish_event(
-                event["id"], [after_sha], push_snapshot, None, base_sha=before_sha
+                event["id"],
+                [head for _, head in ranges],
+                push_snapshots,
+                None,
+                range_bases={head: base for base, head in ranges},
+                reused_jobs=reused,
+                reuse_evidence={"before": before_sha, "after": after_sha, "proof": "exact_diff"},
             )
             return
         mr = gitlab.get_merge_request(repository["project_id"], event["mr_iid"])
@@ -244,6 +305,12 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         git = GitRepository(settings.data_dir, repository)
         git.fetch()
 
+        from ocr_manager.merge_review_reuse import reuse_merge
+
+        if not event.get("force_full_review") and reuse_merge(
+            store, event, repository, mr, git, gitlab
+        ):
+            return
         # 2. 按实际合并产物取提交，避免审查后来移动的目标分支 HEAD。
         merge_sha = mr.get("merge_commit_sha")
         squash_sha = mr.get("squash_commit_sha")
@@ -271,12 +338,21 @@ def expand_event(store: Store, settings: Settings, event: dict[str, Any]) -> Non
         store.finish_event(event["id"], commits, snapshots, None)
     except Exception as error:
         # 事件处理失败必须落库为待处理状态，不能因网络库的新异常类型丢失队列项。
-        LOGGER.warning("关联 %s 的合并事件 %s 需要处理：%s",
-                       event.get("correlation_id", ""), event["id"], error)
+        LOGGER.warning(
+            "关联 %s 的合并事件 %s 需要处理：%s",
+            event.get("correlation_id", ""),
+            event["id"],
+            type(error).__name__,
+        )
+        message = (
+            str(error)
+            if isinstance(error, ValueError)
+            else "远程提交范围核验暂不可用，请稍后重试或检查连接"
+        )
         if is_temporary(error):
-            store.defer_event(event["id"], str(error))
+            store.defer_event(event["id"], message)
         else:
-            store.finish_event(event["id"], None, {}, str(error)[:500])
+            store.finish_event(event["id"], None, {}, message[:500])
 
 
 def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
@@ -289,14 +365,37 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         store.finish_job(job["id"], "failed", None, None, "仓库配置已删除")
         return
     try:
+        repository = for_branch(repository, job.get("target_branch"))
         # 先冻结本次模型参数，再比对版本；保存模型不再被在途队列阻塞。
         model_settings, model_version = review_settings(store, settings, job["repository_id"])
-        snapshot = configuration_snapshot(store, settings, job["rule_digest"], job["repository_id"])
+        snapshot = configuration_snapshot(
+            store,
+            settings,
+            job["rule_digest"],
+            job["repository_id"],
+            job.get("source") == "premerge",
+            job.get("context_hint"),
+            job.get("event_id") if job.get("source") == "premerge" else None,
+        )
         current_hash = snapshot_hash(snapshot)
     except Exception:
         # 凭据不可解时不能退回旧环境变量继续评审，也不把密钥异常持久化。
         store.finish_job(job["id"], "failed", None, None, "评审配置无法读取")
         return
+    if job.get("source") == "premerge":
+        with store.connection() as db:
+            policy = premerge_policy(db, job["repository_id"])
+        if job.get("execution_policy") != policy:
+            store.finish_job(
+                job["id"], "failed", None, None, "合并前审查执行策略已变化，请重新评审"
+            )
+            return
+    if job.get("source") == "premerge" and job["config_hash"].startswith(
+        ("premerge-", "legacy-premerge-")
+    ):
+        with store.connection() as db:
+            db.execute("UPDATE review_jobs SET config_hash=? WHERE id=?", (current_hash, job["id"]))
+        job["config_hash"] = current_hash
     if current_hash != job["config_hash"] or model_version != snapshot["model_version"]:
         # 入队快照是不可变输入；管理员可用重评审创建当前配置的新任务。
         store.finish_job(job["id"], "failed", None, None, "评审配置已变化，请按当前配置重新评审")
@@ -317,11 +416,41 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
         if cancellation_requested(store, job["id"]):
             raise ReviewCancelled("用户请求停止评审")
         base_sha = job.get("base_sha")
-        if not git.is_on_target(job["commit_sha"]):
+        background = None
+        premerge_client = None
+        if job.get("source") == "premerge":
+            from ocr_manager.unified_premerge import prepare
+
+            premerge_client = GitLabClient(repository["gitlab_url"], repository["gitlab_token"])
+            base_sha, background = prepare(store, repository, job, git, premerge_client)
+            digest = git.rule_digest(job["commit_sha"])
+            if digest != job["rule_digest"]:
+                if job["attempts"] > 0:
+                    raise ValueError("固定提交规则摘要已变化")
+                job["rule_digest"] = digest
+                snapshot = configuration_snapshot(
+                    store,
+                    settings,
+                    digest,
+                    job["repository_id"],
+                    True,
+                    job.get("context_hint"),
+                    job["event_id"],
+                )
+                with store.connection() as db:
+                    db.execute(
+                        "UPDATE review_jobs SET rule_digest=?,config_hash=? WHERE id=?",
+                        (digest, snapshot_hash(snapshot), job["id"]),
+                    )
+                save_snapshot(store, job["id"], snapshot)
+        if job.get("source") != "premerge" and not git.is_on_target(job["commit_sha"]):
             raise ValueError("待评审提交不再属于目标分支")
         if base_sha is not None and not git.is_range_base(base_sha, job["commit_sha"]):
             raise ValueError("待评审 Push 范围不再有效")
-        git.checkout(job["commit_sha"], checkout)
+        git.checkout(
+            base_sha or job["commit_sha"] if job.get("source") == "premerge" else job["commit_sha"],
+            checkout,
+        )
         changed_files = (
             git.range_changed_files(base_sha, job["commit_sha"])
             if base_sha is not None
@@ -335,58 +464,93 @@ def review_job(store: Store, settings: Settings, job: dict[str, Any]) -> None:
             )
         set_job_stage(store, job["id"], "preflight")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
-            scope = inspect_range(checkout, job["commit_sha"], base_sha,
-                                  filter_enabled=model_settings.ocr_newline_filter_enabled)
+            scope = inspect_range(
+                checkout,
+                job["commit_sha"],
+                base_sha,
+                filter_enabled=model_settings.ocr_newline_filter_enabled,
+            )
         save_preflight(run_dir, scope)
         with store.connection() as db:
-            db.execute("UPDATE review_jobs SET scope_json=? WHERE id=? AND status='running'",
-                       (json.dumps(scope, ensure_ascii=False), job["id"]))
+            db.execute(
+                "UPDATE review_jobs SET scope_json=? WHERE id=? AND status='running'",
+                (json.dumps(scope, ensure_ascii=False), job["id"]),
+            )
 
         def record_stage(stage: str) -> None:
             set_job_stage(store, job["id"], stage)
             if stage == "scope_validation":
                 preview = read_preview(run_dir / "preview.json")
                 scope["ocr_candidate_count"] = preview["reviewable_count"]
-                scope["ocr_excluded_count"] = (len(preview["files"])
-                                               - preview["reviewable_count"]
-                                               - scope["excluded_count"])
+                scope["ocr_excluded_count"] = (
+                    len(preview["files"]) - preview["reviewable_count"] - scope["excluded_count"]
+                )
                 save_preflight(run_dir, scope)
                 with store.connection() as db:
-                    db.execute("UPDATE review_jobs SET scope_json=? WHERE id=?",
-                               (json.dumps(scope, ensure_ascii=False), job["id"]))
+                    db.execute(
+                        "UPDATE review_jobs SET scope_json=? WHERE id=?",
+                        (json.dumps(scope, ensure_ascii=False), job["id"]),
+                    )
 
         # 3. OCR 结论与异常共用评审专用分类，持久化方法最终裁决取消和重试预算。
         set_job_stage(store, job["id"], "ocr_configuration")
         with cancellation_scope(lambda: cancellation_requested(store, job["id"])):
             status, result = run_review(
-                model_settings, checkout, run_dir, job["commit_sha"],
-                store.get_review_rule(None), store.get_review_rule(job["repository_id"]),
+                model_settings,
+                checkout,
+                run_dir,
+                job["commit_sha"],
+                store.get_review_rule(None),
+                store.get_review_rule(job["repository_id"]),
                 record_stage,
                 scope_analysis=scope,
+                background=background,
                 **({"base_sha": base_sha} if base_sha is not None else {}),
             )
             check_cancellation()
+        if premerge_client:
+            from ocr_manager.unified_premerge import verify_version
+
+            verify_version(store, repository, job, premerge_client)
         failure = result_failure(status, result)
         if failure and failure.retryable:
-            store.defer_job(job["id"], str(failure), result=result,
-                            result_path=str(run_dir / "result.json"),
-                            delay_seconds=retry_delay(
-                                job["attempts"] + 1 - job["retry_start_attempts"],
-                                failure.retry_after))
+            store.defer_job(
+                job["id"],
+                str(failure),
+                result=result,
+                result_path=str(run_dir / "result.json"),
+                delay_seconds=retry_delay(
+                    job["attempts"] + 1 - job["retry_start_attempts"], failure.retry_after
+                ),
+            )
         else:
-            store.finish_job(job["id"], status, str(run_dir / "result.json"), result,
-                             str(failure) if failure else None)
+            store.finish_job(
+                job["id"],
+                status,
+                str(run_dir / "result.json"),
+                result,
+                str(failure) if failure else None,
+            )
     except ReviewCancelled:
         store.finish_job(job["id"], "cancelled", None, None, "用户请求停止评审")
     except Exception as error:
         # 事件与评审使用不同分类；外部异常正文可能含凭据，只记录可信类别。
         failure = classify_review_error(error)
-        LOGGER.warning("关联 %s 的评审任务 %s 失败：%s（%s）",
-                       job.get("correlation_id", ""), job["id"], failure.category,
-                       type(error).__name__)
+        LOGGER.warning(
+            "关联 %s 的评审任务 %s 失败：%s（%s）",
+            job.get("correlation_id", ""),
+            job["id"],
+            failure.category,
+            type(error).__name__,
+        )
         if failure.retryable:
-            store.defer_job(job["id"], str(failure), delay_seconds=retry_delay(
-                job["attempts"] + 1 - job["retry_start_attempts"], failure.retry_after))
+            store.defer_job(
+                job["id"],
+                str(failure),
+                delay_seconds=retry_delay(
+                    job["attempts"] + 1 - job["retry_start_attempts"], failure.retry_after
+                ),
+            )
         else:
             store.finish_job(job["id"], "failed", None, None, str(failure))
     finally:
@@ -413,6 +577,13 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
 
         if not delivery_current(store, delivery):
             return
+    with store.connection() as db:
+        current = db.execute(
+            "SELECT superseded FROM review_jobs WHERE id=?", (delivery["job_id"],)
+        ).fetchone()
+    if current is None or current["superseded"]:
+        finish("版本已被替代，停止投递", retryable=False)
+        return
     repository = store.get_repository(delivery["repository_id"])
     if repository is None:
         finish("仓库配置已删除")
@@ -446,20 +617,30 @@ def deliver_notification(store: Store, settings: Settings, delivery: dict[str, A
             send_review(webhook, delivery)
         finish(None)
     except FeishuDeliveryError as error:
-        LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
-                       delivery.get("correlation_id", ""), delivery["id"], error)
+        LOGGER.warning(
+            "关联 %s 的飞书投递 %s 失败：%s",
+            delivery.get("correlation_id", ""),
+            delivery["id"],
+            error,
+        )
         finish(str(error), retryable=error.retryable)
     except (InvalidToken, ValueError):
         # 密文不可解或已保存结果损坏时，重复发送不会修复输入。
-        LOGGER.warning("关联 %s 的飞书投递 %s 本地配置或结果不可用",
-                       delivery.get("correlation_id", ""), delivery["id"])
+        LOGGER.warning(
+            "关联 %s 的飞书投递 %s 本地配置或结果不可用",
+            delivery.get("correlation_id", ""),
+            delivery["id"],
+        )
         finish("飞书投递配置或结果不可用", retryable=False)
     except Exception as error:
         # 投递失败只改变通知状态，不重新消耗模型额度。
         # HTTP 客户端异常可能包含带令牌的 webhook URL，持久化时仅记录异常类别。
-        LOGGER.warning("关联 %s 的飞书投递 %s 失败：%s",
-                       delivery.get("correlation_id", ""), delivery["id"],
-                       type(error).__name__)
+        LOGGER.warning(
+            "关联 %s 的飞书投递 %s 失败：%s",
+            delivery.get("correlation_id", ""),
+            delivery["id"],
+            type(error).__name__,
+        )
         finish(f"飞书投递失败：{type(error).__name__}")
 
 
@@ -487,8 +668,12 @@ def preview_rule(store: Store, settings: Settings, preview: dict[str, Any]) -> N
 
         # 2. 使用与正式评审相同的页面规则层级；CLI 只返回命中规则，不访问模型。
         output = check_rule(
-            settings, checkout, run_dir, preview["file_path"],
-            store.get_review_rule(None), store.get_review_rule(repository["id"]),
+            settings,
+            checkout,
+            run_dir,
+            preview["file_path"],
+            store.get_review_rule(None),
+            store.get_review_rule(repository["id"]),
         )
         store.finish_rule_preview(preview["id"], commit_sha, output, None)
     except Exception as error:
@@ -521,10 +706,6 @@ def run_once(
     event = store.next_event()
     if event:
         expand_event(store, settings, event)
-        return True, last_repository_id
-    premerge = next_premerge(store)
-    if premerge:
-        review_premerge(store, settings, premerge)
         return True, last_repository_id
     delivery = store.next_delivery()
     if delivery:
@@ -575,8 +756,16 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
     with store.connection() as db:
         current_policy = premerge_policy(db, review["repository_id"])
     if review.get("execution_policy") != current_policy:
-        finish_premerge(store, review["id"], "failed", None, None, None, None,
-                        "合并前审查执行策略已变化，请重新审查当前版本")
+        finish_premerge(
+            store,
+            review["id"],
+            "failed",
+            None,
+            None,
+            None,
+            None,
+            "合并前审查执行策略已变化，请重新审查当前版本",
+        )
         return
     run_dir = settings.data_dir / "premerge-runs" / str(review["id"]) / str(review["attempts"])
     checkout = run_dir / "checkout"
@@ -586,27 +775,38 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         # 1. Webhook 只提供待核验版本；GitLab 当前 MR 身份和 SHA 才能确定输入。
         token = SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
         client = GitLabClient(repository["gitlab_url"], token)
-        client.check_access(repository["project_id"], repository["target_branch"],
-                            repository["remote_url"])
+        client.check_access(
+            repository["project_id"], repository["target_branch"], repository["remote_url"]
+        )
         mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
-        if (mr.get("state") != "opened" or
-            mr.get("target_branch") != repository["target_branch"] or
-            mr.get("target_project_id") != repository["project_id"] or
-            mr.get("sha") != review["head_sha"]):
-            finish_premerge(store, review["id"], "superseded", None, None, None, None,
-                            "MR 状态或提交版本已变化")
+        if (
+            mr.get("state") != "opened"
+            or mr.get("target_branch") != repository["target_branch"]
+            or mr.get("target_project_id") != repository["project_id"]
+            or mr.get("sha") != review["head_sha"]
+        ):
+            finish_premerge(
+                store, review["id"], "superseded", None, None, None, None, "MR 状态或提交版本已变化"
+            )
             # 乱序旧事件可能使更新版本失效；只用已复核的 GitLab 事实补回当前头。
             current_sha = mr.get("sha")
-            if (mr.get("state") == "opened" and
-                mr.get("target_branch") == repository["target_branch"] and
-                mr.get("target_project_id") == repository["project_id"] and
-                isinstance(current_sha, str) and SHA.fullmatch(current_sha)):
+            if (
+                mr.get("state") == "opened"
+                and mr.get("target_branch") == repository["target_branch"]
+                and mr.get("target_project_id") == repository["project_id"]
+                and isinstance(current_sha, str)
+                and SHA.fullmatch(current_sha)
+            ):
                 enqueue_premerge(store, repository["id"], review["mr_iid"], current_sha)
             return
         refs = mr.get("diff_refs")
         base_sha = refs.get("base_sha") if isinstance(refs, dict) else None
-        if (not isinstance(base_sha, str) or not SHA.fullmatch(base_sha) or
-            not isinstance(refs, dict) or refs.get("head_sha") != review["head_sha"]):
+        if (
+            not isinstance(base_sha, str)
+            or not SHA.fullmatch(base_sha)
+            or not isinstance(refs, dict)
+            or refs.get("head_sha") != review["head_sha"]
+        ):
             raise RuntimeError("GitLab 尚未生成 MR diff 基准")
         git = GitRepository(settings.data_dir, {**repository, "gitlab_token": token})
         git.fetch()
@@ -617,22 +817,32 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
             return
 
         with store.connection() as db:
-            context_setting = db.execute("""SELECT include_description,context_paths
+            context_setting = db.execute(
+                """SELECT include_description,context_paths
                 FROM premerge_settings WHERE repository_id=?""",
-                (repository["id"],)).fetchone()
+                (repository["id"],),
+            ).fetchone()
         if context_setting is None:
             raise ValueError("合并前审查配置已删除")
         include_description = bool(context_setting["include_description"])
         current_hint = description_digest(mr.get("description"))
-        if (include_description and review["context_hint"] is not None and
-            review["context_hint"] != current_hint):
-            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
-                            "MR 描述已更新")
-            enqueue_premerge(store, repository["id"], review["mr_iid"],
-                             review["head_sha"], current_hint)
+        if (
+            include_description
+            and review["context_hint"] is not None
+            and review["context_hint"] != current_hint
+        ):
+            finish_premerge(
+                store, review["id"], "superseded", base_sha, None, None, None, "MR 描述已更新"
+            )
+            enqueue_premerge(
+                store, repository["id"], review["mr_iid"], review["head_sha"], current_hint
+            )
             return
         background, context = build_premerge_context(
-            git, review["head_sha"], mr, include_description,
+            git,
+            review["head_sha"],
+            mr,
+            include_description,
             json.loads(context_setting["context_paths"]),
         )
 
@@ -641,76 +851,129 @@ def review_premerge(store: Store, settings: Settings, review: dict[str, Any]) ->
         model_settings, _ = review_settings(store, settings, repository["id"])
         changed_files = git.range_changed_files(base_sha, review["head_sha"])
         with cancellation_scope(lambda: not premerge_is_current(store, review["id"])):
-            scope = inspect_range(checkout, review["head_sha"], base_sha,
-                                  filter_enabled=model_settings.ocr_newline_filter_enabled)
+            scope = inspect_range(
+                checkout,
+                review["head_sha"],
+                base_sha,
+                filter_enabled=model_settings.ocr_newline_filter_enabled,
+            )
         save_preflight(run_dir, scope)
         with store.connection() as db:
-            db.execute("UPDATE premerge_reviews SET scope_json=? WHERE id=? AND status='running'",
-                       (json.dumps(scope, ensure_ascii=False), review["id"]))
+            db.execute(
+                "UPDATE premerge_reviews SET scope_json=? WHERE id=? AND status='running'",
+                (json.dumps(scope, ensure_ascii=False), review["id"]),
+            )
         with cancellation_scope(lambda: not premerge_is_current(store, review["id"])):
+
             def record_premerge_stage(stage: str) -> None:
                 if stage == "scope_validation":
                     preview = read_preview(run_dir / "preview.json")
                     scope["ocr_candidate_count"] = preview["reviewable_count"]
-                    scope["ocr_excluded_count"] = (len(preview["files"])
-                                                   - preview["reviewable_count"]
-                                                   - scope["excluded_count"])
+                    scope["ocr_excluded_count"] = (
+                        len(preview["files"])
+                        - preview["reviewable_count"]
+                        - scope["excluded_count"]
+                    )
                     save_preflight(run_dir, scope)
                     with store.connection() as db:
-                        db.execute("UPDATE premerge_reviews SET scope_json=? WHERE id=?",
-                                   (json.dumps(scope, ensure_ascii=False), review["id"]))
+                        db.execute(
+                            "UPDATE premerge_reviews SET scope_json=? WHERE id=?",
+                            (json.dumps(scope, ensure_ascii=False), review["id"]),
+                        )
 
             status, result = run_review(
-                model_settings, checkout, run_dir, review["head_sha"],
-                store.get_review_rule(None), store.get_review_rule(repository["id"]),
-                base_sha=base_sha, background=background, scope_analysis=scope,
+                model_settings,
+                checkout,
+                run_dir,
+                review["head_sha"],
+                store.get_review_rule(None),
+                store.get_review_rule(repository["id"]),
+                base_sha=base_sha,
+                background=background,
+                scope_analysis=scope,
                 on_stage=record_premerge_stage,
             )
             check_cancellation()
         latest_mr = client.get_merge_request(repository["project_id"], review["mr_iid"])
-        if (latest_mr.get("state") != "opened" or
-            latest_mr.get("sha") != review["head_sha"] or
-            latest_mr.get("target_branch") != repository["target_branch"] or
-            latest_mr.get("target_project_id") != repository["project_id"]):
-            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
-                            "GitLab MR 已更新")
+        if (
+            latest_mr.get("state") != "opened"
+            or latest_mr.get("sha") != review["head_sha"]
+            or latest_mr.get("target_branch") != repository["target_branch"]
+            or latest_mr.get("target_project_id") != repository["project_id"]
+        ):
+            finish_premerge(
+                store, review["id"], "superseded", base_sha, None, None, None, "GitLab MR 已更新"
+            )
             current_sha = latest_mr.get("sha")
-            if (latest_mr.get("state") == "opened" and
-                latest_mr.get("target_branch") == repository["target_branch"] and
-                latest_mr.get("target_project_id") == repository["project_id"] and
-                isinstance(current_sha, str) and SHA.fullmatch(current_sha)):
+            if (
+                latest_mr.get("state") == "opened"
+                and latest_mr.get("target_branch") == repository["target_branch"]
+                and latest_mr.get("target_project_id") == repository["project_id"]
+                and isinstance(current_sha, str)
+                and SHA.fullmatch(current_sha)
+            ):
                 enqueue_premerge(store, repository["id"], review["mr_iid"], current_sha)
             return
         latest_hint = description_digest(latest_mr.get("description"))
         if include_description and latest_hint != current_hint:
-            finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
-                            "MR 描述在审查期间更新")
-            enqueue_premerge(store, repository["id"], review["mr_iid"],
-                             review["head_sha"], latest_hint)
+            finish_premerge(
+                store,
+                review["id"],
+                "superseded",
+                base_sha,
+                None,
+                None,
+                None,
+                "MR 描述在审查期间更新",
+            )
+            enqueue_premerge(
+                store, repository["id"], review["mr_iid"], review["head_sha"], latest_hint
+            )
             return
         # 3. 条件更新避免迟到结果覆盖新提交，原始工件仅供受控本机诊断。
         failure = result_failure(status, result)
         if failure and failure.retryable and review["attempts"] < REVIEW_POLICY["max_attempts"]:
-            defer_premerge(store, review["id"], str(failure),
-                           retry_delay(review["attempts"], failure.retry_after),
-                           base_sha, result, str(run_dir / "result.json"), changed_files)
+            defer_premerge(
+                store,
+                review["id"],
+                str(failure),
+                retry_delay(review["attempts"], failure.retry_after),
+                base_sha,
+                result,
+                str(run_dir / "result.json"),
+                changed_files,
+            )
         else:
-            finish_premerge(store, review["id"], status, base_sha, result,
-                            str(run_dir / "result.json"), changed_files,
-                            str(failure) if failure else None, context)
+            finish_premerge(
+                store,
+                review["id"],
+                status,
+                base_sha,
+                result,
+                str(run_dir / "result.json"),
+                changed_files,
+                str(failure) if failure else None,
+                context,
+            )
     except ReviewCancelled:
-        finish_premerge(store, review["id"], "superseded", base_sha, None, None, None,
-                        "已有新的 MR 提交版本")
+        finish_premerge(
+            store, review["id"], "superseded", base_sha, None, None, None, "已有新的 MR 提交版本"
+        )
     except Exception as error:
         failure = classify_review_error(error)
-        LOGGER.warning("合并前审查 %s 失败：%s（%s）", review["id"], failure.category,
-                       type(error).__name__)
+        LOGGER.warning(
+            "合并前审查 %s 失败：%s（%s）", review["id"], failure.category, type(error).__name__
+        )
         if failure.retryable and review["attempts"] < REVIEW_POLICY["max_attempts"]:
-            defer_premerge(store, review["id"], str(failure),
-                           retry_delay(review["attempts"], failure.retry_after), base_sha)
+            defer_premerge(
+                store,
+                review["id"],
+                str(failure),
+                retry_delay(review["attempts"], failure.retry_after),
+                base_sha,
+            )
         else:
-            finish_premerge(store, review["id"], "failed", base_sha, None, None, None,
-                            str(failure))
+            finish_premerge(store, review["id"], "failed", base_sha, None, None, None, str(failure))
     finally:
         if git is not None:
             try:
@@ -753,21 +1016,27 @@ def execute_backfill(store: Store, settings: Settings, backfill: dict[str, Any])
             raise ValueError("项目已删除")
         token = SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
         client = GitLabClient(repository["gitlab_url"], token)
-        iids = client.list_merged_requests(repository["project_id"],
-                                           datetime.fromisoformat(backfill["since"]),
-                                           datetime.fromisoformat(backfill["until"]))
+        iids = client.list_merged_requests(
+            repository["project_id"],
+            datetime.fromisoformat(backfill["since"]),
+            datetime.fromisoformat(backfill["until"]),
+        )
         enqueued = sum(store.enqueue_mr(repository["id"], iid) for iid in iids)
         with store.connection() as db:
-            db.execute("""UPDATE mr_backfills SET status='done', scanned=?, enqueued=?,
+            db.execute(
+                """UPDATE mr_backfills SET status='done', scanned=?, enqueued=?,
                        finished_at=CURRENT_TIMESTAMP WHERE id=?""",
-                       (len(iids), enqueued, backfill["id"]))
+                (len(iids), enqueued, backfill["id"]),
+            )
     except Exception as error:
         # GitLab 异常可能携带请求地址或代理细节，数据库仅记录异常类别。
         LOGGER.warning("补审申请 %s 失败：%s", backfill["id"], type(error).__name__)
         with store.connection() as db:
-            db.execute("""UPDATE mr_backfills SET status='failed', error=?,
+            db.execute(
+                """UPDATE mr_backfills SET status='failed', error=?,
                        finished_at=CURRENT_TIMESTAMP WHERE id=?""",
-                       (f"补审失败：{type(error).__name__}", backfill["id"]))
+                (f"补审失败：{type(error).__name__}", backfill["id"]),
+            )
 
 
 def main() -> None:

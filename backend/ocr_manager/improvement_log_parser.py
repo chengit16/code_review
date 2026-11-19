@@ -128,5 +128,13 @@ def entry_content(entry: LogEntry, previous: ImprovementContent | None) -> Impro
                    "deployment_state"}
         if not isinstance(states, dict) or not states.keys() <= allowed:
             raise ValueError("同步状态包含非状态字段")
+        # 旧来源使用过这两个枚举；只映射到未知分类和排查中，保留原文且不提升验收状态。
+        if states.get("category") == "quality" or states.get("status") == "in_progress":
+            values["analysis"] += "\n兼容来源状态：" + entry.fields["同步状态"]
+            states = dict(states)
+            if states.get("category") == "quality":
+                states["category"] = "other"
+            if states.get("status") == "in_progress":
+                states["status"] = "investigating"
         values.update(states)
     return ImprovementContent.model_validate(values)

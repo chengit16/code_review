@@ -25,12 +25,19 @@ def environment(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> tuple[St
 
     store = Store(settings.data_dir / "app.db")
     store.migrate()
-    repository_id = store.add_repository({
-        "name": "评审稳定性测试", "gitlab_url": "https://synthetic.invalid", "project_id": 42,
-        "remote_url": "https://synthetic.invalid/team/repo.git", "target_branch": "main",
-        "auth_kind": "secret", "webhook_secret": "synthetic-ciphertext",
-        "feishu_webhook": "synthetic-ciphertext",
-        "gitlab_token_ciphertext": SecretBox(settings.master_key).encrypt("synthetic-token")})
+    repository_id = store.add_repository(
+        {
+            "name": "评审稳定性测试",
+            "gitlab_url": "https://synthetic.invalid",
+            "project_id": 42,
+            "remote_url": "https://synthetic.invalid/team/repo.git",
+            "target_branch": "main",
+            "auth_kind": "secret",
+            "webhook_secret": "synthetic-ciphertext",
+            "feishu_webhook": "synthetic-ciphertext",
+            "gitlab_token_ciphertext": SecretBox(settings.master_key).encrypt("synthetic-token"),
+        }
+    )
 
     class FakeGit:
         """模拟不可变范围与工作目录，清理时不执行文件删除。"""
@@ -75,9 +82,13 @@ def environment(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> tuple[St
             pass
 
         def get_merge_request(self, *_args: Any) -> dict[str, Any]:
-            return {"state": "opened", "sha": SHA, "target_branch": "main",
-                    "target_project_id": 42,
-                    "diff_refs": {"base_sha": "b" * 40, "head_sha": SHA}}
+            return {
+                "state": "opened",
+                "sha": SHA,
+                "target_branch": "main",
+                "target_project_id": 42,
+                "diff_refs": {"base_sha": "b" * 40, "head_sha": SHA},
+            }
 
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
     monkeypatch.setattr(worker, "GitLabClient", FakeGitLab)
@@ -90,22 +101,30 @@ def enqueue_job(store: Store, repository_id: int, settings: Settings) -> int:
     assert store.add_event(repository_id, 7, "synthetic-event", SHA, None)
     event = store.next_event()
     assert event is not None
-    store.finish_event(event["id"], [SHA], {SHA: (
-        worker.config_hash(store, settings, "", repository_id), "")}, None)
+    store.finish_event(
+        event["id"],
+        [SHA],
+        {SHA: (worker.config_hash(store, settings, "", repository_id), "")},
+        None,
+    )
     return store.list_jobs()[0]["id"]
 
 
 @pytest.mark.parametrize("code", [404, 429, 503])
 def test_failed_result_is_saved_with_bounded_retry(
-    environment: tuple[Store, int], settings: Settings, monkeypatch: pytest.MonkeyPatch, code: int,
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    code: int,
 ) -> None:
     """404 立即失败；429/5xx 只允许额外一次尝试，每次保留工件、用量和原始错误。"""
 
     store, repository_id = environment
     job_id = enqueue_job(store, repository_id, settings)
 
-    def fake_review(_settings: Settings, _checkout: Path, run_dir: Path,
-                    *_args: Any, **_kwargs: Any) -> tuple[str, dict[str, Any]]:
+    def fake_review(
+        _settings: Settings, _checkout: Path, run_dir: Path, *_args: Any, **_kwargs: Any
+    ) -> tuple[str, dict[str, Any]]:
         raw = failed_result(code)
         (run_dir / "result.json").write_text(json.dumps(raw), encoding="utf-8")
         return "failed", raw
@@ -132,22 +151,35 @@ def test_failed_result_is_saved_with_bounded_retry(
         assert (detail["delivery"] is not None) is final
         if not final:
             with store.connection() as db:
-                assert db.execute(
-                    "SELECT next_run_at>CURRENT_TIMESTAMP FROM review_jobs WHERE id=?",
-                    (job_id,)).fetchone()[0] == 1
-                db.execute("UPDATE review_jobs SET next_run_at=CURRENT_TIMESTAMP WHERE id=?",
-                           (job_id,))
+                assert (
+                    db.execute(
+                        "SELECT next_run_at>CURRENT_TIMESTAMP FROM review_jobs WHERE id=?",
+                        (job_id,),
+                    ).fetchone()[0]
+                    == 1
+                )
+                db.execute(
+                    "UPDATE review_jobs SET next_run_at=CURRENT_TIMESTAMP WHERE id=?", (job_id,)
+                )
     assert store.next_job() is None
     with store.connection() as db:
         assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 1
 
 
-@pytest.mark.parametrize("error", [RuntimeError("synthetic-private-token"),
-                                   ReviewFailure("timeout", "OCR result 超时"),
-                                   httpx.ConnectError("synthetic-private-token")])
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("synthetic-private-token"),
+        ReviewFailure("timeout", "OCR result 超时"),
+        httpx.ConnectError("synthetic-private-token"),
+    ],
+)
 def test_exception_retry_is_separate_from_event_policy(
-    environment: tuple[Store, int], settings: Settings, monkeypatch: pytest.MonkeyPatch,
-    error: Exception, caplog: pytest.LogCaptureFixture,
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """模型整体超时和未知异常不重试，网络瞬断例外；日志不泄漏外部异常正文。"""
 
@@ -169,7 +201,9 @@ def test_exception_retry_is_separate_from_event_policy(
 
 
 def test_recovery_and_manual_retry_keep_new_budget(
-    environment: tuple[Store, int], settings: Settings, monkeypatch: pytest.MonkeyPatch,
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """重启不重置两次预算，人工确认重跑则开始新周期但保留原尝试历史。"""
 
@@ -202,14 +236,18 @@ def test_recovery_and_manual_retry_keep_new_budget(
 
 @pytest.mark.parametrize("code", [404, 429])
 def test_premerge_uses_same_failure_policy(
-    environment: tuple[Store, int], settings: Settings, monkeypatch: pytest.MonkeyPatch, code: int,
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    code: int,
 ) -> None:
-    """合并前审查共享空评论兼容与两次上限，但不创建合并后通知。"""
+    """合并前审查共享空评论兼容与两次上限，并在终态创建独立通知。"""
 
     store, repository_id = environment
     with store.connection() as db:
-        db.execute("INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)",
-                   (repository_id,))
+        db.execute(
+            "INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)", (repository_id,)
+        )
     assert enqueue_premerge(store, repository_id, 7, SHA)
     monkeypatch.setattr(worker, "run_review", lambda *_args, **_kw: ("failed", failed_result(code)))
     for attempt in range(1, (1 if code == 404 else 2) + 1):
@@ -217,26 +255,34 @@ def test_premerge_uses_same_failure_policy(
         assert review is not None
         worker.review_premerge(store, settings, review)
         with store.connection() as db:
-            row = db.execute("SELECT * FROM premerge_reviews WHERE id=?",
-                             (review["id"],)).fetchone()
+            row = db.execute(
+                "SELECT * FROM premerge_reviews WHERE id=?", (review["id"],)
+            ).fetchone()
             assert row["status"] == ("queued" if code == 429 and attempt == 1 else "failed")
             assert f"HTTP {code}" in row["error"]
             assert json.loads(row["result_json"])["comments"] == []
-            assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 0
-            db.execute("UPDATE premerge_reviews SET next_run_at=CURRENT_TIMESTAMP WHERE id=?",
-                       (review["id"],))
+            assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == (
+                0 if code == 429 and attempt == 1 else 1
+            )
+            db.execute(
+                "UPDATE review_jobs SET next_run_at=CURRENT_TIMESTAMP WHERE legacy_premerge_id=?",
+                (review["id"],),
+            )
     assert next_premerge(store) is None
 
 
 def test_old_premerge_failure_cannot_requeue_superseded_version(
-    environment: tuple[Store, int], settings: Settings, monkeypatch: pytest.MonkeyPatch,
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """模型失败的同时新版本入队，旧故障不能使过期评审重新成为可运行任务。"""
 
     store, repository_id = environment
     with store.connection() as db:
-        db.execute("INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)",
-                   (repository_id,))
+        db.execute(
+            "INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)", (repository_id,)
+        )
     assert enqueue_premerge(store, repository_id, 7, SHA)
 
     def replace_version(*_args: Any, **_kwargs: Any) -> tuple[str, dict[str, Any]]:
@@ -253,14 +299,16 @@ def test_old_premerge_failure_cannot_requeue_superseded_version(
 
 
 def test_policy_migration_preserves_legacy_versions_without_guessing_policy(
-    environment: tuple[Store, int], settings: Settings,
+    environment: tuple[Store, int],
+    settings: Settings,
 ) -> None:
     """模拟 34 版旧队列升级；不回填新策略，旧任务必须人工重建后才能执行。"""
 
     store, repository_id = environment
     with store.connection() as db:
-        db.execute("INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)",
-                   (repository_id,))
+        db.execute(
+            "INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)", (repository_id,)
+        )
     assert enqueue_premerge(store, repository_id, 7, SHA)
     with store.connection() as db:
         remove_observability_schema(db)
@@ -278,15 +326,17 @@ def test_policy_migration_preserves_legacy_versions_without_guessing_policy(
         old = db.execute("SELECT * FROM premerge_reviews").fetchone()
         assert old["status"] == "failed" and "执行策略已变化" in old["error"]
     new_id = retry_premerge(store, claimed["id"])
-    assert new_id is not None and new_id != claimed["id"]
+    assert new_id is not None and new_id == claimed["id"]
     with store.connection() as db:
-        new = db.execute("SELECT execution_policy FROM premerge_reviews WHERE id=?",
-                         (new_id,)).fetchone()
+        new = db.execute(
+            "SELECT execution_policy FROM premerge_reviews WHERE id=?", (new_id,)
+        ).fetchone()
         assert json.loads(new["execution_policy"])["review_policy"]["max_attempts"] == 2
 
 
 def test_failed_policy_migration_rolls_back_ddl(
-    environment: tuple[Store, int], monkeypatch: pytest.MonkeyPatch,
+    environment: tuple[Store, int],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """新增策略列迁移失败时，DDL 与版本号一起回滚，不留下半升级数据库。"""
 
@@ -295,16 +345,121 @@ def test_failed_policy_migration_rolls_back_ddl(
         remove_observability_schema(db)
         db.execute("ALTER TABLE premerge_reviews DROP COLUMN execution_policy")
         db.execute("PRAGMA user_version=34")
-    monkeypatch.setattr(storage, "REVIEW_POLICY_MIGRATION", """
+    monkeypatch.setattr(
+        storage,
+        "REVIEW_POLICY_MIGRATION",
+        """
         ALTER TABLE premerge_reviews ADD COLUMN execution_policy TEXT;
         CREATE TABLE invalid_test (id INTEGER);
         CREATE TABLE invalid_test (id INTEGER);
-    """)
+    """,
+    )
     with pytest.raises(sqlite3.OperationalError):
         store.migrate()
     with store.connection() as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 34
         columns = {row["name"] for row in db.execute("PRAGMA table_info(premerge_reviews)")}
         assert "execution_policy" not in columns
-        assert db.execute("SELECT name FROM sqlite_master WHERE name='invalid_test'").fetchone(
-        ) is None
+        assert (
+            db.execute("SELECT name FROM sqlite_master WHERE name='invalid_test'").fetchone()
+            is None
+        )
+
+
+def test_unified_premerge_executes_once_when_mr_merges_during_ocr(
+    environment: tuple[Store, int],
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """正式统一任务执行中正常合并，固定范围继续完成并只建立一份初审投递。"""
+
+    import ocr_manager.unified_premerge as unified
+
+    store, rid = environment
+    with store.connection() as db:
+        db.execute("INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)", (rid,))
+    assert enqueue_premerge(store, rid, 7, SHA)
+    state = {"value": "opened"}
+    called: list[str] = []
+
+    class Client:
+        """合成 MR 在模型调用中由 opened 变为 merged。"""
+
+        def __init__(self, *_: Any) -> None:
+            pass
+
+        def get_merge_request(self, *_: Any) -> dict[str, Any]:
+            return {
+                "state": state["value"],
+                "sha": SHA,
+                "target_project_id": 42,
+                "target_branch": "main",
+                "diff_refs": {"base_sha": "b" * 40, "head_sha": SHA},
+            }
+
+    original_git = worker.GitRepository
+
+    class Git(original_git):
+        """提供固定提交规则和范围，保留测试夹具的无网络行为。"""
+
+        def rule_digest(self, _: str) -> str:
+            return "frozen-rule"
+
+    def run(
+        _: Settings, checkout: Path, run_dir: Path, head: str, *_args: Any, **kwargs: Any
+    ) -> tuple[str, dict[str, Any]]:
+        called.append(head)
+        assert kwargs["base_sha"] == "b" * 40
+        assert checkout.is_dir()
+        state["value"] = "merged"
+        result = {
+            "comments": [{"path": "main.py", "content": "合成发现", "severity": "high"}],
+            "summary": {"input_tokens": 10, "output_tokens": 3},
+            "manifest": {"terminal_state": "complete"},
+        }
+        (run_dir / "result.json").write_text(json.dumps(result))
+        return "complete", result
+
+    monkeypatch.setattr(worker, "GitRepository", Git)
+    monkeypatch.setattr(worker, "GitLabClient", Client)
+    monkeypatch.setattr(unified, "GitLabClient", Client)
+    monkeypatch.setattr(worker, "run_review", run)
+    monkeypatch.setattr(worker, "inspect_range", lambda *_args, **_kw: {})
+    task = store.next_job()
+    assert task and task["source"] == "premerge"
+    worker.review_job(store, settings, task)
+    detail = store.get_job(task["id"])
+    assert detail and detail["status"] == "complete" and detail["mr_state"] == "merged"
+    assert called == [SHA] and len(detail["attempt_history"]) == 1
+    assert detail["issue_ids"] and detail["result"]["usage"]["input_tokens"] == 10
+    first = store.next_delivery()
+    assert first and first["source"] == "premerge"
+    assert store.next_delivery() is None
+    store.finish_delivery(first["id"], "合成投递失败", retryable=False)
+    assert store.retry_delivery(task["id"])
+    assert store.next_delivery() and called == [SHA]
+
+
+def test_same_head_returning_to_prior_description_has_distinct_version_hash(
+    environment: tuple[Store, int],
+    settings: Settings,
+) -> None:
+    """描述先改再恢复时，同 SHA 的新版本身份仍独立，避免首次执行唯一键冲突。"""
+
+    store, rid = environment
+    with store.connection() as db:
+        db.execute(
+            "INSERT INTO premerge_settings(repository_id,enabled,include_description) "
+            "VALUES(?,1,1)",
+            (rid,),
+        )
+    hashes = []
+    for hint in ("first-description", "second-description", "first-description"):
+        assert enqueue_premerge(store, rid, 7, SHA, hint)
+        job = store.get_job(store.list_jobs()[0]["id"])
+        assert job
+        value = worker.config_hash(store, settings, "", rid, True, hint, job["event_id"])
+        with store.connection() as db:
+            db.execute("UPDATE review_jobs SET config_hash=? WHERE id=?", (value, job["id"]))
+        hashes.append(value)
+    assert len(set(hashes)) == 3

@@ -10,7 +10,7 @@ import { useState } from "react";
 
 import { apiRequest } from "../api/client";
 import type { ReviewFeedbackSummary } from "../api/types";
-import { ListSelect as SelectField } from "../ui/ListControls";
+import { SelectField } from "../ui/SelectField";
 import { ListTable } from "../ui/ListTable";
 import { QueryState } from "../ui/QueryState";
 

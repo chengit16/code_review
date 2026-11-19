@@ -15,6 +15,8 @@ import type { Repository } from "../api/types";
 import type { MergeEvent } from "../api/types";
 import { ListSelect as SelectField, ListStatusNav, ListTime, ListExcerpt, ListConditions } from "../ui/ListControls";
 import { ListTable } from "../ui/ListTable";
+import { ListDateRange } from "../ui/ListDateRange";
+import { localDateInput } from "../ui/listDates";
 import { PageHeader } from "../ui/PageHeader";
 import { Pagination } from "../ui/Pagination";
 import { QueryState } from "../ui/QueryState";
@@ -130,9 +132,11 @@ export function EventCenterPage({ token, canEdit }: {
   const [repositoryFilter, setRepositoryFilter] = useState(params.get("repository_id") ?? "all");
   const [statusFilter, setStatusFilter] = useState(params.get("status") ?? "all");
   const [filterError, setFilterError] = useState("");
+  const [dates, setDates] = useState({ since: params.get("since") ?? "", until: params.get("until") ?? "" });
   useEffect(() => {
     setRepositoryFilter(params.get("repository_id") ?? "all");
     setStatusFilter(params.get("status") ?? "all");
+    setDates({ since: params.get("since") ?? "", until: params.get("until") ?? "" });
   }, [params]);
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: () => apiRequest<Repository[]>(token, "/api/repositories") });
   const events = useQuery({ queryKey: ["event-search", params.toString()], queryFn: ({ signal }) => searchEvents(token, params, signal),
@@ -142,6 +146,7 @@ export function EventCenterPage({ token, canEdit }: {
     void client.invalidateQueries({ queryKey: ["event-search"] });
     void client.invalidateQueries({ queryKey: ["overview"] });
   } });
+  const fullReview = useMutation({ mutationFn: (id: number) => apiRequest(token, `/api/events/${id}/full-review`, { method: "POST" }), onSuccess: () => { void client.invalidateQueries({ queryKey: ["event-search"] }); } });
   const items = events.data?.items ?? [];
   const columns: TableColumnsType<MergeEvent> = [
     { title: "项目 / MR", key: "source", width: 190, render: (_: unknown, item) => <>{item.repository_name ?? `项目 #${item.repository_id}`}<small className="table-sub">{item.mr_iid > 0 ? `MR !${item.mr_iid}` : "默认分支 Push"} · 事件 #{item.id}</small></> },
@@ -150,7 +155,7 @@ export function EventCenterPage({ token, canEdit }: {
     { title: "关联任务", key: "job", width: 180, render: (_: unknown, item) => item.latest_job_id ? <><span>{item.job_count ?? "—"} 个任务</span><small className="list-secondary"><Link to={`/jobs/${item.latest_job_id}`}>最新任务 #{item.latest_job_id}</Link></small></> : `${item.job_count ?? 0} 个任务` },
     { title: "接收时间", dataIndex: "created_at", key: "created_at", width: 170, render: (value: string) => <ListTime value={value} /> },
     { title: "诊断", dataIndex: "error", key: "error", render: (value: string | null) => <ListExcerpt text={value} /> },
-    { title: "操作", key: "action", width: 90, render: (_: unknown, item) => canEdit && item.status === "needs_attention" ? <Button type="text" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { modal.confirm({ title: `重试事件 #${item.id}`, content: "Worker 会重新向 GitLab 核对 MR 和提交范围；排队成功不代表评审完成。", onOk: () => retry.mutateAsync(item.id) }); }}>重试</Button> : null },
+    { title: "操作", key: "action", width: 180, render: (_: unknown, item) => canEdit && item.status === "needs_attention" ? <><Button type="text" aria-label={`重试事件 ${item.id}`} disabled={retry.isPending} onClick={() => { modal.confirm({ title: `重试事件 #${item.id}`, content: "Worker 会重新向 GitLab 核对 MR 和提交范围；排队成功不代表评审完成。", onOk: () => retry.mutateAsync(item.id) }); }}>重试</Button><Button danger type="text" disabled={fullReview.isPending} onClick={() => modal.confirm({ title: `完整重审事件 #${item.id}？`, content: "会按完整事件范围重新评审，可能重复覆盖部分已审代码并产生模型费用。请先核对提交范围。", onOk: () => fullReview.mutateAsync(item.id) })}>完整重审</Button></> : null },
   ];
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
@@ -161,7 +166,7 @@ export function EventCenterPage({ token, canEdit }: {
     if (actionable) next.set("actionable_only", actionable);
     const pageSize = params.get("page_size");
     if (pageSize) next.set("page_size", pageSize);
-    for (const key of ["repository_id", "status", "mr_iid", "since", "until"]) {
+    for (const key of ["repository_id", "status", "mr_iid"]) {
       const value = values.get(key);
       if (typeof value !== "string" || !value || value === "all") continue;
       try {
@@ -171,6 +176,9 @@ export function EventCenterPage({ token, canEdit }: {
         return;
       }
     }
+    if (dates.since && dates.until && dates.since > dates.until) { setFilterError("接收日期起始不能晚于结束"); return; }
+    if (dates.since) next.set("since", dates.since);
+    if (dates.until) next.set("until", dates.until);
     setFilterError("");
     setMessage("");
     setParams(next);
@@ -193,15 +201,14 @@ export function EventCenterPage({ token, canEdit }: {
         onValueChange={setRepositoryFilter}
         options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} />
       <input type="hidden" name="status" value={statusFilter} />
-      <label>MR IID<Input name="mr_iid" type="number" min="1" defaultValue={params.get("mr_iid") ?? ""} placeholder="全部 MR" /></label>
-      <details className="list-advanced"><summary>更多筛选</summary><div className="list-toolbar"><label>起始时间<Input name="since" type="datetime-local" defaultValue={toLocal(params.get("since"))} /></label>
-      <label>结束时间<Input name="until" type="datetime-local" defaultValue={toLocal(params.get("until"))} /></label></div></details>
+      <Input aria-label="MR IID" name="mr_iid" type="number" min="1" defaultValue={params.get("mr_iid") ?? ""} placeholder="MR IID" />
+      <ListDateRange label="接收日期" {...dates} onChange={setDates} />
       <div className="filter-actions"><Button type="primary" htmlType="submit"><Search size={16} />查询</Button><Link className="button button-secondary" to="/events">清空</Link></div>
     </form>
     {filterError && <p className="form-error" role="alert">{filterError}</p>}
     {message && <p className="form-success" role="status">{message}</p>}
-    {(retry.error || repositories.error) && <p className="form-error" role="alert">{retry.error?.message || repositories.error?.message}</p>}
-    <ListConditions items={[{ key: "actionable_only", label: "范围", value: params.get("actionable_only") === "true" ? "当前启用范围" : "" }, { key: "repository_id", label: "项目", value: params.get("repository_id") ?? "" }, { key: "mr_iid", label: "MR", value: params.get("mr_iid") ?? "" }, { key: "since", label: "起始时间", value: params.get("since") ?? "" }, { key: "until", label: "结束时间", value: params.get("until") ?? "" }]} onClear={(key) => { const next = new URLSearchParams(params); next.delete(key); next.delete("page"); setParams(next); }} />
+    {(retry.error || fullReview.error || repositories.error) && <p className="form-error" role="alert">{retry.error?.message || fullReview.error?.message || repositories.error?.message}</p>}
+    <ListConditions items={[{ key: "actionable_only", label: "范围", value: params.get("actionable_only") === "true" ? "当前启用范围" : "" }, { key: "repository_id", label: "项目", value: params.get("repository_id") ?? "" }, { key: "mr_iid", label: "MR", value: params.get("mr_iid") ?? "" }, { key: "since", label: "接收日期从", value: localDateInput(params.get("since")) }, { key: "until", label: "接收日期至", value: localDateInput(params.get("until")) }]} onClear={(key) => { const next = new URLSearchParams(params); next.delete(key); next.delete("page"); setParams(next); }} />
       <QueryState loading={events.isLoading} error={events.error} onRetry={() => void events.refetch()} />
       {events.data && <ListTable rowKey="id" size="middle" columns={columns} dataSource={items} loading={events.isFetching} locale={{ emptyText: events.error ? "无法读取事件" : "当前条件下没有事件；可清除筛选，或展开历史 MR 补扫。" }} scroll={{ x: 1050 }} pagination={false} />}
       <div className="event-pagination"><Pagination label="事件分页" total={events.error ? undefined : events.data?.total} page={events.data?.page ?? Number(params.get("page") || 1)}
@@ -210,10 +217,4 @@ export function EventCenterPage({ token, canEdit }: {
     </Card>
     {canEdit && <Collapse className="event-backfill-collapse" items={[{ key: "backfill", label: "历史 MR 补扫与申请记录", children: <div className="event-backfill-content">{repositories.data && repositories.data.length > 0 && <BackfillForm key={repositories.data.map((item) => item.id).join(",")} token={token} repositories={repositories.data} />}<BackfillHistory token={token} /><p className="coverage-note">扫描完成只表示 MR 已核对并建立事件，不代表对应评审任务已完成。</p></div> }]} />}
   </div>;
-}
-
-function toLocal(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : localDateTime(date);
 }

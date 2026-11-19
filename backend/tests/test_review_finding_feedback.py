@@ -370,7 +370,7 @@ def test_schema51_adds_ignore_feedback_and_preserves_legacy_repair(
         db.execute("PRAGMA user_version=50")
     store.migrate()
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 52
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 54
         verdict = db.execute(
             "SELECT verdict FROM review_finding_feedback WHERE finding_id='j1:a1:c0'").fetchone()[0]
         assert verdict == "fixed"

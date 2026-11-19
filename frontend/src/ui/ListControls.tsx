@@ -1,6 +1,7 @@
 /** @description 通用列表导航、筛选与时间展示；不决定业务状态口径，不读取密钥或执行业务命令。 */
 import { Button, Input, Popover, Select, Tag } from "antd";
-import { useId, useState } from "react";
+import { Search } from "lucide-react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type { SelectFieldProps } from "./SelectField";
@@ -21,19 +22,18 @@ export function ListStatusNav({ value, labels, counts, onChange, disabled, label
   </Button>)}</nav>;
 }
 
-/** 与存量筛选接口兼容的 Ant Design 选择器；隐藏字段仅用于当前表单提交。 */
+/** 筛选使用占位和选项表达含义，保留辅助技术名称；隐藏字段仅用于当前表单提交。 */
 export function ListSelect({ label, value, onValueChange, options, name, required, disabled, placeholder, className }: SelectFieldProps) {
-  const id = useId();
-  return <div className={`list-select ${className ?? ""}`}><label htmlFor={id}>{label}</label>
-    <Select id={id} aria-label={label} value={value || undefined} onChange={onValueChange}
-      options={[...options]} virtual={false} disabled={disabled} placeholder={placeholder} />
+  return <div className={`list-select ${className ?? ""}`}>
+    <Select aria-label={label} value={value || undefined} onChange={onValueChange}
+      options={options.map((option) => ({ ...option, label: option.label === "全部" ? `全部${label}` : option.label }))} virtual={false} disabled={disabled} placeholder={placeholder ?? label} />
     {name && <input type="hidden" name={name} value={value} required={required} />}
   </div>;
 }
 
 /** 文本输入只在提交后参与查询；URL 更新时由调用方 key 重建草稿。 */
 export function ListSearch({ label, value, onSearch, disabled, placeholder }: {
-  /** 可见且可访问的搜索名称。 */ label: string;
+  /** 搜索可访问名称；没有单独占位提示时也用于输入提示。 */ label: string;
   /** 已生效的 URL 查询值。 */ value: string;
   /** 提交裁剪后的搜索条件。 */ onSearch: (value: string) => void;
   /** 确认期间锁定输入。 */ disabled?: boolean;
@@ -41,8 +41,8 @@ export function ListSearch({ label, value, onSearch, disabled, placeholder }: {
 }) {
   const [draft, setDraft] = useState(value);
   return <form className="list-search" onSubmit={(event) => { event.preventDefault(); onSearch(draft.trim()); }}>
-    <label>{label}<Input aria-label={label} value={draft} maxLength={200} placeholder={placeholder}
-      disabled={disabled} onChange={(event) => setDraft(event.target.value)} /></label>
+    <Input aria-label={label} value={draft} maxLength={200} placeholder={placeholder ?? label} prefix={<Search size={15} aria-hidden="true" />}
+      disabled={disabled} onChange={(event) => setDraft(event.target.value)} />
     <Button htmlType="submit" disabled={disabled}>搜索</Button>
   </form>;
 }
@@ -73,7 +73,7 @@ export function ListExcerpt({ text, limit = 90 }: { /** 已脱敏的可见正文
   return text.length <= limit ? <span className="list-excerpt">{text}</span> : <details className="list-excerpt"><summary>{text.slice(0, limit)}… <span>展开全文</span></summary><p>{text}</p></details>;
 }
 
-/** 常用筛选与高级内容共用布局，不控制业务表单状态。 */
-export function ListToolbar({ children, advanced }: { /** 常用筛选。 */ children: ReactNode; /** 低频筛选或范围切换。 */ advanced?: ReactNode }) {
-  return <>{children && <div className="list-toolbar">{children}</div>}{advanced && <details className="list-advanced"><summary>更多筛选</summary><div className="list-toolbar">{advanced}</div></details>}</>;
+/** 所有筛选直接呈现于同一工具栏，不折叠条件，也不控制业务表单状态。 */
+export function ListToolbar({ children, advanced }: { /** 常用筛选。 */ children: ReactNode; /** 补充筛选，沿用参数名但同样直接显示。 */ advanced?: ReactNode }) {
+  return <div className="list-toolbar">{children}{advanced}</div>;
 }

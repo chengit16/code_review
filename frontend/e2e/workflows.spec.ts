@@ -1,12 +1,14 @@
 /** @description 验证关键配置与评审流程；仅使用隔离数据库和合成凭据。 */
 import { expect, test } from "@playwright/test";
+import { mockRepositoryQuery } from "./unifiedFixture";
 
 test.beforeEach(async ({ page }) => {
+  await mockRepositoryQuery(page);
   // 模拟不支持带请求体 PATCH 的穿透入口，全部页面流程必须使用兼容写入。
   await page.route("**/api/**", async (route) => {
     if (route.request().method() === "PATCH") {
       await route.fulfill({ status: 502, body: "合成隧道拒绝 PATCH" });
-    } else await route.continue();
+    } else await route.fallback();
   });
 });
 
@@ -14,11 +16,14 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("/repositories");
   await page.getByRole("button", { name: "添加仓库" }).click();
-  await page.getByLabel("仓库名称").fill("验收仓库");
-  await page.getByLabel("项目数字 ID").fill("42");
-  await page.getByLabel("仓库路径").fill("team/demo");
-  await page.getByLabel("GitLab 项目或 Clone 地址").fill("https://gitlab.example.test/team/demo.git");
+  await page.getByLabel("仓库地址").fill("https://gitlab.example.test/team/demo.git");
   await page.getByLabel("GitLab Token", { exact: true }).fill("synthetic-gitlab-token");
+  await expect(page.getByText("仓库已识别", { exact: true })).toBeVisible();
+  await page.route("**/api/repositories", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataJSON(); delete body.query_session_id;
+    await route.continue({ postData: JSON.stringify(body) });
+  });
   await page.getByRole("button", { name: "保存仓库" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
@@ -27,18 +32,18 @@ test("项目新增、编辑、恢复和删除", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "基础接入" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "评审参数" }).click();
   await expect(page.getByRole("heading", { name: "项目评审参数" })).toBeVisible();
-  await page.getByRole("tab", { name: "发布审查" }).click();
+  await page.getByRole("tab", { name: "结果发布" }).click();
   await expect(page.getByRole("heading", { name: "GitLab 行内评论" })).toBeVisible();
   await page.getByRole("tab", { name: "基础接入" }).click();
-  await expect(page.getByLabel("仓库路径")).toHaveValue("team/demo");
-  await page.getByLabel("仓库名称").fill("修改后仓库");
+  await expect(page.getByLabel("仓库地址")).toHaveValue("https://gitlab.example.test/team/demo.git");
+  await page.getByRole("checkbox", { name: "目标分支 Push 评审", exact: true }).check();
   await page.getByRole("button", { name: "保存基础接入" }).click();
   await expect(page.getByText("基础接入配置已保存", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(page.getByRole("button", { name: "编辑 修改后仓库" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "编辑 验收仓库" })).toBeVisible();
   await page.goto("/config-history");
   // 对象名称与版本分别加载，按对象单元格和新增版本定位，避免提前选中最新修改。
-  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: /修改后仓库/ }) }).filter({ hasText: "新增" }).getByRole("button", { name: /恢复版本/ }).click();
+  await page.getByRole("row").filter({ has: page.getByRole("cell", { name: /验收仓库/ }) }).filter({ hasText: "新增" }).getByRole("button", { name: /恢复版本/ }).click();
   await page.getByRole("dialog").getByRole("button", { name: "确定", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("配置内容已恢复");
   await page.goto("/repositories");
@@ -74,10 +79,10 @@ test("百练模型单价配置与评审详情用量", async ({ page }) => {
   await page.getByLabel("输入单价（每百万 Token）").fill("2");
   await page.getByLabel("输出单价（每百万 Token）").fill("8");
   await page.getByRole("button", { name: "保存模型" }).click();
-  const row = page.getByRole("row").filter({ hasText: "百练验收模型" });
+  const row = page.getByRole("article", { name: "模型 百练验收模型" });
   await expect(row).toContainText("百练 / DashScope");
-  await row.getByRole("button", { name: /展开|expand/i }).click();
-  await expect(page.getByText(/计价：2 输入 \/ 8 输出/)).toBeVisible();
+  await row.getByText("端点与计价", { exact: true }).click();
+  await expect(row.getByText(/输入 2 \/ 输出 8/)).toBeVisible();
   await page.goto("/jobs/1");
   await expect(page.getByRole("heading", { name: "模型用量" })).toBeVisible();
   await expect(page.getByText("500,000")).toBeVisible();

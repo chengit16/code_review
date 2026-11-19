@@ -115,10 +115,12 @@ class GitRepository:
         if mr_iid <= 0:
             raise ValueError("MR IID 无效")
         expected_sha = self._commit_sha(expected_sha)
-        self._git("fetch", self.remote_url,
-                  f"+refs/merge-requests/{mr_iid}/head:refs/remotes/origin/mr-{mr_iid}")
-        actual = self._git("rev-parse", "--verify",
-                           f"refs/remotes/origin/mr-{mr_iid}^{{commit}}")
+        self._git(
+            "fetch",
+            self.remote_url,
+            f"+refs/merge-requests/{mr_iid}/head:refs/remotes/origin/mr-{mr_iid}",
+        )
+        actual = self._git("rev-parse", "--verify", f"refs/remotes/origin/mr-{mr_iid}^{{commit}}")
         if actual != expected_sha:
             raise ValueError("MR 提交已更新")
 
@@ -127,14 +129,26 @@ class GitRepository:
     ) -> list[dict[str, str | int | None]]:
         """记录完整 MR 差异的文件范围，不把最后一个提交误当作整个 MR。"""
 
-        output = self._git("diff", "--numstat", "--no-renames", "-z",
-                           self._commit_sha(base_sha), self._commit_sha(head_sha), "--")
+        output = self._git(
+            "diff",
+            "--numstat",
+            "--no-renames",
+            "-z",
+            self._commit_sha(base_sha),
+            self._commit_sha(head_sha),
+            "--",
+        )
         files: list[dict[str, str | int | None]] = []
         for entry in output.split("\0"):
             if entry:
                 added, deleted, path = entry.split("\t", 2)
-                files.append({"path": path, "added": int(added) if added.isdigit() else None,
-                              "deleted": int(deleted) if deleted.isdigit() else None})
+                files.append(
+                    {
+                        "path": path,
+                        "added": int(added) if added.isdigit() else None,
+                        "deleted": int(deleted) if deleted.isdigit() else None,
+                    }
+                )
         return files
 
     def is_range_base(self, base_sha: str, head_sha: str) -> bool:
@@ -230,8 +244,9 @@ class GitRepository:
         path = validate_context_paths([path])[0]
         sha = self._commit_sha(sha)
         entry = self._git("ls-tree", sha, "--", path)
-        if (not entry.startswith(("100644 blob ", "100755 blob ")) or
-            not entry.endswith(f"\t{path}")):
+        if not entry.startswith(("100644 blob ", "100755 blob ")) or not entry.endswith(
+            f"\t{path}"
+        ):
             raise ValueError(f"业务文档不是普通文件：{path}")
         size = int(self._git("cat-file", "-s", f"{sha}:{path}"))
         if size > 6400:
@@ -252,15 +267,28 @@ class GitRepository:
     def changed_files(self, sha: str) -> list[dict[str, str | int | None]]:
         """仅取路径及增删行数；合并提交以第一父提交为基准，二进制数量为空。"""
 
-        output = self._git("show", "--format=", "--numstat", "--no-renames",
-                           "--first-parent", "-z", self._commit_sha(sha), "--")
+        output = self._git(
+            "show",
+            "--format=",
+            "--numstat",
+            "--no-renames",
+            "--first-parent",
+            "-z",
+            self._commit_sha(sha),
+            "--",
+        )
         files: list[dict[str, str | int | None]] = []
         for entry in output.split("\0"):
             if not entry:
                 continue
             added, deleted, path = entry.split("\t", 2)
-            files.append({"path": path, "added": int(added) if added.isdigit() else None,
-                          "deleted": int(deleted) if deleted.isdigit() else None})
+            files.append(
+                {
+                    "path": path,
+                    "added": int(added) if added.isdigit() else None,
+                    "deleted": int(deleted) if deleted.isdigit() else None,
+                }
+            )
         return files
 
     def remove_checkout(self, target: Path) -> None:
@@ -269,3 +297,40 @@ class GitRepository:
         with repository_lock(self.path):
             if target.exists():
                 self._git("worktree", "remove", "--force", str(target))
+
+    def first_parent(self, sha: str) -> str:
+        """返回固定提交的第一父节点，拒绝无父提交作为自动覆盖边界。"""
+
+        return self._git("rev-parse", f"{self._commit_sha(sha)}^1").strip()
+
+    def first_parent_range(self, before: str, after: str) -> list[str]:
+        """最多核验一百个第一父节点，超限交由事件恢复，不遗漏范围。"""
+
+        commits = self._git(
+            "rev-list",
+            "--first-parent",
+            "--reverse",
+            "--max-count=101",
+            f"{self._commit_sha(before)}..{self._commit_sha(after)}",
+        ).splitlines()
+        if len(commits) > 100:
+            raise ValueError("Push 超过自动关联上限，请缩小范围或手动核实")
+        if commits and self.first_parent(commits[0]) != before:
+            raise ValueError("Push 基准不在同一第一父链，请核实范围")
+        return commits
+
+    def range_signature(self, before: str, after: str) -> str:
+        """精确比较二进制与文本差异；不使用忽略空白或仅按文件名的近似覆盖。"""
+
+        import hashlib
+
+        diff = self._git(
+            "diff",
+            "--no-ext-diff",
+            "--binary",
+            "--full-index",
+            self._commit_sha(before),
+            self._commit_sha(after),
+            "--",
+        )
+        return hashlib.sha256(diff.encode()).hexdigest()

@@ -39,9 +39,12 @@ def cancel_job(store: Store, job_id: int) -> str | None:
         if job is None or job[0] not in {"queued", "running"}:
             return None
         status = "cancelled" if job[0] == "queued" else "running"
-        db.execute("""UPDATE review_jobs SET status=?, cancel_requested=1,
+        db.execute(
+            """UPDATE review_jobs SET status=?, cancel_requested=1,
                    finished_at=CASE WHEN ?='cancelled' THEN CURRENT_TIMESTAMP ELSE NULL END,
-                   error='用户请求停止评审' WHERE id=?""", (status, status, job_id))
+                   error='用户请求停止评审' WHERE id=?""",
+            (status, status, job_id),
+        )
         return "cancelled" if status == "cancelled" else "stopping"
 
 
@@ -72,10 +75,19 @@ def register_task_control(app: FastAPI, store: Store, settings: Settings, admin:
                 result.append({"id": job_id, "status": "rejected", "error": "任务不存在"})
                 continue
             try:
-                snapshot = config_hash(store, settings, job["rule_digest"], job["repository_id"])
+                snapshot = config_hash(
+                    store,
+                    settings,
+                    job["rule_digest"],
+                    job["repository_id"],
+                    job.get("source") == "premerge",
+                    job.get("context_hint"),
+                    job.get("event_id") if job.get("source") == "premerge" else None,
+                )
                 queued = store.retry_job(job_id, snapshot)
-                result.append({"id": job_id, "job_id": queued,
-                               "status": "queued" if queued else "rejected"})
+                result.append(
+                    {"id": job_id, "job_id": queued, "status": "queued" if queued else "rejected"}
+                )
             except (ValueError, InvalidToken):
                 result.append({"id": job_id, "status": "rejected", "error": "评审配置不可用"})
         return result
@@ -87,6 +99,12 @@ def register_task_control(app: FastAPI, store: Store, settings: Settings, admin:
         repository = store.get_repository(repository_id)
         if not repository or not repository["enabled"]:
             raise HTTPException(409, "仓库不存在或已暂停")
-        return [{"id": iid, "status": "queued" if iid > 0 and
-                 store.enqueue_mr(repository_id, iid) else "rejected"}
-                for iid in dict.fromkeys(payload.ids)]
+        return [
+            {
+                "id": iid,
+                "status": "queued"
+                if iid > 0 and store.enqueue_mr(repository_id, iid)
+                else "rejected",
+            }
+            for iid in dict.fromkeys(payload.ids)
+        ]

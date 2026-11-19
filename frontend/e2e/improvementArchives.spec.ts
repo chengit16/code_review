@@ -36,7 +36,7 @@ test("问题和主题归档后可查询、追溯、恢复，默认列表不再�
   }
   await page.goto(`/improvements?q=${encodeURIComponent(title)}`);
   await expect(page.getByText("当前条件下暂无记录", { exact: false })).toBeVisible();
-  await page.getByText("更多筛选", { exact: true }).click();
+
   await page.getByRole("combobox", { name: "归档范围" }).click();
   await page.getByRole("option", { name: "已归档", exact: true }).click();
   await expect(page).toHaveURL(/archive=archived/);

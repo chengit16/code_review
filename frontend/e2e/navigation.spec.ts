@@ -5,7 +5,7 @@ test("精简导航、系统设置标签与旧地址兼容", async ({ page }) => 
   await page.goto("/settings");
   const navigation = page.getByRole("navigation", { name: "主导航" });
   await expect(navigation.getByRole("link")).toHaveText([
-    "项目总览", "评审任务", "评审发现", "合并前审查",
+    "项目总览", "评审任务", "评审发现",
     "运行监控", "平台改进记录", "项目配置", "系统设置",
   ]);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("系统设置");

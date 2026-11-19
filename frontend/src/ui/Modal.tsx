@@ -29,7 +29,7 @@ export function Modal({ titleId, onClose, children, className = "" }: {
       if (event.target instanceof Element && event.target.closest(".ant-modal-root")) return;
       if (event.key === "Escape") {
         // 下拉弹层位于 Portal 中，先让它消费 Escape，下一次按键再关闭弹窗。
-        if (event.target instanceof Element && event.target.closest("[data-select-popup]")) return;
+        if (event.target instanceof Element && event.target.closest("[data-select-popup], .repository-branch-popup, .ant-select-open")) return;
         event.preventDefault();
         onCloseRef.current();
       } else if (event.key === "Tab") {

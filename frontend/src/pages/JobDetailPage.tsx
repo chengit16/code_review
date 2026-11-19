@@ -91,6 +91,7 @@ function JobDetail({ token, canEdit }: {
     {(retry.error || resend.error || feedback.error) && <p className="form-error" role="alert">{(retry.error || resend.error || feedback.error)?.message}</p>}
     {feedback.error && <p role="alert">反馈未保存，操作版本与输入已保留，请刷新核对后重新选择。<span>保留目标 j{id}:a{feedback.variables?.sourceAttempt}:c{feedback.variables?.index} · 版本 {feedback.variables?.sourceAttempt}/0 · 反馈 {feedback.variables?.verdict ?? "撤销"}。</span><Button onClick={async () => { await query.refetch(); feedback.reset(); }}>刷新并重新核对</Button></p>}
     {job && <>
+      <section className="section"><h2>版本与触发记录</h2><p>{job.source === "premerge" ? "合并前 MR" : job.source === "push" ? "目标分支 Push" : "合并后 MR"} · {job.mr_state === "merged" ? "MR 已合并" : job.mr_state === "opened" ? "MR 未合并" : "生命周期未核实"}{job.superseded ? " · 此版本已失效，保留历史" : ""}</p><ol>{job.event_links?.map((event) => <li key={event.id}>{formatTime(event.created_at)} · {event.source === "premerge" ? "合并前触发" : event.source === "push" ? "目标分支 Push" : "MR 合并事件"} · {event.relation === "reused" ? "已关联原任务，未重复评审" : "创建本任务"} · 事件 #{event.id}</li>)}</ol></section>
       <section className="detail-summary job-summary-card">
         <div><span>评审状态</span><Status value={job.effective_status ?? job.status} /></div>
         <div><span>提交人</span><strong>{job.commit_author?.trim() || "未记录"}</strong></div>

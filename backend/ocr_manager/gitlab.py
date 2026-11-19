@@ -84,9 +84,7 @@ class GitLabClient:
                     return commits
                 page = int(next_page)
 
-    def list_merged_requests(
-        self, project_id: int, since: datetime, until: datetime
-    ) -> list[int]:
+    def list_merged_requests(self, project_id: int, since: datetime, until: datetime) -> list[int]:
         """扫描更新过的已合并 MR，按 merged_at 二次过滤；最多 100 页防止无界任务。"""
 
         url = f"{self.base_url}/api/v4/projects/{project_id}/merge_requests"
@@ -94,8 +92,15 @@ class GitLabClient:
         with httpx.Client(timeout=20, headers={"PRIVATE-TOKEN": self.token}) as client:
             for page in range(1, 101):
                 check_cancellation()
-                response = client.get(url, params={"state": "merged", "updated_after":
-                                      since.isoformat(), "per_page": 100, "page": page})
+                response = client.get(
+                    url,
+                    params={
+                        "state": "merged",
+                        "updated_after": since.isoformat(),
+                        "per_page": 100,
+                        "page": page,
+                    },
+                )
                 response.raise_for_status()
                 rows = response.json()
                 if not isinstance(rows, list):
@@ -127,8 +132,12 @@ class GitLabClient:
                 rows = response.json()
                 if not isinstance(rows, list):
                     raise ValueError("GitLab MR diff 响应无效")
-                if any(not isinstance(row, dict) or not isinstance(row.get("diff"), str)
-                       or not isinstance(row.get("new_path"), str) for row in rows):
+                if any(
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("diff"), str)
+                    or not isinstance(row.get("new_path"), str)
+                    for row in rows
+                ):
                     raise ValueError("GitLab MR diff 缺少路径或内容")
                 result.extend(rows)
                 next_page = response.headers.get("x-next-page", "")
@@ -137,8 +146,12 @@ class GitLabClient:
             raise ValueError("GitLab MR diff 超过 100 页")
 
     def post_inline_discussion(
-        self, project_id: int, mr_iid: int, body: str,
-        position: dict[str, str], marker: str,
+        self,
+        project_id: int,
+        mr_iid: int,
+        body: str,
+        position: dict[str, str],
+        marker: str,
     ) -> str:
         """发送前按隐藏标记查重；响应丢失后的重试不会重复发相同评论。"""
 
@@ -163,14 +176,42 @@ class GitLabClient:
             else:
                 raise ValueError("GitLab discussion 超过 100 页，无法确认幂等")
             check_cancellation()
-            posted = client.post(url, data={"body": f"{body}\n\n{marker}",
-                                            **{f"position[{key}]": value
-                                               for key, value in position.items()}})
+            posted = client.post(
+                url,
+                data={
+                    "body": f"{body}\n\n{marker}",
+                    **{f"position[{key}]": value for key, value in position.items()},
+                },
+            )
             posted.raise_for_status()
             data = posted.json()
         if not isinstance(data, dict) or not isinstance(data.get("id"), str):
             raise ValueError("GitLab discussion 创建响应无效")
         return str(data["id"])
+
+    def commit_merge_requests(self, project_id: int, sha: str) -> list[int]:
+        """分页读取引入提交的 MR，不依赖较新版本的 state 参数，状态由详情复核。"""
+
+        url = (f"{self.base_url}/api/v4/projects/{project_id}/repository/commits/"
+               f"{quote(sha, safe='')}/merge_requests")
+        result: list[int] = []
+        with httpx.Client(
+            timeout=20, follow_redirects=False, headers={"PRIVATE-TOKEN": self.token}
+        ) as client:
+            for page in range(1, 11):
+                check_cancellation()
+                response = client.get(url, params={"per_page": 100, "page": page})
+                response.raise_for_status()
+                rows = response.json()
+                if not isinstance(rows, list):
+                    raise ValueError("提交关联 MR 响应无效")
+                for row in rows:
+                    if not isinstance(row, dict) or type(row.get("iid")) is not int:
+                        raise ValueError("提交关联 MR 身份缺失")
+                    result.append(row["iid"])
+                if not response.headers.get("x-next-page"):
+                    return result
+        raise ValueError("提交关联 MR 超过查询上限")
 
 
 def project_web_url(gitlab_url: str, remote_url: str) -> str:

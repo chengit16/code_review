@@ -4,7 +4,11 @@
 .jobs-search-card { background: linear-gradient(110deg, #fff, #fcfdff); }
 .jobs-quick-filters, .jobs-active-filters, .jobs-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .jobs-filter-form { margin-top: 10px; }
-.jobs-filter-main { display: grid; grid-template-columns: minmax(160px, 250px) minmax(160px, 250px) auto; align-items: end; justify-content: start; gap: 12px; }
+.jobs-filter-main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 160px auto; align-items: center; gap: 8px; }
+.jobs-filter-main > .ant-select { width: 100%; min-width: 0; }
+.jobs-created-date { min-width: 0; width: 100%; }
+.jobs-created-date .ant-picker-input > input { min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.jobs-filter-actions { flex-wrap: nowrap; }
 .jobs-filter-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; font-size: 13px; }
 .jobs-filter-field .ant-select { width: 100%; }
 .jobs-filter-advanced { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -58,7 +62,7 @@
 .setup-steps p { line-height: 1.7; }
 .issue-filter-card .ant-card-body, .issue-table-card .ant-card-body { min-width: 0; }
 .issue-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)) minmax(240px, 1.5fr); align-items: end; gap: 12px; }
-.issue-filter-grid > label, .issue-search label { display: grid; gap: 6px; min-width: 0; color: var(--color-muted); font-size: 13px; }
+.issue-filter-grid > div, .issue-search { min-width: 0; }
 .issue-filter-grid .ant-select, .issue-search .ant-input { width: 100%; }
 .issue-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; margin: 0; }
 .issue-table-note { margin: 0 0 12px; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
@@ -111,6 +115,7 @@
 .premerge-drawer .ant-drawer-body { padding: 18px; }
 @media (max-width: 1000px) {
   .jobs-filter-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .jobs-filter-main > .jobs-filter-actions { grid-column: 1 / -1; justify-content: flex-end; }
   .issue-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
@@ -133,9 +138,12 @@
 @media (max-width: 520px) {
   .jobs-feedback-filters { flex-basis: 100%; }
   .jobs-feedback-label { margin-inline-start: 7px; }
-  .jobs-filter-main, .jobs-filter-advanced { grid-template-columns: minmax(0, 1fr); }
+  .jobs-filter-main { grid-template-columns: minmax(0, 1fr); }
   .jobs-filter-actions .ant-btn-primary { flex: 1; }
   .jobs-pagination-controls { flex-wrap: wrap; }
   .jobs-pagination-controls .ant-btn { padding-inline: 10px; }
   .jobs-selection { padding: 12px; }
 }
+
+.repository-trigger-options { display: grid; gap: 10px; padding-block: 4px; }
+.form-grid .repository-trigger-options .ant-checkbox-wrapper { display: inline-flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 0; margin: 0; font-weight: 400; }

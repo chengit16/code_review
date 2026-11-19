@@ -18,7 +18,7 @@ for (const width of [1440, 768, 390, 320]) {
     await expect(row.getByLabel(/^问题处置/)).toHaveCount(0);
     await expect(row).not.toContainText("待处理");
     await expect(row).toContainText("仅当前已发现范围");
-    await expect(page.getByRole("columnheader", { name: "操作", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "操作", exact: true })).toHaveCount(width >= 768 ? 1 : 0);
     const checkbox = row.getByRole("checkbox");
     await checkbox.check();
     await expect(page).toHaveURL("/jobs?page_size=25&target_branch=main");

@@ -36,7 +36,7 @@ def connection_fingerprint(
                              "FROM notification_targets WHERE id=?",
                              (notification_target_id,)).fetchone()
     else:
-        row = db.execute("SELECT gitlab_url,project_id,remote_url,target_branch,"
+        row = db.execute("SELECT gitlab_url,project_id,remote_url,target_branch,target_branches,"
                          "gitlab_token_ciphertext FROM repositories WHERE id=?",
                          (repository_id,)).fetchone()
     if row is None:

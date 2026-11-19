@@ -27,6 +27,7 @@ from ocr_manager.improvement_theme_migration import IMPROVEMENT_THEME_MIGRATION
 from ocr_manager.issue_disposition_migration import MIGRATION as ISSUE_DISPOSITION_MIGRATION
 from ocr_manager.maintenance_migration import MAINTENANCE_MIGRATION
 from ocr_manager.model_pricing import PRICING_MIGRATION
+from ocr_manager.multibranch_migration import MIGRATION as MULTIBRANCH_MIGRATION
 from ocr_manager.newline_filter_migration import NEWLINE_FILTER_MIGRATION
 from ocr_manager.onboarding_migration import MIGRATION as ONBOARDING_MIGRATION
 from ocr_manager.operation_migrations import FEEDBACK_MIGRATION, READINESS_MIGRATION, TASK_MIGRATION
@@ -34,6 +35,7 @@ from ocr_manager.premerge import PREMERGE_CONTEXT_MIGRATION, PREMERGE_MIGRATION
 from ocr_manager.project_limits import LIMITS_MIGRATION
 from ocr_manager.publication_migration import PUBLICATION_MIGRATION
 from ocr_manager.recovery_budget import MIGRATION as RECOVERY_BUDGET_MIGRATION
+from ocr_manager.repository_branches import branches, normalize_branches
 from ocr_manager.review_diagnostic_import_migration import DIAGNOSTIC_IMPORT_MIGRATION
 from ocr_manager.review_effective_migration import EFFECTIVE_MIGRATION
 from ocr_manager.review_effectiveness import EFFECTIVENESS_MIGRATION
@@ -49,8 +51,9 @@ from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES, CONCURRENCY_MI
 from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
+from ocr_manager.unified_review_migration import MIGRATION as UNIFIED_REVIEW_MIGRATION
 
-SCHEMA_VERSION = 52
+SCHEMA_VERSION = 54
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -373,6 +376,8 @@ class Store:
                 (50, ISSUE_DISPOSITION_MIGRATION),
                 (51, FEEDBACK_VALUE_MIGRATION),
                 (52, ONBOARDING_MIGRATION),
+                (53, UNIFIED_REVIEW_MIGRATION),
+                (54, MULTIBRANCH_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -386,8 +391,11 @@ class Store:
             backfill_existing_issues(db)
 
     def enqueue_connection_check(
-        self, kind: str, repository_id: int | None,
-        model_profile_id: int | None = None, notification_target_id: int | None = None,
+        self,
+        kind: str,
+        repository_id: int | None,
+        model_profile_id: int | None = None,
+        notification_target_id: int | None = None,
     ) -> int | None:
         """诊断请求先持久化；同一目标只允许一个未完成检查。"""
 
@@ -397,7 +405,11 @@ class Store:
                 active = db.execute("SELECT id FROM model_profiles WHERE enabled=1").fetchone()
                 model_profile_id = active["id"] if active else None
             fingerprint = connection_fingerprint(
-                db, kind, repository_id, model_profile_id, notification_target_id,
+                db,
+                kind,
+                repository_id,
+                model_profile_id,
+                notification_target_id,
             )
             cursor = db.execute(
                 """INSERT OR IGNORE INTO connection_checks
@@ -405,8 +417,14 @@ class Store:
                  config_fingerprint, config_revision_id)
                 VALUES (?, ?, ?, ?, ?, (SELECT MAX(id) FROM config_revisions
                   WHERE object_type='repository' AND object_id=?))""",
-                (kind, repository_id, model_profile_id, notification_target_id,
-                 fingerprint, repository_id),
+                (
+                    kind,
+                    repository_id,
+                    model_profile_id,
+                    notification_target_id,
+                    fingerprint,
+                    repository_id,
+                ),
             )
             return cursor.lastrowid if cursor.rowcount else None
 
@@ -432,9 +450,11 @@ class Store:
             allowed = kinds or ("git", "gitlab", "model", "feishu")
             row = db.execute(
                 "SELECT * FROM connection_checks WHERE status='queued' AND kind IN ("
-                + ",".join("?" for _ in allowed) + f""") AND (kind<>'model'
+                + ",".join("?" for _ in allowed)
+                + f""") AND (kind<>'model'
                 OR repository_id IS NULL OR repository_id NOT IN ({BUSY_MODEL_REPOSITORIES}))
-                ORDER BY id LIMIT 1""", allowed,
+                ORDER BY id LIMIT 1""",
+                allowed,
             ).fetchone()
             if row:
                 db.execute("UPDATE connection_checks SET status='running' WHERE id=?", (row["id"],))
@@ -456,8 +476,13 @@ class Store:
             )
 
     def record_audit(
-        self, action: str, object_type: str, object_id: int | None, outcome: str,
-        actor_id: int | None = None, actor_name: str | None = None,
+        self,
+        action: str,
+        object_type: str,
+        object_id: int | None,
+        outcome: str,
+        actor_id: int | None = None,
+        actor_name: str | None = None,
         correlation_id: str = "",
     ) -> None:
         """仅记录操作元数据，绝不保存请求体、令牌或外部服务响应。"""
@@ -480,23 +505,37 @@ class Store:
         with self.connection() as db:
             db.execute("BEGIN")
             total = db.execute(f"SELECT COUNT(*) FROM audit_log {where}", args).fetchone()[0]
-            rows = db.execute(f"SELECT * FROM audit_log {where} ORDER BY id DESC LIMIT ? OFFSET ?",
-                              (*args, page_size, (page - 1) * page_size)).fetchall()
-        return {"items": [dict(row) for row in rows], "total": total,
-                "page": page, "page_size": page_size}
+            rows = db.execute(
+                f"SELECT * FROM audit_log {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+                (*args, page_size, (page - 1) * page_size),
+            ).fetchall()
+        return {
+            "items": [dict(row) for row in rows],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+        }
 
     def add_repository(self, values: dict[str, Any]) -> int:
         """持久化项目配置；调用方负责在写入前加密凭据。"""
 
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            values = dict(values)
+            selected = normalize_branches(
+                branches(values)
+            )
+            self._check_branch_overlap(db, values["gitlab_url"], values["project_id"], selected)
+            values["target_branch"] = selected[0]
+            values["target_branches"] = json.dumps(selected)
             cursor = db.execute(
                 """INSERT INTO repositories
-                (name, gitlab_url, project_id, remote_url, target_branch,
+                (name, gitlab_url, project_id, remote_url, target_branch, target_branches,
                  auth_kind, webhook_secret, feishu_webhook, feishu_target_id,
                  path_with_namespace, gitlab_token_ciphertext,
                  enable_merge_requests, enable_default_branch_pushes)
                 VALUES (:name, :gitlab_url, :project_id, :remote_url,
-                        :target_branch, :auth_kind, :webhook_secret,
+                        :target_branch, :target_branches, :auth_kind, :webhook_secret,
                         :feishu_webhook, :feishu_target_id,
                         :path_with_namespace, :gitlab_token_ciphertext,
                         :enable_merge_requests, :enable_default_branch_pushes)""",
@@ -513,20 +552,52 @@ class Store:
             )
             if cursor.lastrowid is None:
                 raise RuntimeError("仓库写入后未返回 ID")
+            if values.get("premerge_enabled"):
+                db.execute(
+                    "INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,1)",
+                    (cursor.lastrowid,),
+                )
             return cursor.lastrowid
+
+    @staticmethod
+    def _check_branch_overlap(
+        db: sqlite3.Connection,
+        origin: str,
+        project: int,
+        selected: list[str],
+        repository_id: int = -1,
+    ) -> None:
+        """同一 GitLab 项目的分支不能重叠接入，避免共享 webhook 无法唯一定位。"""
+
+        for row in db.execute(
+            "SELECT * FROM repositories WHERE gitlab_url=? AND project_id=? AND id!=?",
+            (origin, project, repository_id),
+        ):
+            if set(selected) & set(branches(dict(row))):
+                raise ValueError("目标分支已由该项目的另一条仓库配置订阅")
 
     def get_repository(self, repository_id: int) -> dict[str, Any] | None:
         """读取仓库配置供内部验证与 Worker 使用。"""
 
         with self.connection() as db:
-            row = db.execute("SELECT * FROM repositories WHERE id=?", (repository_id,)).fetchone()
+            row = db.execute(
+                "SELECT r.*,(SELECT enabled FROM premerge_settings WHERE repository_id=r.id) "
+                "AS premerge_enabled FROM repositories r WHERE id=?",
+                (repository_id,),
+            ).fetchone()
             return dict(row) if row else None
 
     def list_repositories(self) -> list[dict[str, Any]]:
         """列出仓库配置；对外响应必须额外移除密文字段。"""
 
         with self.connection() as db:
-            return [dict(row) for row in db.execute("SELECT * FROM repositories ORDER BY id")]
+            return [
+                dict(row)
+                for row in db.execute(
+                    "SELECT r.*,(SELECT enabled FROM premerge_settings WHERE repository_id=r.id) "
+                    "AS premerge_enabled FROM repositories r ORDER BY id"
+                )
+            ]
 
     def list_review_rules(self) -> list[dict[str, Any]]:
         """返回全局与项目规则，供管理台展示当前可编辑版本。"""
@@ -590,7 +661,8 @@ class Store:
 
         with self.connection() as db:
             return [
-                dict(row) for row in db.execute(
+                dict(row)
+                for row in db.execute(
                     """SELECT * FROM rule_previews WHERE repository_id=?
                     ORDER BY id DESC LIMIT 20""",
                     (repository_id,),
@@ -610,8 +682,11 @@ class Store:
             return dict(row) if row else None
 
     def finish_rule_preview(
-        self, preview_id: int, commit_sha: str | None,
-        output: str | None, error: str | None,
+        self,
+        preview_id: int,
+        commit_sha: str | None,
+        output: str | None,
+        error: str | None,
     ) -> None:
         """结果与提交 SHA 一起落库；删除项目后迟到结果不得重建记录。"""
 
@@ -623,14 +698,19 @@ class Store:
             )
 
     def _write_review_rule(
-        self, db: sqlite3.Connection, repository_id: int | None,
-        content: str | None, restored_from: int | None = None,
+        self,
+        db: sqlite3.Connection,
+        repository_id: int | None,
+        content: str | None,
+        restored_from: int | None = None,
     ) -> bool:
         """在调用方事务内核对活动任务并保存当前配置与历史版本。"""
 
-        if repository_id is not None and db.execute(
-            "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
-        ).fetchone() is None:
+        if (
+            repository_id is not None
+            and db.execute("SELECT 1 FROM repositories WHERE id=?", (repository_id,)).fetchone()
+            is None
+        ):
             raise LookupError("仓库不存在")
         active = db.execute(
             """SELECT 1 FROM review_jobs WHERE status IN ('queued','running')
@@ -663,8 +743,12 @@ class Store:
         db.execute(
             """INSERT INTO review_rule_revisions(repository_id, content, action, restored_from)
             VALUES (?, ?, ?, ?)""",
-            (repository_id, content, "restored" if restored_from else
-             "saved" if content is not None else "deleted", restored_from),
+            (
+                repository_id,
+                content,
+                "restored" if restored_from else "saved" if content is not None else "deleted",
+                restored_from,
+            ),
         )
         return True
 
@@ -692,6 +776,14 @@ class Store:
     def update_repository(self, repository_id: int, values: dict[str, Any]) -> bool:
         """项目身份有历史后冻结；来源变化必须等待当前事件和评审结束。"""
 
+        values = dict(values)
+        premerge_enabled = values.pop("premerge_enabled", None)
+        if "target_branches" in values or "target_branch" in values:
+            selected = normalize_branches(
+                branches(values)
+            )
+            values["target_branch"] = selected[0]
+            values["target_branches"] = json.dumps(selected)
         allowed = {
             "name",
             "gitlab_url",
@@ -699,6 +791,7 @@ class Store:
             "remote_url",
             "path_with_namespace",
             "target_branch",
+            "target_branches",
             "enabled",
             "auth_kind",
             "webhook_secret",
@@ -709,6 +802,11 @@ class Store:
             "enable_merge_requests",
             "enable_default_branch_pushes",
         }
+        if not values and premerge_enabled is not None:
+            current_repository = self.get_repository(repository_id)
+            if current_repository is None:
+                return False
+            values = {"enabled": current_repository["enabled"]}
         if not values or not values.keys() <= allowed:
             raise ValueError("仓库更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
@@ -719,16 +817,25 @@ class Store:
                 "remote_url",
                 "path_with_namespace",
                 "target_branch",
+                "target_branches",
             }
             if source_fields & values.keys():
                 # 先取得写锁，防止检查队列状态与更新来源之间插入 Webhook 事件。
                 db.execute("BEGIN IMMEDIATE")
                 current = db.execute(
                     """SELECT gitlab_url, project_id, remote_url, path_with_namespace,
-                    target_branch, last_webhook_at FROM repositories WHERE id=?""",
+                    target_branch, target_branches, last_webhook_at FROM repositories WHERE id=?""",
                     (repository_id,),
                 ).fetchone()
                 if current:
+                    if "target_branches" in values:
+                        self._check_branch_overlap(
+                            db,
+                            values.get("gitlab_url", current["gitlab_url"]),
+                            values.get("project_id", current["project_id"]),
+                            json.loads(values["target_branches"]),
+                            repository_id,
+                        )
                     changed = {
                         key for key in source_fields & values.keys() if values[key] != current[key]
                     }
@@ -758,6 +865,12 @@ class Store:
                 f"UPDATE repositories SET {assignments} WHERE id=?",
                 (*values.values(), repository_id),
             )
+            if premerge_enabled is not None:
+                db.execute(
+                    "INSERT INTO premerge_settings(repository_id,enabled) VALUES(?,?) "
+                    "ON CONFLICT(repository_id) DO UPDATE SET enabled=excluded.enabled",
+                    (repository_id, premerge_enabled),
+                )
             return cursor.rowcount == 1
 
     def clear_feishu_webhook(self, repository_id: int) -> bool:
@@ -824,11 +937,15 @@ class Store:
         """删除项目及其关联事件、评审、通知和连接测试记录。"""
 
         with self.connection() as db:
-            db.execute("""INSERT OR IGNORE INTO orphan_artifacts(job_id)
-                       SELECT id FROM review_jobs WHERE repository_id=?""", (repository_id,))
+            db.execute(
+                """INSERT OR IGNORE INTO orphan_artifacts(job_id)
+                       SELECT id FROM review_jobs WHERE repository_id=?""",
+                (repository_id,),
+            )
             db.execute(
                 """DELETE FROM review_feedback WHERE job_id IN
-                (SELECT id FROM review_jobs WHERE repository_id=?)""", (repository_id,)
+                (SELECT id FROM review_jobs WHERE repository_id=?)""",
+                (repository_id,),
             )
             db.execute("DELETE FROM project_policies WHERE repository_id=?", (repository_id,))
             db.execute(
@@ -864,15 +981,17 @@ class Store:
             raise ValueError("通知级别无效")
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            if db.execute(
-                "SELECT 1 FROM repositories WHERE id=?", (repository_id,)
-            ).fetchone() is None:
+            if (
+                db.execute("SELECT 1 FROM repositories WHERE id=?", (repository_id,)).fetchone()
+                is None
+            ):
                 raise LookupError("仓库不存在")
             if db.execute(
                 """SELECT 1 FROM merge_events WHERE repository_id=?
                 AND status IN ('queued','running')
                 UNION ALL SELECT 1 FROM review_jobs WHERE repository_id=?
-                AND status IN ('queued','running') LIMIT 1""", (repository_id, repository_id),
+                AND status IN ('queued','running') LIMIT 1""",
+                (repository_id, repository_id),
             ).fetchone():
                 raise ValueError("有待处理事件或评审任务，请完成后再修改通知级别")
             db.execute(
@@ -889,8 +1008,10 @@ class Store:
         from ocr_manager.review_feedback_queries import CURRENT_FEEDBACK
 
         with self.connection() as db:
-            return [dict(row) for row in db.execute(
-                f"""SELECT r.id AS repository_id, r.name AS repository_name,
+            return [
+                dict(row)
+                for row in db.execute(
+                    f"""SELECT r.id AS repository_id, r.name AS repository_name,
                 COALESCE(p.minimum_severity, 'medium') AS minimum_severity,
                 SUM(CASE WHEN f.verdict IN ('helpful','false_positive','ignored')
                     THEN 1 ELSE 0 END) AS total,
@@ -901,10 +1022,15 @@ class Store:
                 LEFT JOIN review_jobs j ON j.repository_id=r.id
                 LEFT JOIN ({CURRENT_FEEDBACK}) f ON f.job_id=j.id
                 GROUP BY r.id ORDER BY r.name, r.id"""
-            )]
+                )
+            ]
 
     def set_review_feedback(
-        self, job_id: int, comment_index: int, verdict: str, actor: str = "系统",
+        self,
+        job_id: int,
+        comment_index: int,
+        verdict: str,
+        actor: str = "系统",
     ) -> None:
         """终态反馈及稳定身份镜像同事务提交；价值反馈不修改共享问题处置。"""
 
@@ -922,9 +1048,12 @@ class Store:
             result = json.loads(row["result_json"]) if row["result_json"] else {}
             comments = result.get("comments") if isinstance(result, dict) else None
             if (
-                not isinstance(comment_index, int) or isinstance(comment_index, bool)
-                or comment_index < 0 or not isinstance(comments, list)
-                or comment_index >= len(comments) or not isinstance(comments[comment_index], dict)
+                not isinstance(comment_index, int)
+                or isinstance(comment_index, bool)
+                or comment_index < 0
+                or not isinstance(comments, list)
+                or comment_index >= len(comments)
+                or not isinstance(comments[comment_index], dict)
             ):
                 raise ValueError("发现序号无效")
             db.execute(
@@ -938,16 +1067,22 @@ class Store:
             mirror_initial_feedback(db, job_id, row["attempts"], comment_index, verdict, actor)
 
     def clear_review_feedback(
-        self, job_id: int, comment_index: int, actor: str = "系统",
+        self,
+        job_id: int,
+        comment_index: int,
+        actor: str = "系统",
     ) -> bool:
         """只撤销价值反馈及镜像；已有问题决定及历史审计不撤销。"""
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            deleted = db.execute(
-                "DELETE FROM review_feedback WHERE job_id=? AND comment_index=?",
-                (job_id, comment_index),
-            ).rowcount == 1
+            deleted = (
+                db.execute(
+                    "DELETE FROM review_feedback WHERE job_id=? AND comment_index=?",
+                    (job_id, comment_index),
+                ).rowcount
+                == 1
+            )
             row = db.execute("SELECT attempts FROM review_jobs WHERE id=?", (job_id,)).fetchone()
             if deleted and row is not None:
                 from ocr_manager.review_finding_feedback import mirror_initial_feedback
@@ -965,9 +1100,14 @@ class Store:
             )
 
     def record_webhook_diagnostic(
-        self, repository_id: int | None, claimed_project_id: int | None,
-        claimed_branch: str | None, event_kind: str, outcome: str,
-        reason: str, http_status: int,
+        self,
+        repository_id: int | None,
+        claimed_project_id: int | None,
+        claimed_branch: str | None,
+        event_kind: str,
+        outcome: str,
+        reason: str,
+        http_status: int,
     ) -> None:
         """仅保留有限数量的脱敏投递元数据，不保存请求体、标头或令牌。"""
 
@@ -976,8 +1116,15 @@ class Store:
                 """INSERT INTO webhook_diagnostics
                 (repository_id, claimed_project_id, claimed_branch, event_kind,
                  outcome, reason, http_status) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (repository_id, claimed_project_id, claimed_branch, event_kind,
-                 outcome, reason, http_status),
+                (
+                    repository_id,
+                    claimed_project_id,
+                    claimed_branch,
+                    event_kind,
+                    outcome,
+                    reason,
+                    http_status,
+                ),
             )
             # 公网回调会收到无效请求；固定保留上限防止诊断表无限增长。
             db.execute(
@@ -991,7 +1138,8 @@ class Store:
 
         with self.connection() as db:
             return [
-                dict(row) for row in db.execute(
+                dict(row)
+                for row in db.execute(
                     "SELECT * FROM webhook_diagnostics ORDER BY id DESC LIMIT 100"
                 )
             ]
@@ -1004,33 +1152,60 @@ class Store:
         merge_sha: str | None,
         squash_sha: str | None,
         correlation_id: str | None = None,
+        target_branch: str | None = None,
     ) -> bool:
         """以 MR 和投递 ID 双重去重，成功保存才允许向 GitLab 确认。"""
 
         with self.connection() as db:
             cursor = db.execute(
                 """INSERT OR IGNORE INTO merge_events
-                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha, correlation_id)
-                VALUES (?, ?, ?, ?, ?, ?)""",
                 (repository_id, mr_iid, delivery_id, merge_sha, squash_sha,
-                 correlation_id or uuid.uuid4().hex),
+                 correlation_id,target_branch)
+                VALUES (?, ?, ?, ?, ?, ?,
+                  COALESCE(?,(SELECT target_branch FROM repositories WHERE id=?)))""",
+                (
+                    repository_id,
+                    mr_iid,
+                    delivery_id,
+                    merge_sha,
+                    squash_sha,
+                    correlation_id or uuid.uuid4().hex,
+                    target_branch,
+                    repository_id,
+                ),
             )
             return cursor.rowcount == 1
 
     def add_push_event(
-        self, repository_id: int, before_sha: str, after_sha: str, delivery_id: str | None,
+        self,
+        repository_id: int,
+        before_sha: str,
+        after_sha: str,
+        delivery_id: str | None,
         correlation_id: str | None = None,
+        target_branch: str | None = None,
     ) -> bool:
         """复用事件队列保存 Push；负 IID 仅作内部区分，提交范围以后端 Git 为准。"""
 
-        synthetic_iid = -(int(hashlib.sha256(after_sha.encode()).hexdigest()[:15], 16) + 1)
+        identity = f"{target_branch}:{before_sha}:{after_sha}" if target_branch else after_sha
+        synthetic_iid = -(int(hashlib.sha256(identity.encode()).hexdigest()[:15], 16) + 1)
         with self.connection() as db:
             cursor = db.execute(
                 """INSERT OR IGNORE INTO merge_events
-                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha, correlation_id)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (repository_id, synthetic_iid, delivery_id, after_sha, before_sha,
-                 correlation_id or uuid.uuid4().hex),
+                (repository_id, mr_iid, delivery_id, merge_sha, squash_sha,
+                 correlation_id, source,target_branch)
+                VALUES (?, ?, ?, ?, ?, ?, 'push',
+                  COALESCE(?,(SELECT target_branch FROM repositories WHERE id=?)))""",
+                (
+                    repository_id,
+                    synthetic_iid,
+                    delivery_id,
+                    after_sha,
+                    before_sha,
+                    correlation_id or uuid.uuid4().hex,
+                    target_branch,
+                    repository_id,
+                ),
             )
             return cursor.rowcount == 1
 
@@ -1093,12 +1268,25 @@ class Store:
         snapshots: dict[str, tuple[str, str]],
         error: str | None,
         base_sha: str | None = None,
+        range_bases: dict[str, str] | None = None,
+        reused_jobs: list[int] | None = None,
+        reuse_evidence: dict[str, Any] | None = None,
     ) -> None:
         """在同一事务写入所有提交任务及事件末态；项目已删除时直接结束。"""
 
         if base_sha is not None and (commits is None or len(commits) != 1):
             raise ValueError("范围评审必须且只能对应一个目标提交")
         with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            for job_id in reused_jobs or []:
+                if not db.execute("SELECT 1 FROM review_jobs WHERE id=?", (job_id,)).fetchone():
+                    raise ValueError("对应任务已删除，请核实范围")
+                db.execute(
+                    "INSERT OR IGNORE INTO review_event_links"
+                    "(event_id,job_id,relation,evidence_json) "
+                    "VALUES(?,?,'reused',?)",
+                    (event_id, job_id, json.dumps(reuse_evidence or {})),
+                )
             if commits is not None:
                 event = db.execute("SELECT * FROM merge_events WHERE id=?", (event_id,)).fetchone()
                 if event is None:
@@ -1113,25 +1301,40 @@ class Store:
                         """INSERT OR IGNORE INTO review_jobs
                         (id, repository_id, event_id, mr_iid, commit_sha, base_sha, ordinal,
                          config_hash, rule_digest, correlation_id, target_branch,
-                         notification_min_severity)
+                         notification_min_severity,source)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
                           COALESCE((SELECT correlation_id FROM merge_events WHERE id=?), ''),
-                          (SELECT target_branch FROM repositories WHERE id=?),
+                          COALESCE(NULLIF((SELECT target_branch FROM merge_events WHERE id=?),''),
+                            (SELECT target_branch FROM repositories WHERE id=?)),
                           COALESCE((SELECT minimum_severity FROM project_policies
-                            WHERE repository_id=?), 'medium'))""",
+                            WHERE repository_id=?), 'medium'),?)""",
                         (
                             allocated,
                             event["repository_id"],
                             event_id,
                             event["mr_iid"],
                             commit_sha,
-                            base_sha,
+                            (range_bases or {}).get(commit_sha, base_sha),
                             ordinal,
                             snapshot_hash,
                             rule_digest,
                             event_id,
+                            event_id,
                             event["repository_id"],
                             event["repository_id"],
+                            "push" if event["mr_iid"] < 0 else "mr",
+                        ),
+                    )
+                    db.execute(
+                        "INSERT OR IGNORE INTO review_event_links(event_id,job_id,relation) "
+                        "SELECT ?,id,'created' FROM review_jobs WHERE repository_id=? "
+                        "AND mr_iid=? AND commit_sha=? AND config_hash=?",
+                        (
+                            event_id,
+                            event["repository_id"],
+                            event["mr_iid"],
+                            commit_sha,
+                            snapshot_hash,
                         ),
                     )
             db.execute(
@@ -1174,8 +1377,14 @@ class Store:
             return [dict(row) for row in db.execute("SELECT * FROM model_profiles ORDER BY id")]
 
     def add_model_profile(
-        self, name: str, provider: str, model: str, base_url: str, ciphertext: str,
-        currency: str = "CNY", input_price: str | None = None,
+        self,
+        name: str,
+        provider: str,
+        model: str,
+        base_url: str,
+        ciphertext: str,
+        currency: str = "CNY",
+        input_price: str | None = None,
         output_price: str | None = None,
     ) -> int:
         """新增模型不影响运行任务；明确启用后才参与新任务快照。"""
@@ -1219,8 +1428,16 @@ class Store:
     def update_model_profile(self, profile_id: int, values: dict[str, str | None]) -> bool:
         """始终保存模型编辑；执行前的快照检查阻止在途任务静默切换配置。"""
 
-        allowed = {"name", "provider", "model", "base_url", "api_key_ciphertext",
-                   "price_currency", "input_price_per_million", "output_price_per_million"}
+        allowed = {
+            "name",
+            "provider",
+            "model",
+            "base_url",
+            "api_key_ciphertext",
+            "price_currency",
+            "input_price_per_million",
+            "output_price_per_million",
+        }
         if not values or not values.keys() <= allowed:
             raise ValueError("模型更新字段无效")
         assignments = ", ".join(f"{field}=?" for field in values)
@@ -1231,8 +1448,9 @@ class Store:
             if profile is None:
                 return False
             changes_review = any(
-                field not in {"price_currency", "input_price_per_million",
-                              "output_price_per_million"} and value != profile[field]
+                field
+                not in {"price_currency", "input_price_per_million", "output_price_per_million"}
+                and value != profile[field]
                 for field, value in values.items()
             )
             db.execute(
@@ -1253,8 +1471,9 @@ class Store:
                 return False
             if row["enabled"]:
                 raise ValueError("请先启用其他模型")
-            if db.execute("SELECT 1 FROM project_review_limits WHERE model_profile_id=?",
-                          (profile_id,)).fetchone():
+            if db.execute(
+                "SELECT 1 FROM project_review_limits WHERE model_profile_id=?", (profile_id,)
+            ).fetchone():
                 raise ValueError("模型已关联项目，请先解除关联")
             db.execute("DELETE FROM model_profiles WHERE id=?", (profile_id,))
             return True
@@ -1267,8 +1486,15 @@ class Store:
             row = db.execute(
                 f"""SELECT j.* FROM review_jobs j
                 JOIN repositories r ON r.id=j.repository_id
-                WHERE j.status='queued' AND r.enabled=1
+                WHERE j.status='queued' AND r.enabled=1 AND j.superseded=0
+                AND (j.source!='premerge' OR EXISTS(SELECT 1 FROM premerge_settings s
+                    WHERE s.repository_id=j.repository_id AND s.enabled=1))
                 AND j.next_run_at<=CURRENT_TIMESTAMP
+                AND NOT EXISTS (SELECT 1 FROM review_recoveries b JOIN review_jobs root
+                    ON root.id=b.job_id WHERE root.repository_id=j.repository_id
+                    AND b.status='queued' AND j.source='premerge'
+                    AND (SELECT next_kind FROM review_recovery_fairness
+                    WHERE id=1)='recovery')
                 AND j.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
                 AND NOT EXISTS (
                   SELECT 1 FROM merge_events earlier
@@ -1278,7 +1504,9 @@ class Store:
                 AND NOT EXISTS (
                   SELECT 1 FROM review_jobs earlier_job
                   WHERE earlier_job.repository_id=j.repository_id
-                  AND earlier_job.event_id<j.event_id
+                  AND earlier_job.event_id<j.event_id AND earlier_job.superseded=0
+                  AND (earlier_job.source!='premerge' OR EXISTS(SELECT 1 FROM premerge_settings s
+                    WHERE s.repository_id=earlier_job.repository_id AND s.enabled=1))
                   AND earlier_job.status IN ('queued','running')
                 )
                 AND NOT EXISTS (
@@ -1324,8 +1552,10 @@ class Store:
             # 2. 取消优先于迟到结果；终态和独立投递、发布任务在同一事务写入。
             if job["cancel_requested"]:
                 status, result_path, projection, error = "cancelled", None, None, "用户请求停止评审"
-            db.execute("UPDATE review_jobs SET reason_code=? WHERE id=?",
-                       (reason_code(status, projection, error), job_id))
+            db.execute(
+                "UPDATE review_jobs SET reason_code=? WHERE id=?",
+                (reason_code(status, projection, error), job_id),
+            )
             db.execute(
                 """UPDATE review_jobs SET status=?, result_path=?, result_json=?, error=?,
                 finished_at=CURRENT_TIMESTAMP,
@@ -1343,40 +1573,62 @@ class Store:
             if status != "cancelled":
                 db.execute(
                     """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
-                    SELECT id, correlation_id FROM review_jobs WHERE id=?""", (job_id,)
+                    SELECT id, correlation_id FROM review_jobs WHERE id=?""",
+                    (job_id,),
                 )
             if status in {"complete", "partial"} and projection:
                 comments = projection.get("comments")
                 findings = comments if isinstance(comments, list) else []
                 capture_findings(db, dict(job), findings)
-                enabled = db.execute("""SELECT enabled FROM gitlab_publication_settings
+                enabled = db.execute(
+                    """SELECT enabled FROM gitlab_publication_settings
                     WHERE repository_id=(SELECT repository_id FROM review_jobs WHERE id=?)""",
-                    (job_id,)).fetchone()
+                    (job_id,),
+                ).fetchone()
                 mr = db.execute("SELECT mr_iid FROM review_jobs WHERE id=?", (job_id,)).fetchone()
                 if enabled and enabled["enabled"] and mr and mr["mr_iid"] > 0:
                     for index, _comment in enumerate(findings):
-                        db.execute("""INSERT OR IGNORE INTO gitlab_publications
+                        db.execute(
+                            """INSERT OR IGNORE INTO gitlab_publications
                             (job_id,attempt_number,comment_index) VALUES(?,?,?)""",
-                            (job_id, job["attempts"], index))
+                            (job_id, job["attempts"], index),
+                        )
             # 3. 保存本次用量与尝试证据，不能用后续重试覆盖本次事实。
             usage = projection.get("usage") if projection else None
-            db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
-                       (json.dumps(usage) if usage else None, job_id))
+            db.execute(
+                "UPDATE review_jobs SET usage_json=? WHERE id=?",
+                (json.dumps(usage) if usage else None, job_id),
+            )
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, result_path, error, failure_stage,
                  config_snapshot, result_json, changed_files, started_at, correlation_id)
                 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, correlation_id
                 FROM review_jobs WHERE id=?""",
-                (job_id, job["attempts"], status, result_path, error,
-                 job["failure_stage"] if status in {"failed", "partial"} else None,
-                 job["config_snapshot"], json.dumps(projection, ensure_ascii=False)
-                 if projection is not None else None, job["changed_files"], job["started_at"],
-                 job_id),
+                (
+                    job_id,
+                    job["attempts"],
+                    status,
+                    result_path,
+                    error,
+                    job["failure_stage"] if status in {"failed", "partial"} else None,
+                    job["config_snapshot"],
+                    json.dumps(projection, ensure_ascii=False) if projection is not None else None,
+                    job["changed_files"],
+                    job["started_at"],
+                    job_id,
+                ),
             )
 
-    def defer_job(self, job_id: int, error: str, *, delay_seconds: int | None = None,
-                  result_path: str | None = None, result: dict[str, Any] | None = None) -> None:
+    def defer_job(
+        self,
+        job_id: int,
+        error: str,
+        *,
+        delay_seconds: int | None = None,
+        result_path: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> None:
         """按快照预算有限退避；保留可信失败结果，取消与项目删除不能触发重试。"""
 
         # 1. 在事务内重读任务及周期次数，不能仅依赖 Worker 先前领取的状态。
@@ -1399,39 +1651,61 @@ class Store:
             if projection and isinstance(projection.get("diagnostic"), dict):
                 projection["diagnostic"]["retry_scheduled"] = not final
             projected_json = json.dumps(projection, ensure_ascii=False) if projection else None
-            delay = (min(300, cycle_attempt * cycle_attempt * 20)
-                     if delay_seconds is None else delay_seconds)
-            db.execute("UPDATE review_jobs SET reason_code=? WHERE id=?",
-                       (reason_code("cancelled" if cancelled else "failed", projection, error),
-                        job_id))
+            delay = (
+                min(300, cycle_attempt * cycle_attempt * 20)
+                if delay_seconds is None
+                else delay_seconds
+            )
+            db.execute(
+                "UPDATE review_jobs SET reason_code=? WHERE id=?",
+                (reason_code("cancelled" if cancelled else "failed", projection, error), job_id),
+            )
             # 2. 排队决定、失败证据和实际用量同步写回，取消不保留迟到结果。
             db.execute(
                 """UPDATE review_jobs SET status=?, error=?,
                 next_run_at=datetime('now', printf('+%d seconds', ?)),
                 result_path=?,result_json=?,
                 finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?""",
-                ("cancelled" if cancelled else "failed" if final else "queued",
-                 "用户请求停止评审" if cancelled else error[:500], delay,
-                 result_path, projected_json, final or cancelled, job_id),
+                (
+                    "cancelled" if cancelled else "failed" if final else "queued",
+                    "用户请求停止评审" if cancelled else error[:500],
+                    delay,
+                    result_path,
+                    projected_json,
+                    final or cancelled,
+                    job_id,
+                ),
             )
             usage = projection.get("usage") if projection and not cancelled else None
-            db.execute("UPDATE review_jobs SET usage_json=? WHERE id=?",
-                       (json.dumps(usage) if usage else None, job_id))
+            db.execute(
+                "UPDATE review_jobs SET usage_json=? WHERE id=?",
+                (json.dumps(usage) if usage else None, job_id),
+            )
             db.execute(
                 """INSERT INTO review_attempts
                 (job_id, attempt_number, status, error, failure_stage,
                  config_snapshot, changed_files, started_at, correlation_id,result_path,result_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (job_id, attempts, "cancelled" if cancelled else "failed",
-                 "用户请求停止评审" if cancelled else error[:500],
-                 job["failure_stage"], job["config_snapshot"], job["changed_files"],
-                 job["started_at"], job["correlation_id"], result_path, projected_json),
+                (
+                    job_id,
+                    attempts,
+                    "cancelled" if cancelled else "failed",
+                    "用户请求停止评审" if cancelled else error[:500],
+                    job["failure_stage"],
+                    job["config_snapshot"],
+                    job["changed_files"],
+                    job["started_at"],
+                    job["correlation_id"],
+                    result_path,
+                    projected_json,
+                ),
             )
             # 3. 只在最终失败建立独立通知；退避中的尝试不产生重复投递。
             if final and not cancelled:
                 db.execute(
                     """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
-                    SELECT id, correlation_id FROM review_jobs WHERE id=?""", (job_id,)
+                    SELECT id, correlation_id FROM review_jobs WHERE id=?""",
+                    (job_id,),
                 )
 
     def list_jobs(self) -> list[dict[str, Any]]:
@@ -1464,6 +1738,15 @@ class Store:
             if not row:
                 return None
             result = dict(row)
+            result["event_links"] = [
+                dict(link)
+                for link in db.execute(
+                    "SELECT e.id,e.source,e.created_at,l.relation,l.evidence_json "
+                    "FROM review_event_links l JOIN merge_events e ON e.id=l.event_id "
+                    "WHERE l.job_id=? ORDER BY e.id",
+                    (job_id,),
+                )
+            ]
             raw_result = result.pop("result_json")
             if raw_result:
                 # 原始工件可能包含模型推理内容，管理 API 只提供页面必需的投影。
@@ -1522,22 +1805,31 @@ class Store:
                 (job_id,),
             ).fetchone()
             result["delivery"] = dict(delivery) if delivery else None
-            result["publications"] = [dict(item) for item in db.execute(
-                "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
-                (job_id,))]
-            issues = db.execute("""SELECT o.comment_index,o.issue_id,i.status
+            result["publications"] = [
+                dict(item)
+                for item in db.execute(
+                    "SELECT * FROM gitlab_publications WHERE job_id=? ORDER BY comment_index",
+                    (job_id,),
+                )
+            ]
+            issues = db.execute(
+                """SELECT o.comment_index,o.issue_id,i.status
                 FROM review_issue_occurrences o JOIN review_issue_states i ON i.id=o.issue_id
                 WHERE o.job_id=? AND o.attempt_number=? AND o.recovery_id IS NULL""",
-                (job_id, result["attempts"])).fetchall()
+                (job_id, result["attempts"]),
+            ).fetchall()
             result["issue_ids"] = {
-                int(row["comment_index"]): int(row["issue_id"])
-                for row in issues
+                int(row["comment_index"]): int(row["issue_id"]) for row in issues
             }
             result["issue_statuses"] = {
                 int(row["comment_index"]): str(row["status"]) for row in issues
             }
-            result["stage_timings"] = [dict(stage) for stage in db.execute(
-                "SELECT * FROM review_stage_timings WHERE job_id=? ORDER BY id", (job_id,))]
+            result["stage_timings"] = [
+                dict(stage)
+                for stage in db.execute(
+                    "SELECT * FROM review_stage_timings WHERE job_id=? ORDER BY id", (job_id,)
+                )
+            ]
             enrich_jobs(db, [result], include_scope_paths=True)
             attach_task_facts(db, [result], detail=True)
             return result
@@ -1556,18 +1848,25 @@ class Store:
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             old = db.execute("SELECT * FROM review_jobs WHERE id=?", (job_id,)).fetchone()
-            if old is None or old["status"] not in (
-                "complete", "partial", "failed", "skipped", "cancelled"
+            if (
+                old is None
+                or old["superseded"]
+                or old["status"] not in ("complete", "partial", "failed", "skipped", "cancelled")
             ):
                 return None
-            if db.execute("SELECT 1 FROM review_recoveries WHERE job_id=? AND "
-                          "status IN ('queued','running')", (job_id,)).fetchone():
+            if db.execute(
+                "SELECT 1 FROM review_recoveries WHERE job_id=? AND status IN ('queued','running')",
+                (job_id,),
+            ).fetchone():
                 return None
             # 独立投递槽可能仍在发送旧结果；重评审不能删除或复用其投递身份。
-            if db.execute("""SELECT 1 FROM notification_deliveries
+            if db.execute(
+                """SELECT 1 FROM notification_deliveries
                 WHERE job_id=? AND status='sending' UNION ALL
                 SELECT 1 FROM gitlab_publications
-                WHERE job_id=? AND status='sending' LIMIT 1""", (job_id, job_id)).fetchone():
+                WHERE job_id=? AND status='sending' LIMIT 1""",
+                (job_id, job_id),
+            ).fetchone():
                 return None
             if config_hash and config_hash != old["config_hash"]:
                 allocated = db.execute("INSERT INTO job_identity DEFAULT VALUES").lastrowid
@@ -1575,10 +1874,10 @@ class Store:
                     """INSERT OR IGNORE INTO review_jobs
                     (id, repository_id, event_id, mr_iid, commit_sha, commit_author,
                      base_sha, ordinal, config_hash, rule_digest, correlation_id, target_branch,
-                     notification_min_severity)
+                     notification_min_severity,source,context_hint,context_json,mr_state,execution_policy)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                       (SELECT minimum_severity FROM project_policies WHERE repository_id=?),
-                      'medium'))""",
+                      'medium'),?,?,?,?,?)""",
                     (
                         allocated,
                         old["repository_id"],
@@ -1593,9 +1892,45 @@ class Store:
                         old["correlation_id"],
                         old["target_branch"],
                         old["repository_id"],
+                        old["source"],
+                        old["context_hint"],
+                        old["context_json"],
+                        old["mr_state"],
+                        old["execution_policy"],
                     ),
                 )
+                if cursor.rowcount:
+                    db.execute(
+                        "INSERT INTO review_event_links(event_id,job_id,relation) "
+                        "VALUES(?,?,'manual_retry')",
+                        (old["event_id"], cursor.lastrowid),
+                    )
+                    if old["source"] == "premerge":
+                        from ocr_manager.premerge import premerge_policy
+
+                        db.execute(
+                            "UPDATE review_jobs SET execution_policy=? WHERE id=?",
+                            (premerge_policy(db, old["repository_id"]), cursor.lastrowid),
+                        )
+                        db.execute("UPDATE review_jobs SET superseded=1 WHERE id=?", (job_id,))
+                        db.execute(
+                            "UPDATE merged_review_ranges SET job_id=? WHERE job_id=?",
+                            (cursor.lastrowid, job_id),
+                        )
+                        db.execute(
+                            "UPDATE notification_deliveries SET status='failed',"
+                            "error='人工重评审已建立新任务' WHERE job_id=? "
+                            "AND status='pending'",
+                            (job_id,),
+                        )
                 return cursor.lastrowid if cursor.rowcount else None
+            if old["source"] == "premerge":
+                from ocr_manager.premerge import premerge_policy
+
+                db.execute(
+                    "UPDATE review_jobs SET execution_policy=? WHERE id=?",
+                    (premerge_policy(db, old["repository_id"]), job_id),
+                )
             cursor = db.execute(
                 """UPDATE review_jobs SET status='queued', error=NULL,
                 retry_start_attempts=attempts, cancel_requested=0,
@@ -1619,14 +1954,14 @@ class Store:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 """SELECT d.*, j.repository_id, j.commit_sha, j.commit_author, j.mr_iid,
-                j.status AS review_status, j.attempts AS review_attempt_number,
+                j.status AS review_status, j.attempts AS review_attempt_number,j.source,
                 j.result_json, j.error AS review_error, j.notification_min_severity,
-                r.name AS repository_name, r.path_with_namespace, r.target_branch,
+                r.name AS repository_name, r.path_with_namespace, j.target_branch,
                 r.gitlab_url, r.remote_url
                 FROM notification_deliveries d
                 JOIN review_jobs j ON j.id=d.job_id
                 JOIN repositories r ON r.id=j.repository_id
-                WHERE d.status='pending' AND r.enabled=1
+                WHERE d.status='pending' AND r.enabled=1 AND j.superseded=0
                 AND d.next_run_at<=CURRENT_TIMESTAMP
                 ORDER BY d.id LIMIT 1"""
             ).fetchone()
@@ -1703,10 +2038,13 @@ class Store:
                 FROM premerge_reviews WHERE status='running'""").fetchall()
             for review in premerge_running:
                 final = review["attempts"] >= attempt_limit(review["execution_policy"])
-                db.execute("""UPDATE premerge_reviews SET status=?,
+                db.execute(
+                    """UPDATE premerge_reviews SET status=?,
                     finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,
                     error='Worker 中断，合并前结果未确认',next_run_at=CURRENT_TIMESTAMP
-                    WHERE id=?""", ("failed" if final else "queued", final, review["id"]))
+                    WHERE id=?""",
+                    ("failed" if final else "queued", final, review["id"]),
+                )
             db.execute("UPDATE gitlab_publications SET status='pending' WHERE status='sending'")
             db.execute("""UPDATE mr_backfills SET status='queued' WHERE status='running'""")
             db.execute(
@@ -1734,31 +2072,53 @@ class Store:
             cancelled = db.execute("""SELECT * FROM review_jobs
                 WHERE status='running' AND cancel_requested=1""").fetchall()
             for job in cancelled:
-                db.execute("UPDATE review_jobs SET reason_code='cancelled' WHERE id=?",
-                           (job["id"],))
-                db.execute("""INSERT OR IGNORE INTO review_attempts
+                db.execute(
+                    "UPDATE review_jobs SET reason_code='cancelled' WHERE id=?", (job["id"],)
+                )
+                db.execute(
+                    """INSERT OR IGNORE INTO review_attempts
                     (job_id,attempt_number,status,error,started_at,config_snapshot,failure_stage,
                      correlation_id,changed_files)
                     VALUES(?,?,'cancelled','用户请求停止评审',?,?,?,?,?)""",
-                    (job["id"], job["attempts"], job["started_at"], job["config_snapshot"],
-                     job["failure_stage"], job["correlation_id"], job["changed_files"]))
-                db.execute("""UPDATE review_attempts SET reason_code='interrupted_cancelled'
-                    WHERE job_id=? AND attempt_number=?""", (job["id"], job["attempts"]))
+                    (
+                        job["id"],
+                        job["attempts"],
+                        job["started_at"],
+                        job["config_snapshot"],
+                        job["failure_stage"],
+                        job["correlation_id"],
+                        job["changed_files"],
+                    ),
+                )
+                db.execute(
+                    """UPDATE review_attempts SET reason_code='interrupted_cancelled'
+                    WHERE job_id=? AND attempt_number=?""",
+                    (job["id"], job["attempts"]),
+                )
             db.execute("""UPDATE review_jobs SET status='cancelled',
                        error='用户请求停止评审', finished_at=CURRENT_TIMESTAMP
                        WHERE status='running' AND cancel_requested=1""")
             for job in running:
-                final = (job["attempts"] - job["retry_start_attempts"] >=
-                         attempt_limit(job["config_snapshot"]))
-                db.execute("UPDATE review_jobs SET reason_code='interrupted' WHERE id=?",
-                           (job["id"],))
+                final = job["attempts"] - job["retry_start_attempts"] >= attempt_limit(
+                    job["config_snapshot"]
+                )
+                db.execute(
+                    "UPDATE review_jobs SET reason_code='interrupted' WHERE id=?", (job["id"],)
+                )
                 db.execute(
                     """INSERT OR IGNORE INTO review_attempts
                     (job_id, attempt_number, status, error, correlation_id,
                      config_snapshot,failure_stage,changed_files,started_at)
                     VALUES (?, ?, 'failed', 'Worker 中断，评审结果未确认', ?,?,?,?,?)""",
-                    (job["id"], job["attempts"], job["correlation_id"], job["config_snapshot"],
-                     job["failure_stage"], job["changed_files"], job["started_at"]),
+                    (
+                        job["id"],
+                        job["attempts"],
+                        job["correlation_id"],
+                        job["config_snapshot"],
+                        job["failure_stage"],
+                        job["changed_files"],
+                        job["started_at"],
+                    ),
                 )
                 db.execute(
                     """UPDATE review_jobs SET status=?, error='Worker 中断，评审结果未确认',
@@ -1768,8 +2128,11 @@ class Store:
                     ("failed" if final else "queued", final, job["id"]),
                 )
                 if not final:
-                    db.execute("""UPDATE review_attempts SET retry_ready_at=CURRENT_TIMESTAMP
-                        WHERE job_id=? AND attempt_number=?""", (job["id"], job["attempts"]))
+                    db.execute(
+                        """UPDATE review_attempts SET retry_ready_at=CURRENT_TIMESTAMP
+                        WHERE job_id=? AND attempt_number=?""",
+                        (job["id"], job["attempts"]),
+                    )
                 if final:
                     db.execute(
                         """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)

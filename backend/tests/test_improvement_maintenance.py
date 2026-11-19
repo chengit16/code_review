@@ -412,3 +412,21 @@ def test_no_applicable_and_clean_whitespace_are_eligible(settings: Settings) -> 
     _age(store)
     assert run_maintenance(store, settings).archived_records == 1
     assert get_improvement(store, identifier).deployment_state == "not_applicable"
+
+
+def test_known_legacy_log_states_preserve_text_without_promoting_evidence() -> None:
+    """只兼容明确旧枚举；不推断已解决、验证通过或部署确认，保留来源文字。"""
+
+    from ocr_manager.improvement_log_parser import LogEntry
+
+    states = '{"category":"quality","status":"in_progress"}'
+    entry = LogEntry("PI-20261113-999", "兼容测试", {
+        "现象或目标": "合成目标", "记录日期": "2026-11-13", "代码修改": "未修改",
+        "本地验证": "未运行", "部署生效": "未部署", "同步状态": states}, "synthetic")
+    content = entry_content(entry, None)
+    assert content.category == "other" and content.status == "investigating"
+    assert states in content.analysis
+    assert content.verification_state == "not_run" and content.deployment_state == "unknown"
+    entry.fields["同步状态"] = '{"category":"unknown-new-category"}'
+    with pytest.raises(ValueError):
+        entry_content(entry, None)

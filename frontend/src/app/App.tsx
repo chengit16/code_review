@@ -41,7 +41,6 @@ const navigation = [
     { to: "/", label: "项目总览", icon: LayoutDashboard, end: true },
     { to: "/jobs", label: "评审任务", icon: Activity },
     { to: "/findings", label: "评审发现", icon: TriangleAlert },
-    { to: "/premerge", label: "合并前审查", icon: GitPullRequest },
   ] },
   { heading: "运维与审计", links: [
     { to: "/operations", label: "运行监控", icon: Wrench },

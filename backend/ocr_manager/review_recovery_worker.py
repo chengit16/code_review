@@ -21,21 +21,30 @@ from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 
 
-def _frozen_source(store: Store, settings: Settings, task: dict[str, Any]) -> tuple[
-        dict[str, Any], dict[str, Any], dict[str, Any]]:
+def _frozen_source(
+    store: Store, settings: Settings, task: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     with store.connection() as db:
         db.execute("BEGIN")
-        row = db.execute("SELECT * FROM review_recoveries WHERE id=? AND status='running' "
-                         "AND execution_token=?", (task["id"], task["execution_token"])).fetchone()
+        row = db.execute(
+            "SELECT * FROM review_recoveries WHERE id=? AND status='running' AND execution_token=?",
+            (task["id"], task["execution_token"]),
+        ).fetchone()
         if row is None or row["cancel_requested"]:
             raise ReviewCancelled
         job, source, revision, _ = source_state(db, task["job_id"])
-        attempt = db.execute("SELECT * FROM review_attempts WHERE job_id=? AND attempt_number=?",
-                             (task["job_id"], task["source_attempt"])).fetchone()
-    if (job["attempts"] != task["source_attempt"] or revision != task["source_revision"]
-            or digest(source) != task["source_digest"] or attempt is None
-            or attempt["result_json"] != job["result_json"]
-            or attempt["config_snapshot"] != task["config_snapshot"]):
+        attempt = db.execute(
+            "SELECT * FROM review_attempts WHERE job_id=? AND attempt_number=?",
+            (task["job_id"], task["source_attempt"]),
+        ).fetchone()
+    if (
+        job["attempts"] != task["source_attempt"]
+        or revision != task["source_revision"]
+        or digest(source) != task["source_digest"]
+        or attempt is None
+        or attempt["result_json"] != job["result_json"]
+        or attempt["config_snapshot"] != task["config_snapshot"]
+    ):
         raise RecoveryConflict("source_changed")
     if current_hash(store, settings, job) != job["config_hash"]:
         raise RecoveryConflict("configuration_changed")
@@ -45,8 +54,12 @@ def _frozen_source(store: Store, settings: Settings, task: dict[str, Any]) -> tu
     try:
         resolved = path.resolve(strict=True)
         relative = resolved.relative_to(root)
-        if (not relative.parts or path.is_symlink() or resolved.name != "result.json"
-                or any(parent.is_symlink() for parent in path.parents)):
+        if (
+            not relative.parts
+            or path.is_symlink()
+            or resolved.name != "result.json"
+            or any(parent.is_symlink() for parent in path.parents)
+        ):
             raise ValueError
         with resolved.open("rb") as file:
             content = file.read(16 * 1024 * 1024 + 1)
@@ -84,54 +97,103 @@ def execute_recovery(store: Store, settings: Settings, task: dict[str, Any]) -> 
                 if snapshot_hash(snapshot) != job["config_hash"]:
                     raise RecoveryConflict("configuration_changed")
                 model_settings, model_version = review_settings(
-                    store, settings, job["repository_id"])
+                    store, settings, job["repository_id"]
+                )
                 # 摘要读取和凭据装配不是同一事务；核对实际设置，拒绝读取窗口中的配置漂移。
-                actual = {"provider": model_settings.ocr_provider,
+                actual = {
+                    "provider": model_settings.ocr_provider,
                     "model": model_settings.ocr_model,
-                    "base_url": model_settings.ocr_base_url, "model_version": model_version,
+                    "base_url": model_settings.ocr_base_url,
+                    "model_version": model_version,
                     "timeout_seconds": model_settings.ocr_timeout_seconds,
                     "review_language": model_settings.review_language,
                     "max_files": model_settings.ocr_max_files,
                     "max_tokens_budget": model_settings.ocr_max_tokens_budget,
                     "concurrency": model_settings.ocr_concurrency,
-                    "effort": model_settings.ocr_effort}
-                if (any(snapshot.get(key) != value for key, value in actual.items()) or
-                        snapshot["input_policy"]["filter_enabled"] !=
-                        model_settings.ocr_newline_filter_enabled):
+                    "effort": model_settings.ocr_effort,
+                }
+                if (
+                    any(snapshot.get(key) != value for key, value in actual.items())
+                    or snapshot["input_policy"]["filter_enabled"]
+                    != model_settings.ocr_newline_filter_enabled
+                ):
                     raise RecoveryConflict("configuration_changed")
-                model_settings = replace(model_settings, ocr_max_tokens_budget=task["token_budget"],
-                                         ocr_timeout_seconds=task["timeout_seconds"])
+                model_settings = replace(
+                    model_settings,
+                    ocr_max_tokens_budget=task["token_budget"],
+                    ocr_timeout_seconds=task["timeout_seconds"],
+                )
                 repository = store.get_repository(job["repository_id"])
                 if repository is None:
                     raise ReviewCancelled
                 if repository["gitlab_token_ciphertext"]:
                     repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
-                        repository["gitlab_token_ciphertext"])
+                        repository["gitlab_token_ciphertext"]
+                    )
                 # 2. 固定原始 SHA 和仓库规则；新 checkout 保留完整上下文，不伪造提交。
+                from ocr_manager.repository_branches import for_branch
+
+                repository = for_branch(repository, job.get("target_branch"))
                 git = GitRepository(settings.data_dir, repository)
                 git.fetch()
-                if (not git.is_on_target(job["commit_sha"]) or
-                        git.rule_digest(job["commit_sha"]) != job["rule_digest"] or
-                        job["base_sha"] is not None and
-                        not git.is_range_base(job["base_sha"], job["commit_sha"])):
+                background = None
+                premerge_client = None
+                if job.get("source") == "premerge":
+                    from ocr_manager.gitlab import GitLabClient
+                    from ocr_manager.unified_premerge import prepare
+
+                    premerge_client = GitLabClient(
+                        repository["gitlab_url"], repository["gitlab_token"]
+                    )
+                    _, background = prepare(store, repository, job, git, premerge_client)
+                if (
+                    (job.get("source") != "premerge" and not git.is_on_target(job["commit_sha"]))
+                    or git.rule_digest(job["commit_sha"]) != job["rule_digest"]
+                    or job["base_sha"] is not None
+                    and not git.is_range_base(job["base_sha"], job["commit_sha"])
+                ):
                     raise RecoveryConflict("git_input_changed")
-                git.checkout(job["commit_sha"], checkout)
-                scope = inspect_range(checkout, job["commit_sha"], job["base_sha"],
-                                      filter_enabled=model_settings.ocr_newline_filter_enabled)
+                git.checkout(
+                    (job["base_sha"] or job["commit_sha"])
+                    if premerge_client
+                    else job["commit_sha"],
+                    checkout,
+                )
+                scope = inspect_range(
+                    checkout,
+                    job["commit_sha"],
+                    job["base_sha"],
+                    filter_enabled=model_settings.ocr_newline_filter_enabled,
+                )
 
                 def before_stage(stage: str) -> None:
-                    if (stage == "review"
-                            and current_hash(store, settings, job) != job["config_hash"]):
+                    if (
+                        stage == "review"
+                        and current_hash(store, settings, job) != job["config_hash"]
+                    ):
                         raise RecoveryConflict("configuration_changed")
                     check_cancellation()
 
                 # 3. 双预览与正式 manifest 均须精确命中剩余集合；用量只属于本批次。
                 coverage = coverage_items(source)
-                _, child = run_review(model_settings, checkout, run_dir, job["commit_sha"],
-                    snapshot["global_rule"], snapshot["project_rule"], before_stage,
-                    base_sha=job["base_sha"], scope_analysis=scope,
-                    recovery_selection=(set(coverage["selected"]), set(coverage["failed"])))
+                _, child = run_review(
+                    model_settings,
+                    checkout,
+                    run_dir,
+                    job["commit_sha"],
+                    snapshot["global_rule"],
+                    snapshot["project_rule"],
+                    before_stage,
+                    base_sha=job["base_sha"],
+                    scope_analysis=scope,
+                    background=background,
+                    recovery_selection=(set(coverage["selected"]), set(coverage["failed"])),
+                )
                 check_cancellation()
+                if premerge_client:
+                    from ocr_manager.unified_premerge import verify_version
+
+                    verify_version(store, repository, job, premerge_client)
                 classify_result(child, job["commit_sha"], job["base_sha"])
                 if current_hash(store, settings, job) != job["config_hash"]:
                     raise RecoveryConflict("configuration_changed")

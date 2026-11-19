@@ -47,10 +47,10 @@ export function FindingsPanel({ comments, findingIds, findingSources, feedback, 
     {comments.length > 0 && <>
       <p className="finding-help"><strong>这条 review 对你有用吗？</strong>选择有帮助、误报或忽略即表示这条发现已处理，再次点击可撤销。代码修复记录可进入跟进问题查看。</p>
       <div className="filter-bar finding-filters">
-        <label>严重级别<Select disabled={filtersLocked} aria-label="发现的严重级别" value={severity} onChange={setSeverity} options={[{ value: "all", label: "全部级别" }, ...[...new Set(comments.map((comment) => comment.severity ?? "none"))].map((value) => ({ value, label: value === "none" ? "未分级" : formatSeverity(value) }))]} /></label>
-        <label>文件<Select disabled={filtersLocked} aria-label="发现的文件" value={file} onChange={setFile} options={[{ value: "all", label: "全部文件" }, ...files.map((value) => ({ value, label: value }))]} /></label>
-        <label>反馈<Select disabled={filtersLocked} aria-label="发现的反馈" value={verdict} onChange={setVerdict} options={[{ value: "all", label: "全部反馈" }, { value: "unmarked", label: "未评价" }, ...findingFeedbackOptions.map(({ value, label }) => ({ value, label }))]} /></label>
-        <label>处理状态<Select virtual={false} disabled={filtersLocked} aria-label="发现的处理状态" value={issueState} onChange={setIssueState} options={[{ value: "all", label: "全部发现" }, { value: "open", label: "待处理" }, { value: "handled", label: "已处理" }]} /></label>
+        <div><Select disabled={filtersLocked} aria-label="发现的严重级别" value={severity} onChange={setSeverity} options={[{ value: "all", label: "全部级别" }, ...[...new Set(comments.map((comment) => comment.severity ?? "none"))].map((value) => ({ value, label: value === "none" ? "未分级" : formatSeverity(value) }))]} /></div>
+        <div><Select disabled={filtersLocked} aria-label="发现的文件" value={file} onChange={setFile} options={[{ value: "all", label: "全部文件" }, ...files.map((value) => ({ value, label: value }))]} /></div>
+        <div><Select disabled={filtersLocked} aria-label="发现的反馈" value={verdict} onChange={setVerdict} options={[{ value: "all", label: "全部反馈" }, { value: "unmarked", label: "未评价" }, ...findingFeedbackOptions.map(({ value, label }) => ({ value, label }))]} /></div>
+        <div><Select virtual={false} disabled={filtersLocked} aria-label="发现的处理状态" value={issueState} onChange={setIssueState} options={[{ value: "all", label: "全部发现" }, { value: "open", label: "待处理" }, { value: "handled", label: "已处理" }]} /></div>
       </div>
     </>}
     {visible.length ? <div className="findings">{visible.map(({ comment, index }) => {

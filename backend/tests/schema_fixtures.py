@@ -43,8 +43,12 @@ def remove_improvement_archive_schema(db: sqlite3.Connection) -> None:
     """仅对隔离库移除 41 版列和索引，使旧迁移测试完整重放归档结构。"""
 
     remove_improvement_maintenance_schema(db)
-    for table in ("project_improvements", "improvement_themes",
-                  "project_improvement_revisions", "improvement_theme_revisions"):
+    for table in (
+        "project_improvements",
+        "improvement_themes",
+        "project_improvement_revisions",
+        "improvement_theme_revisions",
+    ):
         columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
         db.execute(f"DROP INDEX IF EXISTS {table}_archive")
         for column in ("archived_at", "archived_by", "archive_reason", "action"):
@@ -76,16 +80,23 @@ def remove_finding_schema(db: sqlite3.Connection) -> None:
             mr_iid INTEGER NOT NULL,commit_sha TEXT NOT NULL,path TEXT NOT NULL,start_line INTEGER,
             content TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             severity TEXT,category TEXT,UNIQUE(job_id,attempt_number,comment_index))""")
-        fields = ("id,issue_id,job_id,attempt_number,comment_index,mr_iid,commit_sha,path,"
-                  "start_line,content,created_at,severity,category")
-        db.execute(f"INSERT INTO review_issue_occurrences_legacy({fields}) SELECT {fields} "
-                   "FROM review_issue_occurrences WHERE recovery_id IS NULL")
+        fields = (
+            "id,issue_id,job_id,attempt_number,comment_index,mr_iid,commit_sha,path,"
+            "start_line,content,created_at,severity,category"
+        )
+        db.execute(
+            f"INSERT INTO review_issue_occurrences_legacy({fields}) SELECT {fields} "
+            "FROM review_issue_occurrences WHERE recovery_id IS NULL"
+        )
         db.execute("DROP TABLE review_issue_occurrences")
         db.execute("ALTER TABLE review_issue_occurrences_legacy RENAME TO review_issue_occurrences")
-        db.execute("CREATE INDEX idx_issue_occurrences_issue "
-                   "ON review_issue_occurrences(issue_id,id DESC)")
-        db.execute("CREATE INDEX idx_issue_occurrences_time "
-                   "ON review_issue_occurrences(created_at,issue_id)")
+        db.execute(
+            "CREATE INDEX idx_issue_occurrences_issue ON review_issue_occurrences(issue_id,id DESC)"
+        )
+        db.execute(
+            "CREATE INDEX idx_issue_occurrences_time "
+            "ON review_issue_occurrences(created_at,issue_id)"
+        )
     db.execute("DROP INDEX IF EXISTS review_recoveries_source")
 
 
@@ -95,10 +106,15 @@ def remove_effective_schema(db: sqlite3.Connection) -> None:
     remove_issue_disposition_schema(db)
     remove_chat_capture_schema(db)
     db.execute("DROP TABLE IF EXISTS review_historical_diagnostics")
-    for trigger in ("review_effective_attempt_changed", "review_effective_batch_changed",
-                    "review_effective_batch_removed", "review_effective_aggregate_changed",
-                    "review_effective_job_changed", "review_effective_attempt_removed",
-                    "review_effective_aggregate_removed"):
+    for trigger in (
+        "review_effective_attempt_changed",
+        "review_effective_batch_changed",
+        "review_effective_batch_removed",
+        "review_effective_aggregate_changed",
+        "review_effective_job_changed",
+        "review_effective_attempt_removed",
+        "review_effective_aggregate_removed",
+    ):
         db.execute(f"DROP TRIGGER IF EXISTS {trigger}")
     db.execute("DROP TABLE IF EXISTS review_recovery_deliveries")
     db.execute("DROP TABLE IF EXISTS review_effective_conclusions")
@@ -156,6 +172,7 @@ def remove_issue_disposition_schema(db: sqlite3.Connection) -> None:
 def remove_onboarding_schema(db: sqlite3.Connection) -> None:
     """仅合成库退回 51 版连接检查结构，避免旧迁移重放混入新队列。"""
 
+    remove_unified_schema(db)
     columns = {row[1] for row in db.execute("PRAGMA table_info(connection_checks)")}
     db.execute("DROP TABLE IF EXISTS repository_discoveries")
     if "config_fingerprint" not in columns:
@@ -170,6 +187,68 @@ def remove_onboarding_schema(db: sqlite3.Connection) -> None:
             db.execute(statement)
     db.execute("ALTER TABLE connection_checks ADD COLUMN config_revision_id INTEGER")
     fields = "id,kind,repository_id,config_revision_id,status,error,created_at,finished_at"
-    db.execute(f"INSERT INTO connection_checks({fields}) SELECT {fields} "
-               "FROM connection_checks_test52 WHERE notification_target_id IS NULL")
+    db.execute(
+        f"INSERT INTO connection_checks({fields}) SELECT {fields} "
+        "FROM connection_checks_test52 WHERE notification_target_id IS NULL"
+    )
     db.execute("DROP TABLE connection_checks_test52")
+
+
+def remove_unified_schema(db: sqlite3.Connection) -> None:
+    """仅合成库还原第 52 版，按依赖清理新投影以重放旧版迁移。"""
+
+    # 还原单分支结构及旧审计触发器，避免让第 54 版残留污染第 53 版演练。
+    from ocr_manager.config_history import history_migration
+
+    db.execute("DROP INDEX IF EXISTS idx_events_branch")
+    for table in ("repositories", "merge_events", "premerge_reviews"):
+        field = "target_branches" if table == "repositories" else "target_branch"
+        if field not in {row[1] for row in db.execute(f"PRAGMA table_info({table})")}:
+            continue
+        if table == "repositories":
+            for operation in ("insert", "update", "delete"):
+                db.execute(f"DROP TRIGGER history_repositories_{operation}")
+        db.execute(f"ALTER TABLE {table} DROP COLUMN {field}")
+        if table == "repositories":
+            script = history_migration()
+            start = script.index("CREATE TRIGGER history_repositories_insert")
+            end = script.index("INSERT INTO config_revisions", script.index(
+                "CREATE TRIGGER history_repositories_delete"))
+            end = script.index("END;", end) + 4
+            for statement in script[start:end].split("END;"):
+                if statement.strip():
+                    db.execute(statement + "END;")
+    db.execute("DROP TRIGGER IF EXISTS unified_premerge_projection")
+    db.execute("DROP TRIGGER IF EXISTS preserve_deleted_premerge")
+    db.execute("DROP TABLE IF EXISTS deleted_premerge_versions")
+    columns = {row[1] for row in db.execute("PRAGMA table_info(review_jobs)")}
+    if "legacy_premerge_id" in columns:
+        for table in ("notification_deliveries", "review_attempts", "review_feedback"):
+            db.execute(
+                f"DELETE FROM {table} WHERE job_id IN "
+                "(SELECT id FROM review_jobs WHERE legacy_premerge_id IS NOT NULL)"
+            )
+        db.execute("DELETE FROM review_jobs WHERE legacy_premerge_id IS NOT NULL")
+        db.execute("DELETE FROM merge_events WHERE source='premerge'")
+    for table in ("merged_review_ranges", "review_event_links", "repository_query_sessions"):
+        db.execute(f"DROP TABLE IF EXISTS {table}")
+    db.execute("DROP INDEX IF EXISTS idx_jobs_source")
+    db.execute("DROP INDEX IF EXISTS idx_jobs_legacy_premerge")
+    for table, fields in {
+        "review_jobs": (
+            "source",
+            "legacy_premerge_id",
+            "context_hint",
+            "context_json",
+            "mr_state",
+            "superseded",
+            "execution_policy",
+            "historical_import",
+        ),
+        "merge_events": ("source", "force_full_review"),
+        "repository_discoveries": ("query_session_id", "operation", "search", "page"),
+    }.items():
+        columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+        for field in fields:
+            if field in columns:
+                db.execute(f"ALTER TABLE {table} DROP COLUMN {field}")

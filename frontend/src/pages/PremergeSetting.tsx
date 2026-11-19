@@ -11,11 +11,13 @@ import type { DraftStatus } from "../ui/useConfigurationDraft";
 interface Configuration { enabled: boolean; include_description: boolean; context_paths: string[] }
 
 /** 配置独立保存，写入失败保留草稿；外层窗口负责离开确认。 */
-export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagnosis, onStatusChange }: {
+export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagnosis, onStatusChange, onEnabledSaved, contextOnly = false }: {
+  /** 嵌入评审参数时仅保存背景，开关统一在基础接入。 */ contextOnly?: boolean;
   /** 内存口令。 */ token: string;
   /** 项目 ID。 */ repositoryId: number;
   /** 已保存的目标分支；省略时提示核对基础接入配置。 */ targetBranch?: string;
   /** 切换到同一项目的接入诊断，保留当前草稿；省略时隐藏入口。 */ onOpenDiagnosis?: () => void;
+  /** 保存后同步基础接入开关，避免随后保存覆盖新值。 */ onEnabledSaved?: (enabled: boolean) => void;
   /** 汇总未保存与写入状态，不负责授权。 */ onStatusChange?: (status: DraftStatus) => void;
 }) {
   const client = useQueryClient();
@@ -24,13 +26,16 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
   const query = useQuery({ queryKey: key, queryFn: () => apiRequest<Configuration>(token, `/api/repositories/${repositoryId}/premerge`) });
   const draft = useConfigurationDraft(query.data);
   const save = useMutation({
-    mutationFn: (input: Configuration) => apiRequest<Configuration>(token, `/api/repositories/${repositoryId}/premerge`, { method: "PUT", body: JSON.stringify(input) }),
+    mutationFn: (input: Configuration) => apiRequest<Configuration>(token, `/api/repositories/${repositoryId}/premerge`, { method: "PUT", body: JSON.stringify(contextOnly ? { include_description: input.include_description, context_paths: input.context_paths } : input) }),
     onSuccess: (result) => {
       // 先更新读取基线再释放草稿，避免失效重取期间短暂回显旧配置。
       client.setQueryData(key, result);
       draft.saved();
+      onEnabledSaved?.(result.enabled);
       void client.invalidateQueries({ queryKey: key });
       void client.invalidateQueries({ queryKey: ["premerge-reviews"] });
+      void client.invalidateQueries({ queryKey: ["jobs"] });
+      void client.invalidateQueries({ queryKey: ["repositories"] });
     },
   });
   useDraftStatus(draft.dirty, save.isPending, onStatusChange);
@@ -45,15 +50,16 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
   }
 
   return <section className="section repository-publication-setting">
-    <div className="publication-section-heading"><h3>合并前审查</h3><Tag>手动保存</Tag></div>
+    <div className="publication-section-heading"><h3>{contextOnly ? "合并前审查背景" : "合并前审查"}</h3><Tag>手动保存</Tag></div>
     <p className="publication-section-description">在 MR 合并前，审查相对目标分支基准的完整差异。</p>
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     {value && <>
       <fieldset className="configuration-fields publication-fields" disabled={save.isPending}>
-        <div className="publication-toggle-row">
+        {!contextOnly && <div className="publication-toggle-row">
           <div><label htmlFor={`${fieldId}-enabled`}>审查未合并 MR 的完整差异</label><p id={`${fieldId}-enabled-help`}>新建、重新打开或更新 MR 时触发；相同提交与背景的重复事件不会重复审查。</p></div>
           <Switch id={`${fieldId}-enabled`} aria-label="审查未合并 MR 的完整差异" aria-describedby={`${fieldId}-enabled-help`} checked={value.enabled} disabled={save.isPending} onChange={(enabled) => changeValue({ ...value, enabled })} />
-        </div>
+        </div>}
+        {contextOnly && <p className="form-note">合并前 MR 评审开关统一在「基础接入」设置，此处仅配置审查使用的业务背景。</p>}
         <div className="publication-context">
           <div className="publication-field-label">审查背景 <span>可选</span></div>
           <Checkbox checked={value.include_description} disabled={save.isPending} onChange={(event) => changeValue({ ...value, include_description: event.target.checked })}>包含 GitLab MR 描述</Checkbox>
@@ -73,14 +79,14 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
       {save.error && <Alert type="error" showIcon title={`保存失败：${save.error.message}`} description="草稿已保留，请重试保存。" />}
     </>}
     <div className="publication-trigger-help">
-      <Alert role="note" type="info" showIcon title="开启并保存后，新建 MR 可自动进入审查队列" description="需接通 GitLab Webhook，并由运行中的 Worker 执行。结果在平台「合并前审查」查看，不自动发送飞书、发布 GitLab 评论或阻止合并。" />
+      <Alert role="note" type="info" showIcon title="开启并保存后，新建 MR 可自动进入审查队列" description="需接通 GitLab Webhook，并由运行中的 Worker 执行。结果统一在「评审任务」查看，并按项目通知配置推送飞书；合入相同版本时复用原任务。GitLab 行内发布仍由独立开关控制，不强制阻止合并。" />
       <Collapse ghost size="small" items={[{ key: "setup", label: "自动触发需要哪些配置？", children: <div className="publication-setup-help">
         <ol>
           <li>在 GitLab 的 Settings → Webhooks 填写本项目回调地址和对应 Token，勾选 <strong>Merge request events</strong>；只勾选 Push events 不够。</li>
-          <li>保持项目的 Webhook 接收开关开启，MR 目标分支须与{targetBranch ? <>已保存的 <code>{targetBranch}</code></> : "基础接入中的目标分支"}一致。</li>
+          <li>保持项目的 Webhook 接收开关开启，MR 目标分支须属于{targetBranch ? <>已保存的目标分支：<code>{targetBranch}</code></> : "基础接入中选择的目标分支"}。</li>
           <li>在接入诊断中验证 Git 与 GitLab API 权限，配置可用的评审模型，并确认 Worker 正常运行。</li>
         </ol>
-        <p>无需配置 GitLab CI。未收到过事件的已有 MR 不会自动补扫，需后续更新触发。「合并后评审」开关与此独立。</p>
+        <p>无需配置 GitLab CI。未收到过事件的已有 MR 不会自动补扫，需后续更新触发。目标分支 Push 评审用于接收合并或直接推送后的变更。</p>
         {onOpenDiagnosis && <Button type="link" size="small" onClick={onOpenDiagnosis}>查看接入诊断</Button>}
       </div> }]} />
     </div>

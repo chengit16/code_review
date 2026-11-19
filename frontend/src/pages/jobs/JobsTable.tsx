@@ -35,7 +35,7 @@ export function JobsTable({ token, items, canEdit, selectable, targets, disabled
   }
   const cell = (label: string) => ({ className: "jobs-fact-cell", "data-label": label });
   const desktop: TableColumnsType<ReviewJob> = [
-    { title: "任务 / 项目", key: "source", width: 185, onCell: () => cell("任务 / 项目"), render: (_, job) => <div className="jobs-source"><Link aria-label={`查看任务 ${job.id}`} title={job.repository_name} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><small title={`${job.target_branch ?? ""} · ${job.commit_sha}`}>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · <span className="mono">{shortSha(job.commit_sha)}</span></small></div> },
+    { title: "任务 / 项目", key: "source", width: 185, onCell: () => cell("任务 / 项目"), render: (_, job) => <div className="jobs-source"><Link aria-label={`查看任务 ${job.id}`} title={job.repository_name} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><small>{job.source === "premerge" ? "合并前 MR" : job.source === "push" ? "目标分支 Push" : "合并后 MR"}{job.mr_state === "merged" ? " · 已合并" : ""}{job.superseded ? " · 历史版本" : ""}</small><small title={`${job.target_branch ?? ""} · ${job.commit_sha}`}>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · <span className="mono">{shortSha(job.commit_sha)}</span></small></div> },
     { title: "提交人", dataIndex: "commit_author", width: 90, onCell: () => cell("提交人"), render: (value: string | null) => value?.trim() || "未记录" },
     { title: "评审状态", key: "result", width: 115, onCell: () => cell("评审状态"), render: (_, job) => <ReviewState job={job} /> },
     { title: "发现 / 价值反馈", key: "issues", width: 230, onCell: () => cell("发现 / 价值反馈"), render: (_, job) => <IssueSummary job={job} /> },
@@ -45,6 +45,7 @@ export function JobsTable({ token, items, canEdit, selectable, targets, disabled
   ];
   const mobile: TableColumnsType<ReviewJob> = [{ title: "任务与评审摘要", key: "summary", render: (_, job) => <div className="task-mobile-summary jobs-mobile-summary">
     <div className="jobs-mobile-heading"><Link aria-label={`查看任务 ${job.id}`} to={detailPath(job.id)}>任务 #{job.id} · {job.repository_name}</Link><ReviewState job={job} /></div>
+    <small>{job.source === "premerge" ? "合并前 MR" : job.source === "push" ? "目标分支 Push" : "合并后 MR"}{job.superseded ? " · 历史版本" : ""}{job.mr_state === "merged" ? " · 已合并" : ""}</small>
     <small>{job.mr_iid > 0 ? `MR !${job.mr_iid}` : "Push"} · {job.target_branch} · {shortSha(job.commit_sha)}</small>
     <IssueSummary job={job} /><details><summary>提交、耗时与通知</summary><span>提交人：{job.commit_author?.trim() || "未记录"}</span><JobTimeFacts job={job} compact /><span>创建：{formatTime(job.created_at)}</span><Notification job={job} /></details>
     {canEdit && <div className="row-actions"><Link to={detailPath(job.id)}>查看详情</Link>{deleteAction(job)}</div>}

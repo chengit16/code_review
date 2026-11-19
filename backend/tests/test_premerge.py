@@ -161,16 +161,17 @@ def test_premerge_cancel_and_retry_latest_version(client: TestClient,
     cancelled = client.post(f"/api/premerge-reviews/{claimed['id']}/cancel", headers=ADMIN)
     assert cancelled.status_code == 200
     assert cancelled.json()["status"] == "stopping"
+    unified_id = client.get(f"/api/premerge-reviews/{claimed['id']}",headers=ADMIN).json()["job_id"]
+    store.finish_job(unified_id,"cancelled",None,None,"用户请求停止评审")
     assert not premerge_is_current(store, claimed["id"])
 
     retried = client.post(f"/api/premerge-reviews/{claimed['id']}/retry", headers=ADMIN)
     assert retried.status_code == 200
     queued_id = retried.json()["review_id"]
-    assert queued_id != claimed["id"]
+    assert queued_id == claimed["id"]
     assert retry_premerge(store, claimed["id"]) is None
     rows = client.get("/api/premerge-reviews", headers=ADMIN).json()
-    assert [(row["id"], row["status"]) for row in rows[:2]] == [
-        (queued_id, "queued"), (claimed["id"], "superseded")]
+    assert [(row["id"], row["status"]) for row in rows] == [(queued_id, "queued")]
 
 
 def test_closed_mr_invalidates_without_postmerge_enabled(client: TestClient) -> None:

@@ -1,0 +1,71 @@
+/* 规则页按紧凑工作区编排；局部样式不改变规则优先级或其他设置页。 */
+.review-rules-page { min-width: 0; }
+.review-rules-page > .page-header { align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 0; border: 0; }
+.review-rules-page > .page-header > div:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.review-rules-page > .page-header h2 { margin: 0; font-size: 18px; }
+.review-rules-page > .page-header p { margin: 0; font-size: 12px; }
+.review-rules-page > .unsaved-note { margin: 0 0 12px; }
+.rules-context { padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.rules-context-row { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.rules-scope-control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.rules-scope-control > span { color: var(--color-muted); font-size: 12px; }
+.rules-scope-control > .ant-select { width: 240px; max-width: 100%; min-width: 0; }
+.rules-context-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--color-muted); }
+.rules-context-meta .ant-tag { margin: 0; }
+.rules-precedence { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; font-size: 12px; color: var(--color-muted); }
+.rules-precedence > span { color: var(--color-subtle); }
+.rules-precedence ol { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 0; margin: 0; list-style: none; }
+.rules-precedence li + li::before { content: "›"; margin-inline: 4px 8px; color: var(--color-subtle); }
+.rules-editor-form { min-width: 0; margin-top: 16px; }
+.rules-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; align-items: start; gap: 16px; }
+.rules-editor-main { min-width: 0; }
+.rules-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.rules-section-heading h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; }
+.rules-section-heading .ant-tag { margin: 0; font-weight: 400; }
+.rules-section-heading p { margin: 4px 0 0; font-size: 12px; color: var(--color-muted); }
+.rules-section-heading > .ant-btn { flex: none; }
+.rules-editor-list { display: grid; gap: 12px; }
+.rules-entry { display: grid; gap: 12px; padding: 12px 16px 16px; min-width: 0; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.rules-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.rules-entry-heading > strong { font-size: 13px; font-weight: 600; }
+.rules-entry-actions { display: flex; gap: 0; }
+.rules-entry-actions .ant-btn { width: 40px; height: 40px; }
+.rules-editor-grid label:not(.ant-checkbox-wrapper) { display: grid; gap: 6px; min-width: 0; font-size: 12px; font-weight: 500; }
+.rules-entry-path, .rules-entry-body, .rules-path-field { display: grid; gap: 6px; min-width: 0; }
+.rules-entry-path { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+.rules-entry-path .ant-input { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; }
+.rules-entry-body .ant-input { font-size: 13px; line-height: 1.7; }
+.rules-entry .ant-checkbox-wrapper { min-height: 32px; font-size: 12px; align-items: center; }
+.rules-path-panel { display: grid; gap: 16px; min-width: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.rules-path-panel .rules-section-heading { margin: 0; }
+.rules-path-panel .ant-input { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; line-height: 1.7; }
+.rules-path-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--color-muted); }
+.rules-editor-empty { padding: 16px; border: 1px dashed var(--color-border-strong); border-radius: 8px; background: var(--color-surface); }
+.rules-editor-empty .ant-empty { margin-block: 16px 8px; }
+.rules-editor-empty > p { margin: 0; text-align: center; font-size: 12px; color: var(--color-muted); }
+.rules-save-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 10px 12px; margin-top: 16px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); }
+.rules-save-bar > div:first-child { display: grid; gap: 2px; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+.rules-save-bar strong { font-size: 13px; font-weight: 500; }
+.rules-save-bar > div:first-child > span { color: var(--color-muted); }
+.rules-save-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
+.review-rules-page .review-rule-secondary { margin-top: 12px; }
+.review-rules-page .review-rule-secondary .rule-workspace { max-width: none; margin-top: 0; }
+.review-rules-page .rule-history .section-head h2 { font-size: 15px; }
+@media (max-width: 1100px) {
+  .rules-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .rules-path-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .rules-path-panel > .rules-section-heading, .rules-path-note { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .rules-context { padding: 12px; }
+  .rules-scope-control { width: 100%; }
+  .rules-scope-control > .ant-select { flex: 1; width: auto; }
+  .rules-editor-grid { gap: 12px; }
+  .rules-entry { padding: 8px 12px 12px; }
+  .rules-entry-path { grid-template-columns: minmax(0, 1fr); }
+  .rules-path-panel { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .rules-save-bar { padding: 10px; }
+  .rules-save-bar > div:first-child { flex-basis: 100%; }
+  .rules-save-actions { width: 100%; }
+  .rules-save-actions > .ant-btn { flex: 1; }
+}

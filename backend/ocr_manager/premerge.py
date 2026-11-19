@@ -13,9 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ocr_manager.finding_policy import VERSION as FINDING_POLICY_VERSION
 from ocr_manager.range_preflight import input_policy
+from ocr_manager.repository_branches import branches
 from ocr_manager.review_failures import REVIEW_POLICY
-from ocr_manager.review_results import project_review_result
 from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES
+from ocr_manager.unified_reviews import attach_premerge, supersede
 
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
@@ -60,12 +61,40 @@ SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 def premerge_policy(db: sqlite3.Connection, repository_id: int) -> str:
     """在队列写事务内冻结项目过滤开关，避免排队后静默改变输入语义。"""
 
-    row = db.execute("SELECT newline_filter_enabled FROM project_review_limits "
-                     "WHERE repository_id=?",
-                     (repository_id,)).fetchone()
-    return json.dumps({"review_policy": REVIEW_POLICY,
-                       "finding_policy_version": FINDING_POLICY_VERSION,
-                       "input_policy": input_policy(bool(row and row[0]))}, sort_keys=True)
+    row = db.execute(
+        "SELECT * FROM project_review_limits WHERE repository_id=?",
+        (repository_id,),
+    ).fetchone()
+    model = db.execute(
+        "SELECT id,version,provider,model,base_url FROM model_profiles WHERE id=COALESCE("
+        "(SELECT model_profile_id FROM project_review_limits WHERE repository_id=?),"
+        "(SELECT id FROM model_profiles WHERE enabled=1))",
+        (repository_id,),
+    ).fetchone()
+    context = db.execute(
+        "SELECT include_description,context_paths FROM premerge_settings WHERE repository_id=?",
+        (repository_id,),
+    ).fetchone()
+    rules = [
+        dict(item)
+        for item in db.execute(
+            "SELECT repository_id,content FROM review_rule_configs "
+            "WHERE repository_id IS NULL OR repository_id=? ORDER BY id",
+            (repository_id,),
+        )
+    ]
+    return json.dumps(
+        {
+            "model": dict(model) if model else None,
+            "limits": dict(row) if row else None,
+            "context": dict(context) if context else None,
+            "rules": rules,
+            "review_policy": REVIEW_POLICY,
+            "finding_policy_version": FINDING_POLICY_VERSION,
+            "input_policy": input_policy(bool(row and row["newline_filter_enabled"])),
+        },
+        sort_keys=True,
+    )
 
 
 def parse_premerge_event(
@@ -84,9 +113,12 @@ def parse_premerge_event(
         raise HTTPException(422, "GitLab MR 字段缺失")
     if attributes.get("action") not in {"open", "reopen", "update", "close", "merge"}:
         return None
-    if (type(project.get("id")) is not int or project["id"] != project_id or
-        type(attributes.get("target_project_id")) is not int or
-        attributes["target_project_id"] != project_id):
+    if (
+        type(project.get("id")) is not int
+        or project["id"] != project_id
+        or type(attributes.get("target_project_id")) is not int
+        or attributes["target_project_id"] != project_id
+    ):
         raise HTTPException(403, "GitLab 项目不匹配")
     if attributes.get("target_branch") != branch:
         return None
@@ -114,45 +146,110 @@ def invalidate_premerge(store: Store, repository_id: int, mr_iid: int) -> None:
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        latest = db.execute("""SELECT head_sha,context_hint,status FROM premerge_reviews
-            WHERE repository_id=? AND mr_iid=? ORDER BY id DESC LIMIT 1""",
-            (repository_id, mr_iid)).fetchone()
-        db.execute("""UPDATE premerge_reviews SET status='superseded',
+        latest = db.execute(
+            """SELECT commit_sha AS head_sha,context_hint,status,target_branch FROM review_jobs
+            WHERE repository_id=? AND mr_iid=? AND source='premerge' AND superseded=0
+            ORDER BY id DESC LIMIT 1""",
+            (repository_id, mr_iid),
+        ).fetchone()
+        supersede(db, repository_id, mr_iid)
+        db.execute(
+            """UPDATE premerge_reviews SET status='superseded',
             finished_at=CURRENT_TIMESTAMP WHERE repository_id=? AND mr_iid=?
-            AND status!='superseded'""", (repository_id, mr_iid))
-        enabled = db.execute("SELECT enabled FROM premerge_settings WHERE repository_id=?",
-                             (repository_id,)).fetchone()
+            AND status!='superseded'""",
+            (repository_id, mr_iid),
+        )
+        enabled = db.execute(
+            "SELECT enabled FROM premerge_settings WHERE repository_id=?", (repository_id,)
+        ).fetchone()
         if latest and latest["status"] != "superseded" and enabled and enabled["enabled"]:
-            db.execute("""INSERT INTO premerge_reviews
-                (repository_id,mr_iid,head_sha,context_hint,execution_policy) VALUES(?,?,?,?,?)""",
-                (repository_id, mr_iid, latest["head_sha"], latest["context_hint"],
-                 premerge_policy(db, repository_id)))
+            db.execute(
+                """INSERT INTO premerge_reviews
+                (repository_id,mr_iid,head_sha,context_hint,execution_policy,target_branch)
+                VALUES(?,?,?,?,?,?)""",
+                (
+                    repository_id,
+                    mr_iid,
+                    latest["head_sha"],
+                    latest["context_hint"],
+                    premerge_policy(db, repository_id),
+                    latest["target_branch"],
+                ),
+            )
+            attach_premerge(db, int(db.execute("SELECT last_insert_rowid()").fetchone()[0]))
 
 
-def enqueue_premerge(store: Store, repository_id: int, mr_iid: int, head_sha: str,
-                     context_hint: str | None = None) -> bool:
+def enqueue_premerge(
+    store: Store,
+    repository_id: int,
+    mr_iid: int,
+    head_sha: str,
+    context_hint: str | None = None,
+    target_branch: str | None = None,
+) -> bool:
     """新版本入库时立即使旧结果失效；重复投递不会重复调用 OCR。"""
 
+    repository = store.get_repository(repository_id)
+    if not repository:
+        return False
+    selected = target_branch or repository["target_branch"]
+    if selected not in branches(repository):
+        return False
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        enabled = db.execute("""SELECT s.enabled FROM premerge_settings s
+        enabled = db.execute(
+            """SELECT s.enabled FROM premerge_settings s
             JOIN repositories r ON r.id=s.repository_id
-            WHERE r.id=? AND r.enabled=1""", (repository_id,)).fetchone()
+            WHERE r.id=? AND r.enabled=1""",
+            (repository_id,),
+        ).fetchone()
         if enabled is None or not enabled["enabled"]:
             return False
-        latest = db.execute("""SELECT head_sha,status,context_hint FROM premerge_reviews
-            WHERE repository_id=? AND mr_iid=? ORDER BY id DESC LIMIT 1""",
-            (repository_id, mr_iid)).fetchone()
-        if (latest and latest["head_sha"] == head_sha and latest["status"] != "superseded"
-            and (context_hint is None or latest["context_hint"] == context_hint)):
+        latest = db.execute(
+            """SELECT commit_sha AS head_sha,status,context_hint,target_branch FROM review_jobs
+            WHERE repository_id=? AND mr_iid=? AND source='premerge' AND superseded=0
+            ORDER BY id DESC LIMIT 1""",
+            (repository_id, mr_iid),
+        ).fetchone()
+        if (
+            latest
+            and latest["head_sha"] == head_sha
+            and latest["target_branch"] == selected
+            and latest["status"] != "superseded"
+            and (context_hint is None or latest["context_hint"] == context_hint)
+        ):
             return False
-        db.execute("""UPDATE premerge_reviews SET status='superseded',
+        if (
+            latest is None
+            and db.execute(
+                "SELECT 1 FROM deleted_premerge_versions WHERE repository_id=? AND mr_iid=? "
+                "AND head_sha=? AND context_hint=? AND target_branch=?",
+                (repository_id, mr_iid, head_sha, context_hint or "", selected),
+            ).fetchone()
+        ):
+            return False
+        supersede(db, repository_id, mr_iid)
+        db.execute(
+            """UPDATE premerge_reviews SET status='superseded',
             finished_at=CURRENT_TIMESTAMP WHERE repository_id=? AND mr_iid=?
-            AND status!='superseded'""", (repository_id, mr_iid))
-        db.execute("""INSERT INTO premerge_reviews
-            (repository_id,mr_iid,head_sha,context_hint,execution_policy)
-            VALUES(?,?,?,?,?)""", (repository_id, mr_iid, head_sha, context_hint,
-                                   premerge_policy(db, repository_id)))
+            AND status!='superseded'""",
+            (repository_id, mr_iid),
+        )
+        db.execute(
+            """INSERT INTO premerge_reviews
+            (repository_id,mr_iid,head_sha,context_hint,execution_policy,target_branch)
+            VALUES(?,?,?,?,?,?)""",
+            (
+                repository_id,
+                mr_iid,
+                head_sha,
+                context_hint,
+                premerge_policy(db, repository_id),
+                selected,
+            ),
+        )
+        legacy_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        attach_premerge(db, legacy_id)
         return True
 
 
@@ -161,18 +258,24 @@ def next_premerge(store: Store, last_repository_id: int | None = None) -> dict[s
 
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        row = db.execute(f"""SELECT p.* FROM premerge_reviews p
+        row = db.execute(
+            f"""SELECT p.* FROM premerge_reviews p
+            JOIN review_jobs j ON j.legacy_premerge_id=p.id
             JOIN repositories r ON r.id=p.repository_id
             JOIN premerge_settings s ON s.repository_id=r.id
-            WHERE p.status='queued' AND p.next_run_at<=CURRENT_TIMESTAMP
+            WHERE j.status='queued' AND j.superseded=0 AND j.next_run_at<=CURRENT_TIMESTAMP
             AND r.enabled=1 AND s.enabled=1
             AND p.repository_id NOT IN ({BUSY_MODEL_REPOSITORIES})
-            ORDER BY CASE WHEN p.repository_id>? THEN 0 ELSE 1 END,
-            p.repository_id,p.id LIMIT 1""",
-                         (last_repository_id,)).fetchone()
+            ORDER BY CASE WHEN p.repository_id>? THEN 0 ELSE 1 END,p.repository_id,p.id LIMIT 1""",
+            (last_repository_id,),
+        ).fetchone()
         if row:
-            db.execute("""UPDATE premerge_reviews SET status='running',
-                attempts=attempts+1 WHERE id=?""", (row["id"],))
+            db.execute(
+                "UPDATE review_jobs SET status='running',attempts=attempts+1,"
+                "started_at=CURRENT_TIMESTAMP "
+                "WHERE legacy_premerge_id=?",
+                (row["id"],),
+            )
         return {**dict(row), "attempts": row["attempts"] + 1} if row else None
 
 
@@ -180,96 +283,126 @@ def premerge_is_current(store: Store, review_id: int) -> bool:
     """OCR 执行期间也检查版本；Webhook 到达后尽快终止过期运行。"""
 
     with store.connection() as db:
-        row = db.execute("SELECT status FROM premerge_reviews WHERE id=?",
-                         (review_id,)).fetchone()
+        row = db.execute("SELECT status FROM premerge_reviews WHERE id=?", (review_id,)).fetchone()
         return row is not None and row["status"] == "running"
 
 
 def cancel_premerge(store: Store, review_id: int) -> str | None:
     """停止当前排队或运行版本；Worker 通过状态变化终止正在执行的 OCR。"""
 
+    from ocr_manager.task_control import cancel_job
+
     with store.connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT status FROM premerge_reviews WHERE id=?",
-                         (review_id,)).fetchone()
-        if row is None or row["status"] not in {"queued", "running"}:
-            return None
-        db.execute("""UPDATE premerge_reviews SET status='cancelled',
-            error='用户请求停止合并前审查',finished_at=CURRENT_TIMESTAMP WHERE id=?""",
-                   (review_id,))
-        return "cancelled" if row["status"] == "queued" else "stopping"
+        row = db.execute(
+            "SELECT id FROM review_jobs WHERE legacy_premerge_id=?", (review_id,)
+        ).fetchone()
+    return cancel_job(store, row["id"]) if row else None
 
 
 def retry_premerge(store: Store, review_id: int) -> int | None:
     """只重试当前 MR 的最新终态版本，避免旧提交被重新解释为当前结论。"""
 
     with store.connection() as db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("""SELECT p.*,r.enabled AS repository_enabled,
-            COALESCE(s.enabled,0) AS premerge_enabled
-            FROM premerge_reviews p JOIN repositories r ON r.id=p.repository_id
-            LEFT JOIN premerge_settings s ON s.repository_id=p.repository_id
-            WHERE p.id=?""", (review_id,)).fetchone()
-        if (row is None or not row["repository_enabled"] or not row["premerge_enabled"]):
-            return None
-        if row["status"] not in {"complete", "partial", "failed", "skipped", "cancelled"}:
-            return None
-        latest = db.execute("""SELECT id FROM premerge_reviews
-            WHERE repository_id=? AND mr_iid=? ORDER BY id DESC LIMIT 1""",
-                            (row["repository_id"], row["mr_iid"])).fetchone()
-        if latest is None or latest["id"] != review_id:
-            return None
-        db.execute("""UPDATE premerge_reviews SET status='superseded',
-            finished_at=COALESCE(finished_at,CURRENT_TIMESTAMP)
-            WHERE id=?""", (review_id,))
-        cursor = db.execute("""INSERT INTO premerge_reviews
-            (repository_id,mr_iid,head_sha,context_hint,execution_policy) VALUES(?,?,?,?,?)""",
-                            (row["repository_id"], row["mr_iid"], row["head_sha"],
-                             row["context_hint"], premerge_policy(db, row["repository_id"])))
-        assert cursor.lastrowid is not None
-        return int(cursor.lastrowid)
+        row = db.execute(
+            "SELECT id FROM review_jobs WHERE legacy_premerge_id=? AND superseded=0", (review_id,)
+        ).fetchone()
+    if row is None or store.retry_job(row["id"]) is None:
+        return None
+    with store.connection() as db:
+        db.execute(
+            "UPDATE premerge_reviews SET execution_policy=? WHERE id=?",
+            (
+                premerge_policy(
+                    db,
+                    int(
+                        db.execute(
+                            "SELECT repository_id FROM premerge_reviews WHERE id=?", (review_id,)
+                        ).fetchone()[0]
+                    ),
+                ),
+                review_id,
+            ),
+        )
+    return review_id
 
 
-def finish_premerge(store: Store, review_id: int, status: str, base_sha: str | None,
-                    result: dict[str, Any] | None, result_path: str | None,
-                    changed_files: list[dict[str, Any]] | None, error: str | None,
-                    context: dict[str, Any] | None = None) -> None:
+def finish_premerge(
+    store: Store,
+    review_id: int,
+    status: str,
+    base_sha: str | None,
+    result: dict[str, Any] | None,
+    result_path: str | None,
+    changed_files: list[dict[str, Any]] | None,
+    error: str | None,
+    context: dict[str, Any] | None = None,
+) -> None:
     """只允许当前运行版本写回；过期 OCR 结果不能复活旧结论。"""
 
-    projection = project_review_result(result) if result is not None else None
     with store.connection() as db:
-        db.execute("""UPDATE premerge_reviews SET status=?,base_sha=?,result_json=?,
-            result_path=?,changed_files=?,error=?,context_json=?,finished_at=CURRENT_TIMESTAMP
-            WHERE id=? AND status='running'""",
-            (status, base_sha, json.dumps(projection, ensure_ascii=False) if projection else None,
-             result_path, json.dumps(changed_files) if changed_files is not None else None,
-             error, json.dumps(context, ensure_ascii=False) if context else None, review_id))
+        row = db.execute(
+            "SELECT id,status FROM review_jobs WHERE legacy_premerge_id=? AND superseded=0",
+            (review_id,),
+        ).fetchone()
+        if row is None or row["status"] != "running":
+            return
+        if status == "superseded":
+            db.execute(
+                "UPDATE review_jobs SET superseded=1,status='cancelled',cancel_requested=1 "
+                "WHERE id=?",
+                (row["id"],),
+            )
+            return
+        db.execute(
+            "UPDATE review_jobs SET base_sha=?,changed_files=?,context_json=? WHERE id=?",
+            (
+                base_sha,
+                json.dumps(changed_files) if changed_files is not None else None,
+                json.dumps(context, ensure_ascii=False) if context else None,
+                row["id"],
+            ),
+        )
+    store.finish_job(row["id"], status, result_path, result, error)
 
 
-def defer_premerge(store: Store, review_id: int, error: str, delay_seconds: int,
-                   base_sha: str | None, result: dict[str, Any] | None = None,
-                   result_path: str | None = None,
-                   changed_files: list[dict[str, Any]] | None = None) -> None:
+def defer_premerge(
+    store: Store,
+    review_id: int,
+    error: str,
+    delay_seconds: int,
+    base_sha: str | None,
+    result: dict[str, Any] | None = None,
+    result_path: str | None = None,
+    changed_files: list[dict[str, Any]] | None = None,
+) -> None:
     """暂时故障保留安全结果并退避；条件写回不能使已取消或失效的版本复活。"""
 
-    projection = project_review_result(result) if result is not None else None
-    if projection and isinstance(projection.get("diagnostic"), dict):
-        projection["diagnostic"]["retry_scheduled"] = True
     with store.connection() as db:
-        db.execute("""UPDATE premerge_reviews SET status='queued',error=?,base_sha=?,
-            result_json=?,result_path=?,changed_files=?,finished_at=NULL,
-            next_run_at=datetime('now',printf('+%d seconds',?))
-            WHERE id=? AND status='running'""",
-            (error, base_sha, json.dumps(projection, ensure_ascii=False) if projection else None,
-             result_path, json.dumps(changed_files) if changed_files is not None else None,
-             delay_seconds, review_id))
+        row = db.execute(
+            "SELECT id FROM review_jobs WHERE legacy_premerge_id=? "
+            "AND superseded=0 AND status='running'",
+            (review_id,),
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE review_jobs SET base_sha=?,changed_files=? WHERE id=?",
+                (
+                    base_sha,
+                    json.dumps(changed_files) if changed_files is not None else None,
+                    row["id"],
+                ),
+            )
+    if row:
+        store.defer_job(
+            row["id"], error, delay_seconds=delay_seconds, result=result, result_path=result_path
+        )
 
 
 class PremergeSetting(BaseModel):
     """项目级合并前审查开关，默认关闭。"""
 
     model_config = ConfigDict(extra="forbid")
-    enabled: bool
+    enabled: bool | None = None
     include_description: bool = False
     context_paths: list[str] = Field(default_factory=list)
 
@@ -284,12 +417,16 @@ def register_premerge(app: FastAPI, store: Store, admin: Any) -> None:
         if store.get_repository(repository_id) is None:
             raise HTTPException(404, "项目不存在")
         with store.connection() as db:
-            row = db.execute("""SELECT enabled,include_description,context_paths
+            row = db.execute(
+                """SELECT enabled,include_description,context_paths
                 FROM premerge_settings WHERE repository_id=?""",
-                             (repository_id,)).fetchone()
-        return {"enabled": bool(row["enabled"]) if row else False,
-                "include_description": bool(row["include_description"]) if row else False,
-                "context_paths": json.loads(row["context_paths"]) if row else []}
+                (repository_id,),
+            ).fetchone()
+        return {
+            "enabled": bool(row["enabled"]) if row else False,
+            "include_description": bool(row["include_description"]) if row else False,
+            "context_paths": json.loads(row["context_paths"]) if row else [],
+        }
 
     @app.put("/api/repositories/{repository_id}/premerge", dependencies=[admin])
     def save_setting(repository_id: int, payload: PremergeSetting) -> dict[str, Any]:
@@ -303,50 +440,89 @@ def register_premerge(app: FastAPI, store: Store, admin: Any) -> None:
             raise HTTPException(422, str(error)) from error
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
-            if not db.execute("SELECT 1 FROM repositories WHERE id=?",
-                              (repository_id,)).fetchone():
+            if not db.execute("SELECT 1 FROM repositories WHERE id=?", (repository_id,)).fetchone():
                 raise HTTPException(404, "项目不存在")
-            previous = db.execute("""SELECT enabled,include_description,context_paths
-                FROM premerge_settings WHERE repository_id=?""", (repository_id,)).fetchone()
+            previous = db.execute(
+                """SELECT enabled,include_description,context_paths
+                FROM premerge_settings WHERE repository_id=?""",
+                (repository_id,),
+            ).fetchone()
+            enabled = (
+                payload.enabled
+                if payload.enabled is not None
+                else bool(previous and previous["enabled"])
+            )
             changed = previous is not None and (
-                bool(previous["enabled"]) != payload.enabled or
-                bool(previous["include_description"]) != payload.include_description or
-                json.loads(previous["context_paths"]) != paths)
-            db.execute("""INSERT INTO premerge_settings
+                bool(previous["enabled"]) != enabled
+                or bool(previous["include_description"]) != payload.include_description
+                or json.loads(previous["context_paths"]) != paths
+            )
+            db.execute(
+                """INSERT INTO premerge_settings
                 (repository_id,enabled,include_description,context_paths) VALUES(?,?,?,?)
                 ON CONFLICT(repository_id) DO UPDATE SET enabled=excluded.enabled,
                 include_description=excluded.include_description,
                 context_paths=excluded.context_paths""",
-                (repository_id, payload.enabled, payload.include_description, json.dumps(paths)))
+                (repository_id, enabled, payload.include_description, json.dumps(paths)),
+            )
             if changed:
                 # 配置改变后旧结论不再代表当前输入；开启时按原 MR 头重新排队并由 Worker 复核。
-                current = db.execute("""SELECT p.mr_iid,p.head_sha,p.context_hint
-                    FROM premerge_reviews p JOIN (SELECT mr_iid,MAX(id) AS id
-                    FROM premerge_reviews WHERE repository_id=? GROUP BY mr_iid) latest
-                    ON latest.id=p.id WHERE p.status!='superseded'""",
-                    (repository_id,)).fetchall()
-                db.execute("""UPDATE premerge_reviews SET status='superseded',
+                current = db.execute(
+                    """SELECT p.mr_iid,p.commit_sha AS head_sha,p.context_hint,p.target_branch
+                    FROM review_jobs p WHERE p.repository_id=?
+                    AND p.source='premerge' AND p.superseded=0""",
+                    (repository_id,),
+                ).fetchall()
+                for item in current:
+                    supersede(db, repository_id, item["mr_iid"])
+                db.execute(
+                    """UPDATE premerge_reviews SET status='superseded',
                     finished_at=CURRENT_TIMESTAMP WHERE repository_id=?
-                    AND status!='superseded'""", (repository_id,))
-                if payload.enabled:
-                    db.executemany("""INSERT INTO premerge_reviews
-                        (repository_id,mr_iid,head_sha,context_hint,execution_policy)
-                        VALUES(?,?,?,?,?)""",
-                        [(repository_id, row["mr_iid"], row["head_sha"], row["context_hint"],
-                          premerge_policy(db, repository_id))
-                         for row in current])
-        return {"enabled": payload.enabled, "include_description": payload.include_description,
-                "context_paths": paths}
+                    AND status!='superseded'""",
+                    (repository_id,),
+                )
+                if enabled:
+                    db.executemany(
+                        """INSERT INTO premerge_reviews
+                        (repository_id,mr_iid,head_sha,context_hint,execution_policy,target_branch)
+                        VALUES(?,?,?,?,?,?)""",
+                        [
+                            (
+                                repository_id,
+                                row["mr_iid"],
+                                row["head_sha"],
+                                row["context_hint"],
+                                premerge_policy(db, repository_id),
+                                row["target_branch"],
+                            )
+                            for row in current
+                        ],
+                    )
+                    for row in db.execute(
+                        "SELECT p.id FROM premerge_reviews p LEFT JOIN review_jobs j "
+                        "ON j.legacy_premerge_id=p.id WHERE p.repository_id=? "
+                        "AND j.id IS NULL",
+                        (repository_id,),
+                    ).fetchall():
+                        attach_premerge(db, row["id"])
+        return {
+            "enabled": enabled,
+            "include_description": payload.include_description,
+            "context_paths": paths,
+        }
 
     @app.get("/api/premerge-reviews", dependencies=[admin])
     def list_reviews(repository_id: int | None = None) -> list[dict[str, Any]]:
         """最多展示最近 100 个版本，旧版本明确标为失效。"""
 
         with store.connection() as db:
-            rows = db.execute("""SELECT p.*,r.name AS repository_name FROM premerge_reviews p
+            rows = db.execute(
+                """SELECT p.*,(SELECT id FROM review_jobs WHERE legacy_premerge_id=p.id) AS job_id,
+                r.name AS repository_name FROM premerge_reviews p
                 JOIN repositories r ON r.id=p.repository_id
                 WHERE (? IS NULL OR p.repository_id=?) ORDER BY p.id DESC LIMIT 100""",
-                (repository_id, repository_id)).fetchall()
+                (repository_id, repository_id),
+            ).fetchall()
         return [dict(row) for row in rows]
 
     @app.get("/api/premerge-reviews/{review_id}", dependencies=[admin])
@@ -354,9 +530,12 @@ def register_premerge(app: FastAPI, store: Store, admin: Any) -> None:
         """详情只暴露安全投影与差异文件，原始模型工件保留在本机。"""
 
         with store.connection() as db:
-            row = db.execute("""SELECT p.*,r.name AS repository_name FROM premerge_reviews p
+            row = db.execute(
+                """SELECT p.*,(SELECT id FROM review_jobs WHERE legacy_premerge_id=p.id) AS job_id,
+                r.name AS repository_name FROM premerge_reviews p
                 JOIN repositories r ON r.id=p.repository_id WHERE p.id=?""",
-                (review_id,)).fetchone()
+                (review_id,),
+            ).fetchone()
         if row is None:
             raise HTTPException(404, "合并前审查不存在")
         return dict(row)

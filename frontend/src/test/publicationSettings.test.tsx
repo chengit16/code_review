@@ -44,7 +44,7 @@ it("合并前说明展示已保存目标分支，切到诊断不提交草稿", a
   render(<QueryClientProvider client={client}><PremergeSetting token="" repositoryId={1} targetBranch="test" onOpenDiagnosis={onOpenDiagnosis} /></QueryClientProvider>);
   const user = userEvent.setup();
   await screen.findByRole("switch");
-  expect(screen.getByRole("note")).toHaveTextContent("不自动发送飞书、发布 GitLab 评论或阻止合并");
+  expect(screen.getByRole("note")).toHaveTextContent("按项目通知配置推送飞书");
   await user.click(screen.getByRole("button", { name: "自动触发需要哪些配置？" }));
   await waitFor(() => expect(screen.getByText("Merge request events")).toBeVisible());
   expect(screen.getByText("test", { exact: true })).toBeVisible();
@@ -89,4 +89,19 @@ it("行内发布失败保留服务端开关，保存期间冻结且不重复提�
   expect(toggle).toBeChecked();
   expect(client.getQueryData(["gitlab-publication", 1])).toEqual({ enabled: true });
   expect(onStatusChange).toHaveBeenLastCalledWith({ dirty: false, pending: false });
+});
+
+it("背景分区没有第二个触发开关，保存时不覆盖基础接入的启用状态", async () => {
+  const writes: unknown[] = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+    if (options?.method === "PUT") writes.push(JSON.parse(String(options.body)));
+    return new Response(JSON.stringify({ enabled: true, include_description: options?.method === "PUT", context_paths: [] }));
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><PremergeSetting token="" repositoryId={1} contextOnly /></QueryClientProvider>);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("checkbox", { name: "包含 GitLab MR 描述" }));
+  expect(screen.queryByRole("switch", { name: "审查未合并 MR 的完整差异" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "保存合并前配置" }));
+  await waitFor(() => expect(writes).toEqual([{ include_description: true, context_paths: [] }]));
 });

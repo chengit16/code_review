@@ -12,6 +12,7 @@ export interface Repository {
   remote_url: string;
   path_with_namespace: string;
   target_branch: string;
+  /** 已订阅的目标分支；兼容旧响应时使用单分支。 */ target_branches?: string[];
   auth_kind: "signing" | "secret";
   enabled: number;
   webhook_id: string | null;
@@ -20,6 +21,7 @@ export interface Repository {
   has_gitlab_token: boolean;
   enable_merge_requests: number;
   enable_default_branch_pushes: number;
+  /** 是否订阅合并前 MR。 */ premerge_enabled?: number;
   feishu_target_id: number | null;
   webhook_url: string;
   created_at: string;
@@ -47,12 +49,15 @@ export interface RepositoryInput {
   remote_url: string;
   path_with_namespace: string;
   target_branch: string;
+  /** 已订阅的目标分支；兼容旧响应时使用单分支。 */ target_branches?: string[];
   auth_kind?: "secret";
   webhook_token?: string;
   gitlab_token: string;
   feishu_target_id?: number | null;
   enable_merge_requests: boolean;
   enable_default_branch_pushes: boolean;
+  /** 合并前触发配置。 */ premerge_enabled?: boolean;
+  /** 服务端识别引用，不含凭据。 */ query_session_id?: string;
 }
 
 /** 管理员主动查看单个项目令牌时的响应，不进入仓库列表缓存。 */
@@ -68,6 +73,7 @@ export interface RepositoryUpdateInput {
   remote_url?: string;
   path_with_namespace?: string;
   target_branch?: string;
+  /** 多分支订阅，至少选择一项。 */ target_branches?: string[];
   enabled?: boolean;
   auth_kind?: "signing" | "secret";
   webhook_token?: string;
@@ -76,6 +82,8 @@ export interface RepositoryUpdateInput {
   webhook_id?: string | null;
   enable_merge_requests?: boolean;
   enable_default_branch_pushes?: boolean;
+  /** 合并前触发配置。 */ premerge_enabled?: boolean;
+  /** 当前草稿的识别引用。 */ query_session_id?: string;
 }
 
 /** OCR 原生 rule.json 格式；条目顺序决定同一层内的首次命中。 */
@@ -179,6 +187,10 @@ export interface WebhookDiagnostic {
 
 /** 单提交或 Push 范围评审任务列表数据。 */
 export interface ReviewJob {
+  /** 真实任务来源。 */ source?: "premerge" | "mr" | "push";
+  /** MR 生命周期与任务执行状态独立。 */ mr_state?: string;
+  /** 旧版本仅保留历史。 */ superseded?: number;
+  /** 多个自动事件可关联同一任务。 */ event_links?: { id: number; source: string; created_at: string; relation: string }[];
   /** 初审/候选并列，不把候选状态写成旧任务执行状态。 */
   conclusions?: ConclusionOverview | null;
   /** 有效结论与初审执行状态独立；旧后端缺失时回退初审。 */ effective_status?: string;

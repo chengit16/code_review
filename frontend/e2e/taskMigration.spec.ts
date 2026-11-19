@@ -9,8 +9,8 @@ for (const width of [1440, 1280, 768, 390, 320]) {
     await page.goto("/jobs");
     await expect(page.getByRole("link", { name: "查看任务 1", exact: true })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "选择任务 1", exact: true })).toBeEnabled();
-    await page.getByText("更多筛选（提交、分支、时间）", { exact: true }).click();
-    await expect(page.getByLabel("起始时间", { exact: true })).toBeVisible();
+
+    await expect(page.getByLabel("创建日期", { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `/tmp/ocr-task-migration/jobs-${width}.png`, fullPage: true, animations: "disabled" });
     await page.goto("/onboarding");
@@ -29,14 +29,15 @@ test("任务筛选键盘提交和时间 UTC URL 可刷新、回退，勾选不�
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
-  await page.getByText("更多筛选（提交、分支、时间）", { exact: true }).click();
-  await page.getByLabel("起始时间", { exact: true }).fill("2026-01-01T08:00");
-  const expected = await page.evaluate(() => new Date("2026-01-01T08:00").toISOString());
+
+  await page.getByLabel("创建日期", { exact: true }).fill("2026-01-01");
+  await page.getByLabel("创建日期", { exact: true }).press("Tab");
+  const expected = await page.evaluate(() => new Date(2026, 0, 1).toISOString());
   await page.getByRole("button", { name: "查询", exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("since")).toBe(expected);
   expect(new URL(page.url()).searchParams.get("feedback_state")).toBe("pending");
   await page.reload();
-  await expect(page.getByLabel("起始时间", { exact: true })).toHaveValue("2026-01-01T08:00");
+  await expect(page.getByLabel("创建日期", { exact: true })).toHaveValue("2026-01-01");
   await page.getByRole("button", { name: "清空筛选" }).click();
   await page.getByRole("checkbox", { name: "选择任务 1", exact: true }).check();
   await page.getByRole("button", { name: /^失败(?:\s+\d+)?$/ }).click();

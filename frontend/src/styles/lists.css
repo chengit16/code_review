@@ -3,16 +3,18 @@
 .list-surface + .list-surface { margin-top: 16px; }
 .list-status-nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 12px; background: var(--color-surface-subtle, #fafafa); border-radius: 6px; }
 .list-status-count { margin-left: 6px; font-size: 12px; opacity: .75; font-variant-numeric: tabular-nums; }
-.list-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 12px; }
-.list-select { display: flex; flex-direction: column; gap: 5px; min-width: 140px; max-width: 100%; }
-.list-select > label, .list-search label { font-size: 12px; color: var(--color-muted, #666); }
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.list-toolbar > .ant-btn, .list-toolbar > .filter-actions { order: 1; }
+.list-toolbar > .ant-input { flex: 0 1 180px; min-width: 0; }
+.list-select { display: flex; min-width: 140px; max-width: 100%; }
 .list-select .ant-select { min-width: 140px; width: 100%; }
-.list-search { display: flex; align-items: end; gap: 8px; }
-.list-search label { display: flex; flex-direction: column; gap: 5px; }
-.list-search .ant-input { width: 240px; max-width: 100%; }
-.list-advanced { margin: 8px 0 12px; }
-.list-advanced > summary { cursor: pointer; color: var(--color-accent, #1677ff); padding: 4px 0; }
-.list-advanced > .list-toolbar { margin-top: 12px; }
+.list-search { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; }
+.list-search > .ant-input-affix-wrapper { width: 260px; max-width: 100%; min-width: 0; }
+.list-search .ant-input { min-width: 0; }
+.list-date-range { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.list-date-range > .ant-picker { flex: 1; min-width: 0; width: 154px; }
+.list-date-range .ant-picker-input > input { min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.list-date-range > span { color: var(--color-muted); }
 .list-conditions { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0; }
 .list-time { border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer; font: inherit; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .list-time:focus-visible { outline: 2px solid var(--color-accent, #1677ff); outline-offset: 3px; }
@@ -37,8 +39,9 @@
   .list-surface { padding: 12px; }
   .list-toolbar { align-items: stretch; gap: 10px; }
   .list-select, .list-search { flex: 1 1 100%; min-width: 0; }
-  .list-search label { flex: 1; min-width: 0; }
-  .list-search .ant-input { width: 100%; }
+  .list-search > .ant-input-affix-wrapper { flex: 1; width: auto; }
+  .list-toolbar > .ant-input, .list-toolbar > .list-date-range { flex: 1 1 100%; }
+  .list-date-range { width: 100%; }
   .compact-list-table .ant-table-thead, .compact-list-table colgroup { display: none; }
   .compact-list-table table, .compact-list-table .ant-table-tbody, .compact-list-table .ant-table-tbody > tr { display: block; width: 100%; }
   .compact-list-table .ant-table-tbody > tr { border-bottom: 1px solid var(--color-border-strong, #d9d9d9); padding: 8px 0; }
@@ -72,7 +75,8 @@
 .list-detail-title > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 /* 发现筛选沿用列表密度，长摘要和批量版本在窄屏自然折行。 */
 .finding-list-filters { margin-bottom: 12px; align-items: end; }
-.finding-list-filters label { display: flex; flex-direction: column; gap: 6px; }
+.summary-filters > .ant-input { width: 180px; }
+@media (max-width: 600px) { .summary-filters > .ant-input { flex: 1 1 100%; } }
 .finding-list-filters .ant-select { min-width: 140px; }
 .finding-list-batch { padding: 12px 0; }
 .compact-list-table .list-cell-content .finding-list-summary.ant-btn { display: block; width: 100%; max-width: 100%; min-width: 0; height: auto; white-space: normal; text-align: left; padding-inline: 0; overflow-wrap: anywhere; }

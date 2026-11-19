@@ -14,3 +14,19 @@ export function utcTimeInput(value: string): string {
   if (Number.isNaN(date.getTime())) throw new Error("时间无效");
   return date.toISOString();
 }
+
+/** 完整带时区时间回显为设备本地日期；不以 UTC 日期替代用户所选日。 */
+export function localDateInput(value: string | null): string {
+  return localTimeInput(value).slice(0, 10);
+}
+
+/** 日期筛选包含起止两天；按本地日历构造边界，兼容夏令时和跨月。 */
+export function utcDateInput(value: string, boundary: "start" | "end"): string {
+  if (!value) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("请选择有效日期");
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) throw new Error("请选择有效日期");
+  if (boundary === "end") date.setHours(23, 59, 59, 999);
+  return date.toISOString();
+}

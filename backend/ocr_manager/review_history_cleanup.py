@@ -37,8 +37,8 @@ def _tables(db: sqlite3.Connection) -> list[str]:
 def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     if datetime.strptime(cutoff, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S") != cutoff:
         raise ValueError("清理边界必须是规范 UTC 时间")
-    if db.execute("PRAGMA user_version").fetchone()[0] != 52:
-        raise ValueError("仅支持已核对的 schema 52，不自动迁移")
+    if db.execute("PRAGMA user_version").fetchone()[0] != 54:
+        raise ValueError("仅支持已核对的 schema 54，不自动迁移")
     if db.execute("PRAGMA foreign_key_check").fetchall():
         raise ValueError("现有外键不完整，拒绝清理")
     active = {
@@ -114,7 +114,7 @@ def _expected(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, str]:
         "gitlab_publications", "review_stage_timings", "review_recoveries",
         "review_recovery_aggregates", "review_effective_conclusions",
         "review_recovery_deliveries", "review_historical_diagnostics",
-        "review_recovery_authorizations",
+        "review_recovery_authorizations", "review_event_links",
     ), by_job)
     filters.update({
         "review_jobs": "id NOT IN (SELECT id FROM cleanup_jobs)",
@@ -124,7 +124,23 @@ def _expected(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, str]:
         "review_finding_feedback": "finding_id NOT IN (SELECT finding_id FROM cleanup_findings)",
         "review_recovery_budget_evidence": "recovery_id NOT IN (SELECT id FROM cleanup_recoveries)",
     })
-    return {table: _digest(db, table, filters.get(table, "1")) for table in _tables(db)}
+    expected = {table: _digest(db, table, filters.get(table, "1")) for table in _tables(db)}
+    rows = [list(row) for row in db.execute('SELECT * FROM merged_review_ranges')]
+    for row in rows:
+        if row[5] in plan.job_ids:
+            row[5] = None
+    expected['merged_review_ranges'] = hashlib.sha256("\n".join(sorted(
+        json.dumps(row,ensure_ascii=True) for row in rows)).encode()).hexdigest()
+    deleted = [tuple(row) for row in db.execute("SELECT * FROM deleted_premerge_versions")]
+    for row in db.execute("SELECT repository_id,mr_iid,commit_sha,COALESCE(context_hint,''),"
+                          "target_branch,CURRENT_TIMESTAMP FROM review_jobs "
+                          "WHERE source='premerge' "
+                          "AND id IN (SELECT id FROM cleanup_jobs)"):
+        if not any(item[:5] == tuple(row)[:5] for item in deleted):
+            deleted.append(tuple(row))
+    expected["deleted_premerge_versions"] = hashlib.sha256("\n".join(sorted(
+        json.dumps(row, ensure_ascii=True) for row in deleted)).encode()).hexdigest()
+    return expected
 
 
 def apply_cleanup(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, int]:

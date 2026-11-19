@@ -193,7 +193,9 @@ def build_review_card(job: dict[str, Any]) -> dict[str, Any]:
         severity_counts.append(f"未分级 {other_count}")
     header = " · ".join((title, *severity_counts))
     repository = str(job.get("path_with_namespace") or job["repository_name"])
-    source = f"MR !{job['mr_iid']}" if job["mr_iid"] > 0 else "默认分支 Push"
+    source = f"MR !{job['mr_iid']}" if job["mr_iid"] > 0 else "目标分支 Push"
+    if job.get("source") == "premerge":
+        source = f"合并前 MR !{job['mr_iid']}"
     author = " ".join(str(job.get("commit_author") or "").split())[:80]
     author_text = f" · 提交人：{author}" if author else ""
     metadata = (

@@ -45,6 +45,7 @@ def task_filters(
     issue_state: Literal["open", "resolved", "none", "unknown"] | None = None,
     feedback_state: Literal["pending", "handled"] | None = None,
     notification_failed: bool = False,
+    source: Literal["premerge","mr","push"] | None = None,
 ) -> dict[str, Any]:
     """列表和相邻任务统一校验条件；时间按 UTC 比较，无时区输入默认 UTC。"""
 
@@ -64,7 +65,7 @@ def task_filters(
         "view": view,
         "issue_state": issue_state,
         "feedback_state": feedback_state,
-        "notification_failed": notification_failed,
+        "notification_failed": notification_failed, "source": source,
     }
 
 

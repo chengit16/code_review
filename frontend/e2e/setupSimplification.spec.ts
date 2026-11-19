@@ -1,39 +1,43 @@
 /** @description 新接入流程使用临时服务与合成契约；不调用真实 GitLab、模型或飞书。 */
 import { expect, test } from "@playwright/test";
+import { mockRepositoryQuery } from "./unifiedFixture";
 
-test("显式获取资料后核对保存，地址和令牌不出现在请求 URL", async ({ page }) => {
-  const writes: { url: string; body: Record<string, unknown> }[] = [];
-  const original = (await (await page.request.get("/api/repositories")).json())[0];
-  const metadata = { name: "资料带出的项目", project_id: 123, path_with_namespace: "team/new", target_branch: "develop", remote_url: "https://gitlab.test/team/new.git", gitlab_url: "https://gitlab.test" };
-  let saved = false;
-  await page.route("**/api/repository-discoveries", async (route) => {
-    writes.push({ url: route.request().url(), body: route.request().postDataJSON() });
-    await route.fulfill({ status: 202, json: { id: 77, status: "queued" } });
-  });
-  await page.route("**/api/repository-discoveries/77", (route) => route.fulfill({ json: { status: "passed", result: metadata } }));
-  await page.route("**/api/repositories/preflight", (route) => route.fulfill({ json: { status: "ok" } }));
+test("自动识别隐藏身份，远程搜索与第二页分支可选，保存含核验引用", async ({ page }, testInfo) => {
+  await mockRepositoryQuery(page);
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/repositories/preflight", (route) => route.fulfill({ json: { status: "passed" } }));
   await page.route("**/api/repositories", async (route) => {
-    if (route.request().method() === "POST") {
-      writes.push({ url: route.request().url(), body: route.request().postDataJSON() }); saved = true;
-      await route.fulfill({ json: { ...original, ...metadata, id: 2 } });
-    } else await route.fulfill({ json: saved ? [original, { ...original, ...metadata, id: 2 }] : [original] });
+    if (route.request().method() === "POST") { writes.push(route.request().postDataJSON()); await route.fulfill({ status: 409, json: { detail: "合成冲突，草稿保留" } }); }
+    else await route.continue();
   });
   await page.goto("/repositories");
   await page.getByRole("button", { name: "添加仓库", exact: true }).click();
-  await page.getByLabel("GitLab 项目或 Clone 地址").fill("https://gitlab.test/team/new");
+  await page.getByLabel("仓库地址").fill("https://gitlab.test/team/new");
   await page.getByLabel("GitLab Token", { exact: true }).fill("synthetic-token");
-  expect(writes).toEqual([]);
-  await page.getByRole("button", { name: "获取项目资料" }).click();
-  await expect(page.getByText(/资料已带出，请核对后保存/)).toBeVisible();
-  await expect(page.getByLabel("仓库名称", { exact: true })).toHaveValue(metadata.name);
-  await expect(page.getByLabel("目标分支", { exact: true })).toHaveValue("develop");
-  expect(saved).toBe(false);
+  await expect(page.getByText("仓库已识别", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("仓库名称", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("项目数字 ID")).toHaveCount(0);
+  const branch = page.getByRole("combobox", { name: "目标分支", exact: true });
+  await branch.click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await branch.click();
+  await page.getByRole("button", { name: "加载更多分支" }).click();
+  await page.getByText("release/second", { exact: true }).last().click();
+  await expect(page.getByRole("dialog")).toContainText("release/second");
+  await branch.fill("specific");
+  await page.getByText("feature/specific", { exact: true }).last().click();
+  await page.getByRole("checkbox", { name: "合并前 MR 评审", exact: true }).check();
   await page.getByRole("button", { name: "保存仓库", exact: true }).click();
-  await expect(page).toHaveURL(/repository=2&section=connection/);
-  await expect(page.getByRole("heading", { name: "编辑 资料带出的项目" })).toBeVisible();
-  expect(writes.map((write) => new URL(write.url).pathname)).toEqual(["/api/repository-discoveries", "/api/repositories"]);
-  expect(writes[0].body).toEqual({ remote_url: "https://gitlab.test/team/new", gitlab_token: "synthetic-token" });
-  expect(writes.every((write) => !write.url.includes("synthetic-token"))).toBe(true);
+  await expect(page.getByRole("alert")).toContainText("草稿保留");
+  expect(writes[0]).toMatchObject({ name: "验收仓库", project_id: 42, target_branch: "main", target_branches: ["main", "release/second", "feature/specific"], premerge_enabled: true });
+  expect(writes[0].query_session_id).toBeTruthy();
+  expect(writes[0].enable_merge_requests).toBe(false);
+  await expect(page.getByRole("checkbox", { name: "合并后评审（Merge Request）" })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("repository-create-desktop.png"), animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("repository-create-mobile.png"), animations: "disabled" });
 });
 
 test("非默认模型和未关联通知独立确认；取消、打开及嵌套 Escape 不写入", async ({ page }) => {
@@ -108,4 +112,44 @@ test("成功详情折叠证据，导航及旧锚点打开对应明细", async ({
   await expect(page.locator("#job-cost")).toBeVisible();
   await page.goto("/jobs/1#job-execution");
   await expect(page.locator("#job-execution")).toBeVisible();
+});
+
+test("编辑留空 Token 可远程选分支，409 保留连接草稿", async ({ page }) => {
+  await mockRepositoryQuery(page);
+  const queries: Record<string, unknown>[] = [];
+  const saves: Record<string, unknown>[] = [];
+  await page.route("**/api/repository-query-sessions", async (route) => {
+    queries.push(route.request().postDataJSON()); await route.fallback();
+  });
+  await page.route("**/api/repositories/preflight?*", (route) => route.fulfill({ json: { status: "passed" } }));
+  await page.route("**/api/repositories/1", async (route) => {
+    if (route.request().method() === "POST") {
+      saves.push(route.request().postDataJSON());
+      await route.fulfill({ status: 409, json: { detail: "合成在途保护，草稿保留" } });
+    } else await route.continue();
+  });
+  await page.goto("/repositories?repository=1&section=connection");
+  await expect(page.getByText("仓库已识别", { exact: true })).toBeVisible();
+  expect(queries[0]).toMatchObject({ repository_id: 1, gitlab_token: "" });
+  await expect(page.getByLabel("GitLab Token", { exact: true })).toHaveValue("");
+  const branch = page.getByRole("combobox", { name: "目标分支", exact: true });
+  await branch.click();
+  await page.getByRole("button", { name: "加载更多分支" }).click();
+  await page.getByText("release/second", { exact: true }).last().click();
+  await page.getByRole("button", { name: "保存基础接入" }).click();
+  await expect(page.getByRole("alert")).toContainText("草稿保留");
+  expect(saves[0]).toMatchObject({ target_branch: "main", target_branches: ["main", "release/second"], query_session_id: expect.any(String) });
+  expect(saves[0]).not.toHaveProperty("gitlab_token");
+  await expect(page.getByRole("dialog")).toContainText("release/second");
+});
+
+test("旧合并前链接使用映射任务编号并移除独立导航", async ({ page }) => {
+  await page.route("**/api/premerge-reviews/77", (route) => route.fulfill({ json: { job_id: 1 } }));
+  await page.goto("/premerge?review=77");
+  await expect(page).toHaveURL(/\/jobs\/1$/);
+  await expect(page.getByRole("navigation").getByRole("link", { name: "合并前审查", exact: true })).toHaveCount(0);
+  await page.goto("/premerge?repository_id=1&status=partial");
+  await expect.poll(() => new URL(page.url()).searchParams.get("source")).toBe("premerge");
+  expect(new URL(page.url()).pathname).toBe("/jobs");
+  expect(new URL(page.url()).searchParams.get("repository_id")).toBe("1");
 });

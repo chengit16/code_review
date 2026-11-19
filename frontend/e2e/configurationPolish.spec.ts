@@ -25,10 +25,10 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       { id: 12, name: "合成启用模型", model: "review-active", provider: "dashscope", base_url: "", price_currency: "CNY", input_price_per_million: "0.8", output_price_per_million: "2.7", enabled: 1, has_api_key: true },
     ] }));
     await page.goto("/settings?tab=model");
-    const modelRow = page.getByRole("row").filter({ hasText: "合成备用模型" });
+    const modelRow = page.getByRole("article", { name: "模型 合成备用模型" });
     await expect(modelRow).toBeVisible();
     await expect(modelRow).toContainText("非默认");
-    const actions = modelRow.locator(".config-row-actions");
+    const actions = modelRow.locator(".configuration-card-actions");
     const buttons = actions.getByRole("button");
     await expect(buttons).toHaveCount(3);
     const tops: number[] = [];
@@ -39,10 +39,9 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       if (box) tops.push(box.y);
     }
     expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
-    expect(await actions.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(34);
-    // 手机沿用带标签的纵向资料卡，只有桌面表格行高应保持紧凑。
-    if (width > 600) expect(await modelRow.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThan(110);
-    const active = page.getByRole("row").filter({ hasText: "合成启用模型" });
+    expect(await actions.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(44);
+    await expect(page.locator(".configuration-card-grid")).toBeVisible();
+    const active = page.getByRole("article", { name: "模型 合成启用模型" });
     await expect(active.locator(".ant-tag")).toHaveText("全局默认");
     await expect(active.getByRole("button", { name: "删除 合成启用模型", exact: true })).toBeDisabled();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

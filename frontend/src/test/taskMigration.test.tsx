@@ -10,25 +10,43 @@ import { DesignProvider } from "../app/DesignProvider";
 import { TaskFilters } from "../pages/TaskFilters";
 import { TaskSelectionBar } from "../pages/TaskSelectionBar";
 
-it("未应用筛选不会检索，折叠后保留高级输入、UTC 时间与每页条数", async () => {
+it("单日筛选集中提交且包含整天，旧链接条件与每页条数保留", async () => {
   const apply = vi.fn();
   const user = userEvent.setup();
   render(<DesignProvider><TaskFilters params={new URLSearchParams("page=3&page_size=50&view=attention&issue_state=open&sha=abcd")}
     repositories={[]} onApply={apply} /></DesignProvider>);
-  const branch = screen.getByLabelText("分支", { exact: true });
-  await user.type(branch, "main");
-  await user.type(screen.getByLabelText("起始时间", { exact: true }), "2026-01-01T08:00");
-  await user.click(screen.getByText("更多筛选（提交、分支、时间）"));
+  expect(screen.queryByLabelText("分支", { exact: true })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("提交 SHA", { exact: true })).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("创建日期", { exact: true }), "2026-01-01");
+  await user.tab();
+  expect(screen.queryByText(/更多筛选/)).not.toBeInTheDocument();
   expect(apply).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "查询" }));
   const params = apply.mock.calls[0][0] as URLSearchParams;
   expect(params.get("sha")).toBe("abcd");
-  expect(params.get("target_branch")).toBe("main");
   expect(params.get("page_size")).toBe("50");
   expect(params.get("view")).toBe("attention");
   expect(params.get("issue_state")).toBe("open");
   expect(params.has("page")).toBe(false);
-  expect(params.get("since")).toBe(new Date("2026-01-01T08:00").toISOString());
+  expect(params.get("since")).toBe(new Date(2026, 0, 1).toISOString());
+  expect(params.get("until")).toBe(new Date(2026, 0, 1, 23, 59, 59, 999).toISOString());
+});
+
+it("旧范围未经修改继续生效，清空筛选仅保留每页条数", async () => {
+  const apply = vi.fn();
+  const user = userEvent.setup();
+  const original = new URLSearchParams("page_size=50&page=3&sha=abcd&target_branch=main&notification_failed=true&since=2026-11-01T00:00:00Z&until=2026-11-03T23:59:59Z");
+  render(<DesignProvider><TaskFilters params={original} repositories={[]} onApply={apply} /></DesignProvider>);
+  expect(screen.getByLabelText("创建日期", { exact: true })).toHaveValue("");
+  await user.click(screen.getByRole("button", { name: "查询" }));
+  const params = apply.mock.calls[0][0] as URLSearchParams;
+  expect(params.get("since")).toBe(original.get("since"));
+  expect(params.get("until")).toBe(original.get("until"));
+  expect(params.get("notification_failed")).toBe("true");
+  expect(params.get("target_branch")).toBe("main");
+  expect(params.has("page")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "清空筛选" }));
+  expect((apply.mock.calls[1][0] as URLSearchParams).toString()).toBe("page_size=50");
 });
 
 it("打开后外部选择变化不改变冻结编号，网络失败不自动重试", async () => {

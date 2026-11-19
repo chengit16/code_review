@@ -140,7 +140,8 @@ def backfill_existing_issues(db: sqlite3.Connection) -> None:
         return
     db.execute("BEGIN IMMEDIATE")
     for job in db.execute("""SELECT id,repository_id,attempts,mr_iid,commit_sha,result_json
-        FROM review_jobs WHERE status IN ('complete','partial') AND result_json IS NOT NULL
+        FROM review_jobs WHERE status IN ('complete','partial') AND superseded=0
+        AND result_json IS NOT NULL
         ORDER BY id""").fetchall():
         try:
             result = json.loads(job["result_json"])

@@ -1,5 +1,6 @@
 /** @description 主题的问题选择器；服务端检索和分页，选择不隐式扩展到其他页。 */
 import { useQuery } from "@tanstack/react-query";
+import { Button, Input } from "antd";
 import { useState } from "react";
 
 import { listImprovements } from "../api/improvements";
@@ -22,7 +23,7 @@ export function ThemeProblemPicker({ token, selected, onChange, disabled }: {
   return <section className="theme-issue-links" aria-label="关联问题记录"><h3>关联问题记录</h3>
     <p className="muted">已选 {selected.length} 条，仅关联显式选择的记录；不会自动改变问题状态。检索包含归档记录，原关联不会因归档丢失。</p>
     <div className="theme-selected-links">{selected.map((id) => <button key={id} className="button button-secondary" type="button" disabled={disabled} aria-label={`取消关联记录 ${id}`} onClick={() => onChange(selected.filter((value) => value !== id))}>#{id} ×</button>)}</div>
-    <div className="improvement-search"><label>搜索可关联记录<input maxLength={200} value={keyword} disabled={disabled} onChange={(event) => setKeyword(event.target.value)} /></label><button type="button" className="button button-secondary" disabled={disabled} onClick={() => { setQ(keyword.trim()); setPage(1); }}>搜索问题</button></div>
+    <div className="improvement-search"><Input aria-label="搜索可关联记录" placeholder="搜索可关联记录" maxLength={200} value={keyword} disabled={disabled} onChange={(event) => setKeyword(event.target.value)} /><Button disabled={disabled} onClick={() => { setQ(keyword.trim()); setPage(1); }}>搜索问题</Button></div>
     <QueryState loading={issues.isLoading} error={issues.error} onRetry={() => void issues.refetch()} />
     {issues.data && <><div className="theme-problem-options">{issues.data.items.map((issue) => <label className="checkbox-label" key={issue.id}><input type="checkbox" disabled={disabled || (!selected.includes(issue.id) && selected.length >= 500)} checked={selected.includes(issue.id)} onChange={(event) => onChange(event.target.checked ? [...selected, issue.id] : selected.filter((id) => id !== issue.id))} />#{issue.id} · {issue.title} · {progressLabels[issue.status]}{issue.archived_at ? " · 已归档" : ""}</label>)}</div>
       {issues.data.total === 0 && <p className="muted">没有匹配的记录，已有选择仍保留。</p>}

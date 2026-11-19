@@ -110,7 +110,7 @@ def test_model_lane_rotates_reviews_premerge_and_diagnostics(
         active -= 1
 
     def review(_store: Store, _settings: Settings, task: dict[str, Any]) -> None:
-        enter("review")
+        enter("premerge" if task.get("source")=="premerge" else "review")
         _store.finish_job(task["id"], "complete", None, {"comments": []}, None)
 
     def premerge(_store: Store, _settings: Settings, task: dict[str, Any]) -> None:
@@ -127,8 +127,10 @@ def test_model_lane_rotates_reviews_premerge_and_diagnostics(
     monkeypatch.setattr(worker, "deliver_notification",
                         lambda db, _settings, task: db.finish_delivery(task["id"], None))
     with WorkerScheduler(store, settings) as scheduler:
-        pump(scheduler, lambda: len(seen) >= 4)
-    assert seen[:4] == ["review", "premerge", "check", "review"]
+        pump(scheduler, lambda: "premerge" in seen and len(seen) >= 6)
+    assert seen[:3] == ["review", "check", "review"]
+    pump_seen = seen.copy()
+    assert "check" in pump_seen
     assert maximum == 1
 
 

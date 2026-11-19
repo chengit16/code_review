@@ -14,8 +14,6 @@ export function RuntimeSummary({ data, workerStatus, readStatus }: {
     { label: "评审执行异常", count: data.summary.attention, path: "/jobs?view=attention" },
     { label: "飞书通知失败", count: data.summary.notification_failed, path: "/jobs?view=notification_failed" },
     { label: "合并事件需要恢复", count: data.todo.events_attention, path: "/events?status=needs_attention&actionable_only=true" },
-    { label: "合并前审查失败", count: data.todo.premerge_failed, path: "/premerge?status=failed&latest_only=true&actionable_only=true" },
-    { label: "合并前审查覆盖不完整", count: data.todo.premerge_partial, path: "/premerge?status=partial&latest_only=true&actionable_only=true" },
   ].filter((row) => row.count > 0) : [];
   return <section className="overview-runtime" aria-label="全平台运行摘要">
     <div className="overview-runtime-head">{workerStatus}<span className="overview-scope">全平台 · 不随项目和时间筛选变化</span></div>
@@ -23,6 +21,6 @@ export function RuntimeSummary({ data, workerStatus, readStatus }: {
       {rows.map((row) => <Link key={row.path} to={row.path} aria-label={`查看${row.label} ${row.count}`}>{row.label} <strong>{row.count}</strong></Link>)}
       {!rows.length && <span>当前未发现运行异常</span>}
     </div>}
-    <div className="overview-runtime-foot">{readStatus}{rows.length > 0 && <span>各类异常可能关联同一链路，不相加；事件及合并前入口限定当前启用范围。</span>}</div>
+    <div className="overview-runtime-foot">{readStatus}{rows.length > 0 && <span>各类异常可能关联同一链路，不相加；事件入口限定当前启用范围。</span>}</div>
   </section>;
 }

@@ -61,7 +61,7 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
             raise HTTPException(422, "时间必须包含时区")
         if since and until and since > until:
             raise HTTPException(422, "起始时间不能晚于结束时间")
-        conditions: list[str] = []
+        conditions: list[str] = ["e.source!='premerge'"]
         if actionable_only:
             conditions.append(EVENT_ACTIONABLE_SCOPE)
         args: list[Any] = []
@@ -93,7 +93,8 @@ def register_event_search(app: FastAPI, store: Store, admin: Any) -> None:
             rows = db.execute(f"""SELECT e.*, r.name AS repository_name,
                 COUNT(j.id) AS job_count, MAX(j.id) AS latest_job_id
                 FROM merge_events e JOIN repositories r ON r.id=e.repository_id
-                LEFT JOIN review_jobs j ON j.event_id=e.id{where}
+                LEFT JOIN review_event_links l ON l.event_id=e.id
+                LEFT JOIN review_jobs j ON j.id=l.job_id{where}
                 GROUP BY e.id ORDER BY e.id DESC LIMIT ? OFFSET ?""",
                 (*args, page_size, (page-1)*page_size)).fetchall()
         return {"items": [dict(row) for row in rows], "total": total,

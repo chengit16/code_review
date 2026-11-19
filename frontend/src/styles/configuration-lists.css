@@ -9,3 +9,45 @@
 @media (max-width: 600px) {
   .configuration-list-page .auth-mode-setting { align-items: flex-start; flex-direction: column; gap: 8px; }
 }
+
+/* 配置卡片突出名称、使用关系与真实验证；仅维护布局，不改测试和危险操作状态。 */
+.configuration-catalog { min-width: 0; }
+.configuration-card-list { min-width: 0; }
+.configuration-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.configuration-item-card { min-width: 0; height: 100%; }
+.configuration-item-card .ant-card-body { height: 100%; padding: 14px 16px; }
+.configuration-item-card article { display: flex; flex-direction: column; gap: 8px; height: 100%; min-width: 0; }
+.configuration-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.configuration-card-heading > div { min-width: 0; }
+.configuration-card-heading h3 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.configuration-card-heading p { margin: 2px 0 0; color: var(--color-muted); font-size: 12px; overflow-wrap: anywhere; }
+.configuration-card-heading > .ant-tag { flex: none; margin: 0; }
+.configuration-card-facts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; }
+.configuration-card-facts > div { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; align-items: baseline; }
+.configuration-card-facts dt, .configuration-card-projects > span { color: var(--color-muted); font-size: 12px; }
+.configuration-card-facts dd { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.configuration-card-details { font-size: 12px; color: var(--color-muted); overflow-wrap: anywhere; }
+.configuration-card-details summary { cursor: pointer; color: var(--color-accent); }
+.configuration-card-details p { margin: 8px 0; }
+.configuration-card-projects { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; }
+.configuration-card-projects > div { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.configuration-card-projects .ant-tag { max-width: 100%; margin: 0; white-space: normal; overflow-wrap: anywhere; }
+.configuration-card-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--color-border); }
+.configuration-card-check { min-width: 0; }
+.configuration-card-check .connection-checks { margin: 0; padding: 0; }
+.configuration-card-check .connection-check-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.configuration-card-check .connection-check-result { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.configuration-card-check .connection-check-result > span:nth-child(2) { color: var(--color-muted); }
+.configuration-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0; }
+.configuration-card-actions .ant-btn { padding-inline: 8px; }
+.configuration-card-pagination { display: flex; justify-content: flex-end; padding: 12px 0; }
+.configuration-card-pagination .ant-pagination { flex-wrap: wrap; row-gap: 8px; }
+@media (max-width: 1000px) {
+  .configuration-card-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .configuration-item-card .ant-card-body { padding: 12px; }
+  .configuration-card-footer { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .configuration-card-actions .ant-btn { min-height: 40px; }
+  .configuration-card-pagination { justify-content: flex-start; }
+}

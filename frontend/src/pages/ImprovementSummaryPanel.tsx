@@ -1,5 +1,6 @@
 /** @description 编排平台复盘查询、URL 筛选与明细跳转；不写入业务事实或自动确认部署。 */
 import { useQuery } from "@tanstack/react-query";
+import { Input } from "antd";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -7,7 +8,7 @@ import { getImprovementSummary } from "../api/improvementSummary";
 import type { ImprovementAttentionGroup, ImprovementSummary } from "../api/improvementSummary";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
-import { SelectField } from "../ui/SelectField";
+import { ListSelect as SelectField } from "../ui/ListControls";
 import { formatTime } from "../ui/format";
 import { ImprovementActivity, ImprovementBreakdown } from "./ImprovementSummaryCharts";
 import { categoryLabels, codeLabels, deploymentLabels, kindLabels, progressLabels, verificationLabels } from "./improvementFields";
@@ -48,8 +49,8 @@ function SummaryFilters({ params, onApply }: { params: URLSearchParams; onApply:
   const [end, setEnd] = useState(params.get("end_date") ?? "");
   const [category, setCategory] = useState(params.get("category") ?? "all");
   return <form className="summary-filters section" onSubmit={(event) => { event.preventDefault(); onApply({ start_date: start, end_date: end, category }); }}>
-    <label>活动开始日期<input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-    <label>活动结束日期<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+    <Input aria-label="活动开始日期" title="活动开始日期" type="date" value={start} onChange={(event) => setStart(event.target.value)} />
+    <Input aria-label="活动结束日期" title="活动结束日期" type="date" value={end} onChange={(event) => setEnd(event.target.value)} />
     <SelectField label="复盘分类" value={category} onValueChange={setCategory} options={[{ value: "all", label: "全部分类" }, ...Object.entries(categoryLabels).map(([value, label]) => ({ value, label }))]} />
     <button type="submit" className="button button-primary">应用复盘条件</button><button type="button" className="button button-secondary" onClick={() => { setStart(""); setEnd(""); setCategory("all"); onApply({ start_date: "", end_date: "", category: "" }); }}>重置条件</button>
     <p className="muted">日期留空默认近 30 天；最多 366 天。日期只影响活动趋势，不裁剪当前累计与待办。分类同时作用于两者。</p>

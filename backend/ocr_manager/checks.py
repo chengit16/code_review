@@ -14,6 +14,7 @@ from ocr_manager.feishu import FeishuDeliveryError, send_connection_test
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient
 from ocr_manager.ocr import check_model_connection
+from ocr_manager.repository_branches import branches
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
 
@@ -49,16 +50,20 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
         with store.connection() as db:
             db.execute("BEGIN")
             current = check_is_current(db, check)
-            repo_row = db.execute("SELECT * FROM repositories WHERE id=?",
-                                  (check["repository_id"],)).fetchone()
+            repo_row = db.execute(
+                "SELECT * FROM repositories WHERE id=?", (check["repository_id"],)
+            ).fetchone()
             repository = dict(repo_row) if repo_row else None
-            model_row = db.execute("SELECT * FROM model_profiles WHERE id=?",
-                                   (check.get("model_profile_id"),)).fetchone()
+            model_row = db.execute(
+                "SELECT * FROM model_profiles WHERE id=?", (check.get("model_profile_id"),)
+            ).fetchone()
             profile = dict(model_row) if model_row else None
             target_id = check.get("notification_target_id") or (
-                repository["feishu_target_id"] if repository else None)
-            target_row = db.execute("SELECT * FROM notification_targets WHERE id=?",
-                                    (target_id,)).fetchone()
+                repository["feishu_target_id"] if repository else None
+            )
+            target_row = db.execute(
+                "SELECT * FROM notification_targets WHERE id=?", (target_id,)
+            ).fetchone()
             target = dict(target_row) if target_row else None
         if not current:
             store.finish_connection_check(check["id"], "配置已更改或无版本证据，请重新测试")
@@ -73,7 +78,9 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                     ocr_base_url=profile["base_url"],
                     ocr_api_key=SecretBox(settings.master_key).decrypt(
                         profile["api_key_ciphertext"]
-                    ) if profile["api_key_ciphertext"] else "",
+                    )
+                    if profile["api_key_ciphertext"]
+                    else "",
                 )
             check_model_connection(model_settings, settings.data_dir / "checks" / str(check["id"]))
         elif kind == "feishu" and check.get("notification_target_id"):
@@ -81,8 +88,11 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                 raise ValueError("通知通道不存在")
             box = SecretBox(settings.master_key)
             webhook = box.decrypt(target["webhook_ciphertext"])
-            signing_secret = (box.decrypt(target["signing_secret_ciphertext"])
-                              if target["signing_secret_ciphertext"] else "")
+            signing_secret = (
+                box.decrypt(target["signing_secret_ciphertext"])
+                if target["signing_secret_ciphertext"]
+                else ""
+            )
             if signing_secret:
                 send_connection_test(webhook, signing_secret)
             else:
@@ -94,18 +104,19 @@ def run_connection_check(store: Store, settings: Settings, check: dict[str, Any]
                 repository["gitlab_token"] = SecretBox(settings.master_key).decrypt(
                     repository["gitlab_token_ciphertext"]
                 )
-            GitRepository(settings.data_dir, repository).check_access()
+            for branch in branches(repository):
+                GitRepository(
+                    settings.data_dir, {**repository, "target_branch": branch}
+                ).check_access()
         elif kind == "gitlab":
             token = (
                 SecretBox(settings.master_key).decrypt(repository["gitlab_token_ciphertext"])
                 if repository["gitlab_token_ciphertext"]
                 else settings.gitlab_api_token
             )
-            GitLabClient(repository["gitlab_url"], token).check_access(
-                repository["project_id"],
-                repository["target_branch"],
-                repository["remote_url"],
-            )
+            client = GitLabClient(repository["gitlab_url"], token)
+            for branch in branches(repository):
+                client.check_access(repository["project_id"], branch, repository["remote_url"])
         elif kind == "feishu":
             webhook_ciphertext = (
                 target["webhook_ciphertext"] if target else repository["feishu_webhook"]

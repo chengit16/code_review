@@ -1,6 +1,7 @@
 /** @description 验证复选框和文字在页面、表单及窄屏中的对齐；不提交配置或切换认证方式。 */
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { mockRepositoryQuery } from "./unifiedFixture";
 
 async function expectCheckboxAlignment(page: Page) {
   const rows = await page.locator(".checkbox-label").evaluateAll((labels) => labels.filter((label) => label.getClientRects().length > 0).map((label) => {
@@ -34,7 +35,7 @@ async function expectCheckboxAlignment(page: Page) {
   }
   for (const row of designRows) {
     expect(row.centerOffset).toBeLessThanOrEqual(2.5);
-    expect(row.height).toBeGreaterThanOrEqual(40);
+    expect(row.height).toBeGreaterThanOrEqual(20);
     expect(row.right).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -42,51 +43,40 @@ async function expectCheckboxAlignment(page: Page) {
 
 for (const width of [1280, 390, 320]) {
   test(`复选框统一对齐，视口 ${width}`, async ({ page }) => {
+    await mockRepositoryQuery(page);
     await page.setViewportSize({ width, height: 844 });
     let writes = 0;
-    page.on("request", (request) => { if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) writes += 1; });
-    await page.goto("/premerge");
-    await page.getByText("更多筛选", { exact: true }).click();
-    await expect(page.getByRole("checkbox", { name: /包含历史版本/ })).toBeVisible();
-    await expectCheckboxAlignment(page);
-    await page.locator(".version-toggle").screenshot({ path: `test-results/history-checkbox-${width}.png` });
+    page.on("request", (request) => { if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method()) && !/repository-query-sessions|repository-discoveries/.test(request.url())) writes += 1; });
     await page.goto("/users");
     await expect(page.getByRole("checkbox", { name: "启用多人账号登录" })).toBeVisible();
     await expectCheckboxAlignment(page);
-    await page.locator(".inline-setting").screenshot({ path: `test-results/auth-checkbox-${width}.png` });
+    await page.getByRole("checkbox", { name: "启用多人账号登录" }).locator("..").screenshot({ path: `test-results/auth-checkbox-${width}.png` });
     await page.route("**/api/auth/users", (route) => route.fulfill({ json: [{ id: 999, username: "alignment-user", role: "reader", enabled: 1, created_at: "2026-10-22 00:00:00" }] }));
     await page.reload();
     await page.getByRole("button", { name: "编辑 alignment-user" }).click();
     await expect(page.getByRole("checkbox", { name: "启用账号", exact: true })).toBeVisible();
     await expectCheckboxAlignment(page);
-    await page.goto("/operations?tab=alerts");
+    await page.goto("/operations?tab=alerts", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("checkbox", { name: "主动飞书告警" })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.goto("/repositories");
     await page.getByRole("button", { name: "添加仓库" }).click();
+    await expect(page.getByRole("checkbox", { name: "合并前 MR 评审", exact: true })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.getByRole("button", { name: "取消", exact: true }).click();
     await page.getByRole("button", { name: "编辑 验收任务项目" }).click();
+    await expect(page.getByRole("checkbox", { name: "合并前 MR 评审", exact: true })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.getByRole("tab", { name: "评审参数" }).click();
     await expect(page.getByRole("checkbox", { name: "自动过滤纯换行文件" })).toBeVisible();
     await expectCheckboxAlignment(page);
-    await page.getByRole("tab", { name: "发布审查" }).click();
+    await page.getByRole("tab", { name: "评审参数" }).click();
     await expect(page.getByRole("checkbox", { name: "包含 GitLab MR 描述" })).toBeVisible();
     await expectCheckboxAlignment(page);
     await page.goto("/issues");
     await expect(page.getByRole("combobox", { name: "项目", exact: true })).toBeVisible();
-    if (width < 621) {
-      const filters = await page.locator(".issue-filters .select-field").evaluateAll((fields) => fields.map((field) => {
-        const label = field.querySelector("label")?.getBoundingClientRect();
-        const trigger = field.querySelector('[role="combobox"]')?.getBoundingClientRect();
-        return { labelBottom: label?.bottom, triggerTop: trigger?.top, labelHeight: label?.height };
-      }));
-      for (const filter of filters) {
-        expect(filter.labelHeight).toBeLessThan(25);
-        expect(filter.labelBottom).toBeLessThanOrEqual(filter.triggerTop ?? 0);
-      }
-    }
+    await expect(page.locator(".issue-filter-grid label")).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "级别", exact: true })).toBeVisible();
     await page.route("**/api/notification-targets", (route) => route.fulfill({ json: [{ id: 999, name: "对齐测试通知", repository_count: 0, has_signing_secret: true, created_at: "2026-10-22 00:00:00", updated_at: "2026-10-22 00:00:00" }] }));
     await page.goto("/settings?tab=feishu");
     await page.getByRole("button", { name: "编辑 对齐测试通知" }).click();

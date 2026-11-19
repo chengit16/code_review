@@ -23,7 +23,7 @@ QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
  e.revision,COALESCE(e.document_json,j.result_json) AS document,
  CASE WHEN e.job_id IS NULL THEN 0 ELSE 1 END AS promoted
  FROM review_jobs j LEFT JOIN effective e ON e.job_id=j.id
- WHERE j.status IN ('complete','partial','failed','skipped')
+ WHERE j.superseded=0 AND j.status IN ('complete','partial','failed','skipped')
  AND (? IS NULL OR j.repository_id=?)
  AND ((j.finished_at>=? AND j.finished_at<?) OR e.job_id IS NOT NULL
       OR j.finished_at IS NULL)

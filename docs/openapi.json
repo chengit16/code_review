@@ -133,6 +133,27 @@
         "title": "BatchIds",
         "type": "object"
       },
+      "BranchInput": {
+        "additionalProperties": false,
+        "description": "远程分页搜索，不把第一页结果作为全部候选。",
+        "properties": {
+          "page": {
+            "default": 1,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "search": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Search",
+            "type": "string"
+          }
+        },
+        "title": "BranchInput",
+        "type": "object"
+      },
       "BudgetAuthorization": {
         "additionalProperties": false,
         "description": "仅管理员显式提高或调整单任务上限；保存不是付费执行，不修改源快照约束。",
@@ -3705,8 +3726,15 @@
             "type": "array"
           },
           "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
           },
           "include_description": {
             "default": false,
@@ -3714,9 +3742,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "enabled"
-        ],
         "title": "PremergeSetting",
         "type": "object"
       },
@@ -3818,6 +3843,41 @@
           "enabled"
         ],
         "title": "PublicationSetting",
+        "type": "object"
+      },
+      "QueryInput": {
+        "additionalProperties": false,
+        "description": "查询会话绑定输入；编辑留空令牌仅允许访问原主机。",
+        "properties": {
+          "gitlab_token": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Gitlab Token",
+            "type": "string"
+          },
+          "remote_url": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Remote Url",
+            "type": "string"
+          },
+          "repository_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Id"
+          }
+        },
+        "required": [
+          "remote_url"
+        ],
+        "title": "QueryInput",
         "type": "object"
       },
       "RecoveryBudget": {
@@ -4460,20 +4520,52 @@
             ],
             "title": "Path With Namespace"
           },
+          "premerge_enabled": {
+            "default": false,
+            "title": "Premerge Enabled",
+            "type": "boolean"
+          },
           "project_id": {
             "exclusiveMinimum": 0.0,
             "title": "Project Id",
             "type": "integer"
+          },
+          "query_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Session Id"
           },
           "remote_url": {
             "title": "Remote Url",
             "type": "string"
           },
           "target_branch": {
+            "default": "",
             "maxLength": 200,
-            "minLength": 1,
             "title": "Target Branch",
             "type": "string"
+          },
+          "target_branches": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Branches"
           },
           "webhook_token": {
             "anyOf": [
@@ -4492,8 +4584,7 @@
           "name",
           "gitlab_url",
           "project_id",
-          "remote_url",
-          "target_branch"
+          "remote_url"
         ],
         "title": "RepositoryCreate",
         "type": "object"
@@ -4619,6 +4710,17 @@
             ],
             "title": "Path With Namespace"
           },
+          "premerge_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premerge Enabled"
+          },
           "project_id": {
             "anyOf": [
               {
@@ -4630,6 +4732,17 @@
               }
             ],
             "title": "Project Id"
+          },
+          "query_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Session Id"
           },
           "remote_url": {
             "anyOf": [
@@ -4654,6 +4767,22 @@
               }
             ],
             "title": "Target Branch"
+          },
+          "target_branches": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Branches"
           },
           "webhook_id": {
             "anyOf": [
@@ -6796,6 +6925,50 @@
         "summary": "List Events"
       }
     },
+    "/api/events/{event_id}/full-review": {
+      "post": {
+        "description": "显式恢复无法安全分割的事件；允许重复覆盖部分已审代码并产生模型费用。",
+        "operationId": "full_review_api_events__event_id__full_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Full Review Api Events  Event Id  Full Review Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Full Review"
+      }
+    },
     "/api/events/{event_id}/retry": {
       "post": {
         "description": "把需要人工处理的事件重新放入 GitLab 确认队列。",
@@ -8744,6 +8917,27 @@
               "default": false,
               "title": "Notification Failed",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "premerge",
+                    "mr",
+                    "push"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           }
         ],
@@ -11585,6 +11779,145 @@
         "summary": "Read"
       }
     },
+    "/api/repository-query-sessions": {
+      "post": {
+        "description": "来源不变时允许编辑使用已存凭据；换主机必须新凭据。",
+        "operationId": "create_api_repository_query_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Api Repository Query Sessions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/repository-query-sessions/{session_id}": {
+      "delete": {
+        "description": "放弃草稿即时过期，不删除查询事实。",
+        "operationId": "cancel_api_repository_query_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Cancel Api Repository Query Sessions  Session Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel"
+      }
+    },
+    "/api/repository-query-sessions/{session_id}/branches": {
+      "post": {
+        "description": "分页查询先入 SQLite，网络由 ingress Worker 执行。",
+        "operationId": "branches_api_repository_query_sessions__session_id__branches_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Branches Api Repository Query Sessions  Session Id  Branches Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Branches"
+      }
+    },
     "/api/repository-readiness": {
       "get": {
         "description": "按保存版本与测试时间计算接入状态，旧测试不会冒充新配置已验证。",
@@ -13179,6 +13512,27 @@
               "default": false,
               "title": "Notification Failed",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "premerge",
+                    "mr",
+                    "push"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
             }
           }
         ],

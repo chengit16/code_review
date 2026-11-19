@@ -32,3 +32,36 @@
   .publication-save-row { align-items: stretch; flex-direction: column; }
   .publication-save-row > .ant-btn { width: 100%; }
 }
+
+/* 回调是复制信息，诊断是执行记录；分开呈现，避免把地址挤入仓库列表工具栏。 */
+.repository-callback-panel { display: grid; gap: 12px; margin: 20px 0; padding: 18px 20px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.repository-callback-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.repository-callback-heading h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.repository-callback-heading p { margin: 4px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.repository-callback-control { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.repository-callback-control .ant-input { min-width: 0; flex: 1; font-size: 12px; background: var(--color-surface-subtle); }
+.repository-callback-control .ant-btn { flex: none; }
+.repository-callback-panel > p { margin: 0; }
+.repository-branch-tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.repository-branch-tags .ant-tag { margin: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.repository-diagnosis { display: grid; gap: 20px; }
+.repository-diagnosis > .diagnosis-checklist { margin: 0; }
+.diagnosis-tests h3 { margin: 0; font-size: 14px; }
+.diagnosis-test-list { margin-top: 10px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 8px; }
+.diagnosis-test-list .connection-checks { margin: 0; padding: 0; }
+.diagnosis-test-list .connection-check-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; padding: 12px 0; min-height: 64px; border-bottom: 1px solid var(--color-border); }
+.diagnosis-test-list > .connection-checks:last-child .connection-check-row:last-child { border-bottom: 0; }
+.diagnosis-test-list .connection-check-row .ant-btn { justify-self: start; }
+.diagnosis-test-list .connection-check-result { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-width: 0; font-size: 12px; }
+.diagnosis-test-list .connection-check-result > span:nth-child(2) { color: var(--color-muted); }
+.diagnosis-test-unavailable { margin: 0; padding: 14px 0; color: var(--color-muted); font-size: 12px; }
+.repository-diagnosis .diagnosis-events { margin-top: 0; }
+.repository-editor-body { scrollbar-gutter: stable; scroll-padding-top: 20px; overflow-anchor: none; }
+@media (max-width: 600px) {
+  .repository-callback-panel { padding: 16px; }
+  .repository-callback-control { flex-wrap: wrap; }
+  .repository-callback-control .ant-input { flex-basis: 100%; }
+  .repository-callback-control .ant-btn { width: 100%; }
+  .diagnosis-tests > .section-head { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .diagnosis-test-list .connection-check-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}

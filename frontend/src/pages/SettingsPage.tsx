@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, Collapse, Input, Tag } from "antd";
-import type { TableColumnsType } from "antd";
 import { Plus, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -10,8 +9,8 @@ import type { FormEvent } from "react";
 import { apiRequest } from "../api/client";
 import type { ModelConfiguration } from "../api/types";
 import { ConnectionChecks } from "../ui/ConnectionChecks";
+import { ConfigurationCards } from "../ui/ConfigurationCards";
 import { ListSearch, ListStatusNav } from "../ui/ListControls";
-import { ListTable as Table } from "../ui/ListTable";
 import { Modal } from "../ui/Modal";
 import { PageHeader } from "../ui/PageHeader";
 import { QueryState } from "../ui/QueryState";
@@ -101,25 +100,26 @@ export function SettingsPage({ token, embedded = false }: {
     setOpen(true);
   }
   const list = useLocalList(profiles.error ? undefined : profiles.data, (item) => `${item.name} ${item.model} ${item.provider} ${item.base_url}`, (item) => item.enabled ? "enabled" : "disabled", "model_");
-  const columns: TableColumnsType<ModelConfiguration> = [
-    { title: "配置名称", dataIndex: "name", key: "name", render: (name: string, profile) => <><strong>{name}</strong><span className="list-secondary mono">{profile.model}</span></> },
-    { title: "Provider", dataIndex: "provider", key: "provider", width: 150, render: (value: string) => value === "dashscope" ? "百练 / DashScope" : value },
-    { title: "使用情况", key: "usage", width: 180, render: (_: unknown, profile) => <><Tag>{profile.enabled ? "全局默认" : "非默认"}</Tag><span className="list-secondary">{!profile.model || !profile.has_api_key ? "草稿待补全" : "配置完整"} · {usage.isSuccess ? `${usage.data[String(profile.id)] ?? 0} 个项目指定` : "项目使用情况待确认"}</span></> },
-    { title: "当前连接验证", key: "check", width: 320, render: (_: unknown, profile) => <ConnectionChecks compact token={token} kinds={["model"]} modelProfileId={profile.id} enabled={Boolean(profile.model && profile.has_api_key)} /> },
-    { title: "操作", key: "actions", width: 240, render: (_: unknown, profile) => <div className="config-row-actions">{!profile.enabled && <Button type="link" size="small" title="设为全局默认" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>设为全局默认</Button>}<Button type="link" size="small" title="编辑模型" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="link" size="small" title="删除模型" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div> },
-  ];
   return <div className={`configuration-list-page ${embedded ? "settings-content" : "page"}`}>
     <PageHeader headingLevel={embedded ? 2 : 1} title="评审模型" subtitle="Open Code Review 评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
     <QueryState loading={profiles.isLoading} error={profiles.error} />
-    {!profiles.isLoading && !profiles.error && <Card className="model-profile-card" size="small" title={<h2 className="model-profile-heading">模型配置</h2>}>
+    <section className="configuration-catalog" aria-label="模型配置">
       <div className="list-toolbar"><ListSearch key={list.q} label="搜索配置" value={list.q} onSearch={(value) => list.update("q", value)} /></div>
       <ListStatusNav value={list.status} labels={{ all: "全部", enabled: "全局默认", disabled: "非默认" }} counts={list.counts} onChange={(value) => list.update("status", value)} />
-      <Table rowKey="id" columns={columns} dataSource={list.filtered ?? []} loading={profiles.isFetching} locale={{ emptyText: profiles.error ? "无法读取模型配置" : "尚无模型配置" }} scroll={{ x: 1100 }} pagination={list.pagination} expandable={{ expandedRowRender: (profile) => <p>端点：{profile.base_url || "Provider 内置端点"} · 计价：{profile.input_price_per_million ?? "未知"} 输入 / {profile.output_price_per_million ?? "未知"} 输出（{profile.price_currency} / 百万 Token）；价格未配置不按零计算。</p> }} />
+      <ConfigurationCards label="模型配置列表" list={list} loading={profiles.isFetching} failed={Boolean(profiles.error)} emptyText={list.q ? "没有匹配的模型配置" : "尚无模型配置"} renderItem={(profile) => <Card key={profile.id} className="configuration-item-card" size="small">
+        <article aria-label={`模型 ${profile.name}`}>
+          <header className="configuration-card-heading"><div><h3>{profile.name || "未命名模型"}</h3><p className="mono">{profile.model || "尚未填写模型标识"}</p></div><Tag color={profile.enabled ? "blue" : "default"}>{profile.enabled ? "全局默认" : "非默认"}</Tag></header>
+          <dl className="configuration-card-facts"><div><dt>Provider</dt><dd>{profile.provider === "dashscope" ? "百练 / DashScope" : profile.provider}</dd></div><div><dt>项目使用</dt><dd>{usage.isSuccess ? `${usage.data[String(profile.id)] ?? 0} 个项目指定` : "项目使用情况待确认"}</dd></div><div><dt>配置状态</dt><dd>{!profile.model || !profile.has_api_key ? "草稿待补全" : "配置完整"}</dd></div></dl>
+          <details className="configuration-card-details"><summary>端点与计价</summary><p>端点：{profile.base_url || "Provider 内置端点"}</p><p>输入 {profile.input_price_per_million ?? "未知"} / 输出 {profile.output_price_per_million ?? "未知"}（{profile.price_currency} / 百万 Token）</p><small>价格未配置不按零计算。</small></details>
+          <footer className="configuration-card-footer"><div className="configuration-card-check"><ConnectionChecks compact token={token} kinds={["model"]} modelProfileId={profile.id} enabled={Boolean(profile.model && profile.has_api_key)} /></div>
+          <div className="configuration-card-actions">{!profile.enabled && <Button type="text" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>设为默认</Button>}<Button type="text" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="text" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div></footer>
+        </article>
+      </Card>} />
       <p className="form-note">保存不发起调用；每个模型可独立测试，不改变默认模型。非默认模型仍可由项目指定使用。</p>
-    </Card>}
+    </section>
     {open && <Modal titleId="model-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
       <form className="settings-form hook-form" noValidate onSubmit={submit}><fieldset className="form-fields" disabled={create.isPending || update.isPending}>

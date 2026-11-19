@@ -1,6 +1,6 @@
 /** @description 配置全历史查询与安全恢复；筛选分页由 URL 管理，密文不进入差异展示。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Drawer, Input } from "antd";
+import { App, Button, Drawer } from "antd";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -12,7 +12,8 @@ import { ListTable } from "../ui/ListTable";
 import { PageHeader } from "../ui/PageHeader";
 import { Pagination } from "../ui/Pagination";
 import { QueryState } from "../ui/QueryState";
-import { localTimeInput, utcTimeInput } from "../ui/listDates";
+import { ListDateRange } from "../ui/ListDateRange";
+import { localDateInput } from "../ui/listDates";
 
 
 const kinds = [
@@ -53,22 +54,18 @@ export function ConfigHistoryPage({ token }: { /** 内存中的管理口令。 *
     <section className="list-surface">
       <ListToolbar advanced={<>
         <ListSelect label="变更动作" value={params.get("action") ?? "all"} onValueChange={(value) => update("action", value)} disabled={restore.isPending} options={[{ value: "all", label: "全部动作" }, ...Object.entries(actions).map(([value, label]) => ({ value, label }))]} />
-        <form className="list-toolbar" key={`${params.get("since")}-${params.get("until")}`} onSubmit={(event) => {
-          event.preventDefault(); const form = new FormData(event.currentTarget);
-          try {
-            const since = utcTimeInput(String(form.get("since") ?? "")); const until = utcTimeInput(String(form.get("until") ?? ""));
-            if (since && until && since > until) throw new Error("起始时间不能晚于结束时间");
-            const next = new URLSearchParams(params); next.delete("page");
-            for (const [key, value] of [["since", since], ["until", until]]) { if (value) next.set(key, value); else next.delete(key); }
-            setDateError(""); setDetail(null); setFeedback(""); setParams(next);
-          } catch (error) { setDateError(error instanceof Error ? error.message : "时间无效"); }
-        }}><label>起始时间<Input name="since" type="datetime-local" defaultValue={localTimeInput(params.get("since"))} /></label><label>结束时间<Input name="until" type="datetime-local" defaultValue={localTimeInput(params.get("until"))} /></label><Button htmlType="submit" disabled={restore.isPending}>应用时间</Button></form>
+        <ListDateRange since={params.get("since") ?? ""} until={params.get("until") ?? ""} disabled={restore.isPending} onChange={({ since, until }) => {
+          if (since && until && since > until) { setDateError("创建日期起始不能晚于结束"); return; }
+          const next = new URLSearchParams(params); next.delete("page");
+          for (const [key, value] of [["since", since], ["until", until]]) { if (value) next.set(key, value); else next.delete(key); }
+          setDateError(""); setDetail(null); setFeedback(""); setParams(next);
+        }} />
       </>}>
         <ListSelect label="配置类型" value={kind} onValueChange={(value) => update("kind", value)} disabled={restore.isPending} options={kinds} />
         <ListSelect label="对象" value={object} onValueChange={(value) => update("object_id", value)} disabled={restore.isPending} options={[{ value: "all", label: "全部对象" }, ...(objects.data ?? []).map((item) => ({ value: String(item.id), label: item.name })), ...(object !== "all" && !objects.data?.some((item) => String(item.id) === object) ? [{ value: object, label: `历史对象 #${object}` }] : [])]} />
         <Button disabled={restore.isPending} onClick={() => { setDetail(null); setFeedback(""); setDateError(""); setParams(new URLSearchParams({ kind })); }}>重置</Button>
       </ListToolbar>
-      <ListConditions disabled={restore.isPending} items={[{ key: "action", label: "动作", value: actions[params.get("action") ?? ""] ?? "" }, { key: "since", label: "起始", value: params.get("since") ?? "" }, { key: "until", label: "结束", value: params.get("until") ?? "" }]} onClear={(key) => update(key, "")} />
+      <ListConditions disabled={restore.isPending} items={[{ key: "action", label: "动作", value: actions[params.get("action") ?? ""] ?? "" }, { key: "since", label: "起始", value: localDateInput(params.get("since")) }, { key: "until", label: "结束", value: localDateInput(params.get("until")) }]} onClear={(key) => update(key, "")} />
       {dateError && <p role="alert">{dateError}</p>}{feedback && <p role="status">{feedback}</p>}
       <QueryState loading={history.isLoading} error={history.error || objects.error || restore.error} onRetry={() => { void history.refetch(); void objects.refetch(); }} />
       <p className="form-note">凭据只展示是否变更；恢复不改变模型启用状态，也不保证历史凭据仍然有效。</p>

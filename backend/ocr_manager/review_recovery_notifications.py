@@ -21,9 +21,9 @@ def claim_delivery(store: Store) -> dict[str, Any] | None:
         db.execute("""UPDATE review_recovery_deliveries SET status='superseded'
             WHERE status IN ('pending','failed') AND NOT EXISTS (
             SELECT 1 FROM review_jobs j WHERE j.id=job_id AND j.attempts=source_attempt
-            AND j.status='partial' AND j.cancel_requested=0)""")
+            AND j.status='partial' AND j.cancel_requested=0 AND j.superseded=0)""")
         row = db.execute("""SELECT d.*,j.repository_id,j.commit_sha,j.commit_author,j.mr_iid,
-            j.notification_min_severity,r.name AS repository_name,r.target_branch,
+            j.notification_min_severity,j.source,r.name AS repository_name,j.target_branch,
             n.status AS initial_delivery_status FROM review_recovery_deliveries d
             JOIN review_jobs j ON j.id=d.job_id JOIN repositories r ON r.id=j.repository_id
             LEFT JOIN notification_deliveries n ON n.job_id=j.id
@@ -83,7 +83,8 @@ def retry_delivery(store: Store, delivery_id: int) -> bool:
         row = db.execute("""UPDATE review_recovery_deliveries SET status='pending',attempts=0,
             error=NULL,next_run_at=CURRENT_TIMESTAMP WHERE id=? AND status='failed'
             AND EXISTS (SELECT 1 FROM review_jobs j WHERE j.id=job_id
-            AND j.attempts=source_attempt AND j.status='partial' AND j.cancel_requested=0
+            AND j.attempts=source_attempt AND j.status='partial'
+            AND j.cancel_requested=0 AND j.superseded=0
             )""", (delivery_id,))
         return row.rowcount == 1
 
@@ -95,7 +96,7 @@ def delivery_current(store: Store, delivery: dict[str, Any]) -> bool:
         current = db.execute("""SELECT 1 FROM review_recovery_deliveries d
             JOIN review_jobs j ON j.id=d.job_id WHERE d.id=? AND d.execution_token=?
             AND d.status='sending' AND j.attempts=d.source_attempt
-            AND j.status='partial' AND j.cancel_requested=0""",
+            AND j.status='partial' AND j.cancel_requested=0 AND j.superseded=0""",
             (delivery["id"], delivery["execution_token"])).fetchone()
         if current is None:
             db.execute("UPDATE review_recovery_deliveries SET status='superseded' "
