@@ -1,6 +1,188 @@
 {
   "components": {
     "schemas": {
+      "AgentComparison": {
+        "description": "两路结果与人工裁定同一读快照，固定 Git 范围用于证据定位。",
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentComparisonResult"
+          },
+          "base_sha": {
+            "title": "Base Sha",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "curation": {
+            "$ref": "#/components/schemas/CurationSnapshot"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "head_sha": {
+            "title": "Head Sha",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "latest_curation_version": {
+            "title": "Latest Curation Version",
+            "type": "integer"
+          },
+          "ocr": {
+            "$ref": "#/components/schemas/OcrComparisonResult"
+          },
+          "previous_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "partial",
+              "failed",
+              "skipped",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/FindingMatch"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "source_attempt",
+          "previous_id",
+          "status",
+          "created_at",
+          "finished_at",
+          "base_sha",
+          "head_sha",
+          "ocr",
+          "agent",
+          "suggestions",
+          "curation",
+          "latest_curation_version"
+        ],
+        "title": "AgentComparison",
+        "type": "object"
+      },
+      "AgentComparisonResult": {
+        "description": "由冻结清单与已落库执行进度组成，不读取 Git 文件或模型原始回执。",
+        "properties": {
+          "excluded_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded Paths",
+            "type": "array"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentCoverageFile"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ComparisonUsage"
+          }
+        },
+        "required": [
+          "reason",
+          "files",
+          "excluded_paths",
+          "findings",
+          "usage"
+        ],
+        "title": "AgentComparisonResult",
+        "type": "object"
+      },
+      "AgentCoverageFile": {
+        "description": "按文件聚合实际送达、证据验收和清单记录数；单位是差异记录。",
+        "properties": {
+          "delivered": {
+            "default": 0,
+            "title": "Delivered",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reviewed": {
+            "default": 0,
+            "title": "Reviewed",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "AgentCoverageFile",
+        "type": "object"
+      },
       "AlertConfig": {
         "additionalProperties": false,
         "description": "默认关闭主动投递；启用时必须引用已保存的飞书通道。",
@@ -487,6 +669,360 @@
         "title": "ChatInbox",
         "type": "object"
       },
+      "ComparisonCreate": {
+        "additionalProperties": false,
+        "description": "提交时确认当前 OCR 尝试与上一条 Agent 版本，按请求键去重。",
+        "properties": {
+          "previous_id": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "request_key": {
+            "pattern": "^[A-Za-z0-9_.:-]{1,100}$",
+            "title": "Request Key",
+            "type": "string"
+          },
+          "source_attempt": {
+            "minimum": 1.0,
+            "title": "Source Attempt",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_attempt",
+          "previous_id",
+          "request_key"
+        ],
+        "title": "ComparisonCreate",
+        "type": "object"
+      },
+      "ComparisonCreated": {
+        "description": "返回已登记的尝试编号，任务领取及执行由 Worker 完成。",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ComparisonCreated",
+        "type": "object"
+      },
+      "ComparisonCuration": {
+        "additionalProperties": false,
+        "description": "每次保存追加完整裁定快照，以支持历史复核和乐观并发。",
+        "properties": {
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/FindingEvaluation"
+            },
+            "maxItems": 10000,
+            "title": "Evaluations",
+            "type": "array"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/FindingMatch"
+            },
+            "maxItems": 500,
+            "title": "Matches",
+            "type": "array"
+          },
+          "missed": {
+            "items": {
+              "$ref": "#/components/schemas/MissedFinding"
+            },
+            "maxItems": 500,
+            "title": "Missed",
+            "type": "array"
+          }
+        },
+        "title": "ComparisonCuration",
+        "type": "object"
+      },
+      "ComparisonFinding": {
+        "description": "当前比较内的发现身份；缺失或文件级证据不假定 Git 的一侧。",
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "excerpt": {
+            "default": "",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^(ocr|agent):[0-9]{1,6}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "impact": {
+            "default": "",
+            "title": "Impact",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "base",
+                  "head"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Side"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "line",
+          "title"
+        ],
+        "title": "ComparisonFinding",
+        "type": "object"
+      },
+      "ComparisonIndex": {
+        "description": "返回当前可运行来源与按稳定编号倒序分页的历史。",
+        "properties": {
+          "active_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Id"
+          },
+          "current_source_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Source Attempt"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          },
+          "previous_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          }
+        },
+        "required": [
+          "current_source_attempt",
+          "previous_id",
+          "active_id",
+          "unavailable_reason",
+          "items",
+          "next_before_id"
+        ],
+        "title": "ComparisonIndex",
+        "type": "object"
+      },
+      "ComparisonSummary": {
+        "description": "历史选择项；OCR 修订号固定为初审原始结果。",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "previous_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "source_attempt": {
+            "title": "Source Attempt",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "partial",
+              "failed",
+              "skipped",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_attempt",
+          "previous_id",
+          "status",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "ComparisonSummary",
+        "type": "object"
+      },
+      "ComparisonUsage": {
+        "description": "仅汇总供应商已返回用量；未回执调用和费用保持独立。",
+        "properties": {
+          "cost": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "unknown_calls": {
+            "default": 0,
+            "title": "Unknown Calls",
+            "type": "integer"
+          }
+        },
+        "title": "ComparisonUsage",
+        "type": "object"
+      },
       "ConclusionCoverage": {
         "description": "覆盖数量来自持久化集合；历史缺失时整个覆盖对象为空而非伪造零。",
         "properties": {
@@ -892,6 +1428,66 @@
         "title": "CumulativeUsage",
         "type": "object"
       },
+      "CurationSnapshot": {
+        "description": "版本零为空白比较；正版本保留实际修改时间和管理身份。",
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "document": {
+            "$ref": "#/components/schemas/ComparisonCuration"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "document"
+        ],
+        "title": "CurationSnapshot",
+        "type": "object"
+      },
+      "CurationUpdate": {
+        "additionalProperties": false,
+        "description": "覆盖前确认编辑起始版本，冲突由界面提示并保留草稿。",
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/ComparisonCuration"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "document"
+        ],
+        "title": "CurationUpdate",
+        "type": "object"
+      },
       "DeleteTaskRequest": {
         "additionalProperties": false,
         "description": "确认框看到的任务版本；重审或后台状态变化后必须重新确认。",
@@ -1165,6 +1761,49 @@
         "title": "FeedbackTarget",
         "type": "object"
       },
+      "FindingEvaluation": {
+        "additionalProperties": false,
+        "description": "正确性与处理价值独立；未判断处理价值时保持为空。",
+        "properties": {
+          "finding_id": {
+            "pattern": "^(ocr|agent):[0-9]{1,6}$",
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "valid",
+              "invalid",
+              "insufficient"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "worth_fixing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worth Fixing"
+          }
+        },
+        "required": [
+          "finding_id",
+          "verdict"
+        ],
+        "title": "FindingEvaluation",
+        "type": "object"
+      },
       "FindingFeedbackRecord": {
         "description": "反馈随稳定发现身份保留；重审后旧版本可读但不可继续写入。",
         "properties": {
@@ -1237,6 +1876,51 @@
           "verdict"
         ],
         "title": "FindingFeedbackWrite",
+        "type": "object"
+      },
+      "FindingMatch": {
+        "additionalProperties": false,
+        "description": "同根因可以包含多条发现，每条发现最多属于一个组。",
+        "properties": {
+          "agent_ids": {
+            "items": {
+              "pattern": "^(ocr|agent):[0-9]{1,6}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Agent Ids",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^match:[a-z0-9:-]{1,50}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "ocr_ids": {
+            "items": {
+              "pattern": "^(ocr|agent):[0-9]{1,6}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ocr Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "ocr_ids",
+          "agent_ids"
+        ],
+        "title": "FindingMatch",
         "type": "object"
       },
       "FindingOrigin": {
@@ -3405,6 +4089,69 @@
         "title": "MaintenanceStatus",
         "type": "object"
       },
+      "MissedFinding": {
+        "additionalProperties": false,
+        "description": "人工补录的共同漏报，不参与任何引擎结果或发布。",
+        "properties": {
+          "id": {
+            "pattern": "^missed:[a-z0-9-]{1,50}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "base",
+                  "head"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Side"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "path"
+        ],
+        "title": "MissedFinding",
+        "type": "object"
+      },
       "ModeUpdate": {
         "additionalProperties": false,
         "description": "账号模式显式启停；开启前须已有可用管理员。",
@@ -3712,6 +4459,43 @@
           }
         },
         "title": "NotificationTargetUpdate",
+        "type": "object"
+      },
+      "OcrComparisonResult": {
+        "description": "固定初审的文件覆盖与发现；历史缺失的覆盖显示为未知。",
+        "properties": {
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConclusionCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ComparisonUsage"
+          }
+        },
+        "required": [
+          "status",
+          "coverage",
+          "findings",
+          "usage"
+        ],
+        "title": "OcrComparisonResult",
         "type": "object"
       },
       "PremergeSetting": {
@@ -8150,6 +8934,248 @@
           }
         },
         "summary": "Get Job"
+      }
+    },
+    "/api/jobs/{job_id}/agent-comparisons": {
+      "get": {
+        "description": "读取任务级历史及当前版本的运行资格。",
+        "operationId": "history_api_jobs__job_id__agent_comparisons_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonIndex"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      },
+      "post": {
+        "description": "返回已登记的 Agent 尝试，浏览器等待 Worker 领取及执行。",
+        "operationId": "create_api_jobs__job_id__agent_comparisons_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create"
+      }
+    },
+    "/api/jobs/{job_id}/agent-comparisons/{comparison_id}": {
+      "get": {
+        "description": "限定到任务内的比较及裁定版本，不回退到另一条任务或当前结果。",
+        "operationId": "detail_api_jobs__job_id__agent_comparisons__comparison_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "curation_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Curation Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail"
+      }
+    },
+    "/api/jobs/{job_id}/agent-comparisons/{comparison_id}/curation": {
+      "put": {
+        "description": "按起始版本保存人审，冲突保留既有裁定并由前端管理草稿。",
+        "operationId": "update_api_jobs__job_id__agent_comparisons__comparison_id__curation_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurationSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update"
       }
     },
     "/api/jobs/{job_id}/cancel": {

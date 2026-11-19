@@ -30,7 +30,7 @@ RUN_SQL = """SELECT a.*,j.repository_id,j.source,j.mr_iid,j.target_branch,j.cont
 
 def enqueue(
     store: Store, config: AgentReviewConfig, job_id: int, request_key: str,
-    previous_id: int | None = None,
+    previous_id: int | None = None, *, source_attempt: int | None = None,
 ) -> int:
     """本机运维触发；写锁下固定 OCR 初审版本和已验证的 Git 范围，禁止并行重跑。"""
 
@@ -43,24 +43,26 @@ def enqueue(
         db.execute("BEGIN IMMEDIATE")
         # 1. 幂等查询先于当前任务校验，终态后重复同一请求也只返回原版本。
         existing = db.execute(
-            "SELECT id,previous_id,model_snapshot FROM agent_reviews "
-            "WHERE job_id=? AND request_key=?",
+            """SELECT a.id,a.previous_id,a.model_snapshot,o.attempt_number
+            FROM agent_reviews a JOIN review_attempts o ON o.id=a.source_attempt_id
+            WHERE a.job_id=? AND a.request_key=?""",
             (job_id, request_key),
         ).fetchone()
         if existing:
-            if existing["previous_id"] != previous_id or existing["model_snapshot"] != snapshot:
+            same_source = source_attempt is None or existing["attempt_number"] == source_attempt
+            if (existing["previous_id"] != previous_id or existing["model_snapshot"] != snapshot
+                    or not same_source):
                 raise ValueError("同一请求键已绑定其他参数")
             return int(existing["id"])
         # 2. 旧任务缺少实际预检范围时默认拒绝，避免把当前分支当成历史 OCR 输入。
-        source = db.execute("""SELECT j.*,o.id AS attempt_id,r.enabled
-            FROM review_jobs j JOIN repositories r ON r.id=j.repository_id
-            JOIN review_attempts o ON o.job_id=j.id AND o.attempt_number=j.attempts
-              AND o.status=j.status WHERE j.id=?""", (job_id,)).fetchone()
+        source = current_source(db, job_id)
         if not source or source["status"] not in TERMINAL_OCR or source["superseded"]:
             raise ValueError("需要当前且已结束的 OCR 尝试")
+        if source_attempt is not None and source["attempts"] != source_attempt:
+            raise ValueError("OCR 尝试已更新，请核对新的初审版本")
         if not source["enabled"] or source["repository_id"] not in config.repositories:
             raise ValueError("仓库未获准运行 Agent")
-        base, head = _range(source)
+        base, head = source_range(source)
         latest = db.execute("""SELECT id,status FROM agent_reviews
             WHERE source_attempt_id=? ORDER BY id DESC LIMIT 1""", (source["attempt_id"],)
         ).fetchone()
@@ -81,7 +83,18 @@ def enqueue(
         return cursor.lastrowid
 
 
-def _range(source: sqlite3.Row) -> tuple[str, str]:
+def current_source(db: sqlite3.Connection, job_id: int) -> sqlite3.Row | None:
+    """从调用方事务读取当前 OCR 尝试，要求任务与尝试状态一致。"""
+
+    return cast(sqlite3.Row | None, db.execute("""SELECT j.*,o.id AS attempt_id,r.enabled
+        FROM review_jobs j JOIN repositories r ON r.id=j.repository_id
+        JOIN review_attempts o ON o.job_id=j.id AND o.attempt_number=j.attempts
+          AND o.status=j.status WHERE j.id=?""", (job_id,)).fetchone())
+
+
+def source_range(source: sqlite3.Row) -> tuple[str, str]:
+    """校验已落库的 OCR 固定范围；没有预检快照时不使用当前分支。"""
+
     scope = json.loads(source["scope_json"] or "{}")
     if not isinstance(scope, dict):
         raise ValueError("缺少固定的 OCR 评审范围")

@@ -28,6 +28,7 @@ import { JobNavigation } from "./JobNavigation";
 import { TaskStop } from "./TaskControls";
 import { TaskDelete } from "./TaskDelete";
 import type { FindingFeedbackChoice } from "./FindingActions";
+import { AgentComparisonPanel } from "./agentComparison/AgentComparisonPanel";
 
 /** 按任务重新挂载详情，防止连续导航时沿用旧任务的发现筛选和操作状态。 */
 export function JobDetailPage({ token, canEdit = true }: {
@@ -51,6 +52,7 @@ function JobDetail({ token, canEdit }: {
   const listParams = new URLSearchParams(location.search);
   const openFindings = listParams.get("finding_state") === "open";
   listParams.delete("finding_state");
+  listParams.delete("agent_comparison");
   const back = listParams.size ? `/jobs?${listParams}` : typeof location.state?.back === "string" && location.state.back.startsWith("/jobs?") ? location.state.back : "/jobs";
   const download = useMutation({ mutationFn: () => downloadTaskReport(token, Number(id)) });
   const queryClient = useQueryClient();
@@ -109,13 +111,14 @@ function JobDetail({ token, canEdit }: {
         {(job.mr_url || job.commit_url) && <div className="detail-links">{job.mr_url && <a href={job.mr_url} target="_blank" rel="noreferrer">查看 MR <ExternalLink size={14} /></a>}{job.commit_url && <a href={job.commit_url} target="_blank" rel="noreferrer">查看提交 <ExternalLink size={14} /></a>}</div>}
       </div>
       <nav className="job-detail-jump" aria-label="任务详情分区">
-        <a href="#job-result">结论与发现</a><a href="#job-execution" onClick={() => openDiagnostic("execution", "job-execution")}>执行与恢复</a><a href="#job-cost" onClick={() => openDiagnostic("cost", "job-cost")}>覆盖与费用</a><a href="#job-history" onClick={() => { const detail = document.getElementById("job-history"); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>文件与历史</a><a href="#job-notifications">通知与尝试</a>
+        <a href="#job-result">结论与发现</a><a href="#job-agent-comparison">双评审对比</a><a href="#job-execution" onClick={() => openDiagnostic("execution", "job-execution")}>执行与恢复</a><a href="#job-cost" onClick={() => openDiagnostic("cost", "job-cost")}>覆盖与费用</a><a href="#job-history" onClick={() => { const detail = document.getElementById("job-history"); if (detail instanceof HTMLDetailsElement) detail.open = true; }}>文件与历史</a><a href="#job-notifications">通知与尝试</a>
       </nav>
       {download.error && <p className="form-error" role="alert">{download.error.message}</p>}
       {job.error && <div className="detail-error" role="alert">{job.error}<p>{["configuration", "ocr_configuration"].includes(job.failure_stage ?? "") ? <Link to="/settings?tab=model">检查模型配置 →</Link> : <Link to="/repositories">打开项目配置，查看接入诊断 →</Link>}</p></div>}
       <section id="job-result" className="job-detail-region" aria-label="评审结论与发现">
         {job.effective_document ? <EffectiveReview token={token} job={job} canEdit={canEdit} initialIssueState={openFindings ? "open" : "all"} /> : <FindingsPanel initialIssueState={openFindings ? "open" : "all"} comments={comments} feedback={job.feedback} issueIds={issueIds} issueStatuses={issueStatuses} status={job.status} coverageWaived={Boolean(coverage?.waived.length)} pending={feedback.isPending || Boolean(feedback.error)} canEdit={canEdit} onFeedback={(index, verdict) => feedback.mutate({ index, verdict, sourceAttempt: job.attempts })} />}
       </section>
+      <AgentComparisonPanel token={token} jobId={job.id} canEdit={canEdit} />
       <JobDiagnosticSections token={token} job={job} canEdit={canEdit} expanded={expanded} onExpanded={setExpanded} />
       {job.result?.summary?.budget_exceeded && <p className="form-error">Token 预算已用尽，本次结果为部分覆盖</p>}
       {canEdit && !job.effective_document && <GitLabPublications token={token} job={job} />}

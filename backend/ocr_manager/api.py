@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
+from ocr_manager.agent_comparison_api import register_agent_comparison_api
 from ocr_manager.alerts_api import register_alerts
 from ocr_manager.auth import register_auth, session_identity, users_mode
 from ocr_manager.chat_capture_api import register_chat_capture
@@ -478,6 +479,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_scheduler_api(app, store, admin)
     register_task_control(app, store, config, admin)
     register_recovery_api(app, store, config, admin)
+    register_agent_comparison_api(app, store, config, admin)
     register_finding_api(app, store, config, admin)
     register_alerts(app, store, admin)
     register_project_limits(app, store, admin)

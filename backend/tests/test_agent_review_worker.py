@@ -360,7 +360,7 @@ def test_migration_retains_ocr_and_requires_explicit_scope(pilot: tuple[Store, S
         db.execute("PRAGMA user_version=54")
     store.migrate()
     with store.connection() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 55
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert tuple(db.execute("SELECT * FROM review_attempts").fetchone()) == initial_ocr
         assert not db.execute("PRAGMA foreign_key_check").fetchall()
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

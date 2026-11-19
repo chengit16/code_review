@@ -11873,3 +11873,63 @@
 - 关联文件或证据：本机 `.local-data/agent-zt-acceptance.NAQ6il/protected.json` 与 `.local-data/agent-zt-acceptance.NAQ6il/tail-page.json`。
 - 遗留与下一步：按试点建议书工作包 3 进入结果读取接口和任务详情对比页。真实 MR 试点前校准网关用量预留并确认可发送范围。按累计二十八条执行只读同步核验。
 - 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜开始第三阶段双评审对比页
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：用户授权开始第三阶段，已受理。
+- 关联记录：本编号的阶段二真实合成验收及试点建议书工作包 3。
+- 现象或目标：在任务详情查看当前及历史两路评审、核对证据、保存人工裁定并单侧重跑 Agent。
+- 原因或分析：阶段二报告通过命令行读取，需要接入管理台权限、版本记录和双路页面。
+- 处理与改进：核对现有任务详情、角色与 SQLite 约定，优先复用历史报告和 Worker。使用隔离实例验证页面与接口。
+- 代码修改：受理时仅追加台账。
+- 本地验证：已检查工作区及台账条数，尚未运行本阶段的业务验证。
+- 部署生效：未部署。
+- 关联文件或证据：docs/review-agent-pilot-proposal.md 工作包 3。
+- 遗留与下一步：实现并验证版本化对比、人工裁定与重跑。收尾追加实际结果并核验同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜第三阶段双评审对比通过本地验证
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：双评审对比 API、任务详情、人工裁定和 Agent 单侧重跑已实现，隔离预览可访问。
+- 关联记录：本编号第三阶段受理、阶段二真实合成验收和试点建议书工作包 3。
+- 现象或目标：从同一任务回看固定 OCR 初审与 Agent 尝试，核对各自覆盖、发现和证据，记录人工判断并保留版本历史。
+- 原因或分析：首次后端回归发现迁移版本回拨的既有测试会重复建表，已将新迁移的 DDL 改为幂等。首次前端全量与其他检查并发运行时有两项超时，限制 Worker 数复跑通过。前端构建仍提示既有共享包体积警告。
+- 处理与改进：保存明确的 OCR 尝试和 Agent 前驱，复用现有 Worker。支持同根因分组、共同漏报、裁定历史与并发保护。用合成 Git、OCR 和环回脚本模型验证排队到完成，历史比较及裁定继续可读。
+- 代码修改：新增比较 API、SQLite v56 迁移和清理兼容，更新 OpenAPI。任务详情新增 Ant Design 比较面板、证据抽屉与裁定交互，补充隔离验证夹具、专项测试和走查手册。
+- 本地验证：`.venv/bin/python -m pytest -q -r s` 通过 874 项，外部续跑探针跳过 1 项。`.venv/bin/ruff check backend`、`.venv/bin/mypy backend/ocr_manager`、`PYTHONPATH=backend .venv/bin/python -m ocr_manager.openapi_contract` 通过。`npm --prefix frontend test -- --maxWorkers 2` 通过 283 项，之后的锚点和请求键调整由最终 `npm --prefix frontend run lint`、隔离 `npm --prefix frontend run build -- --outDir` 和 Playwright 专项覆盖。在 `frontend` 下运行 `npx --no-install playwright test e2e/agentComparison.spec.ts`，两项通过，覆盖裁定冲突、重跑、旧版本、仅 OCR 和窄屏。对 `e2e/workflows.spec.ts` 筛选重审、详情导航和账号模式的三项回归均通过。SQLite 业务库副本验证 v54 到 v56 的完整性、外键、关键表计数和无历史 Agent 自动入队。`git diff --check` 通过。`curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8792/jobs/1` 返回 200。
+- 部署生效：本机隔离预览运行在 8792，正式服务未部署，原业务库仍为 v54。本轮使用合成数据，未发送真实模型、OCR、飞书或 GitLab 请求。
+- 关联文件或证据：docs/review-agent-phase3-walkthrough.md、backend/tests/test_agent_comparison_api.py、frontend/e2e/agentComparison.spec.ts。
+- 遗留与下一步：真实 MR 试点前仍需核实发送范围及预算预留。按累计三十条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"modified","verification_state":"passed","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜核对正式页面部署状态与单仓试点顺序
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：已核对下一步发布建议及现有服务状态，待明确正式切换时间。
+- 关联记录：本编号第三阶段本地验证和试点建议书工作包 4。
+- 现象或目标：确认下一步是否应将双评审对比入口发布到正式管理台。
+- 原因或分析：正式服务健康检查报告 Worker 运行，运行库仍为 v54。双评审页面依赖新接口和 v56 迁移，需要配套发布。隔离预览目前仍可访问。
+- 处理与改进：建议先用隔离样例走查，再完成成对备份及恢复演练，选择维护窗口整体升级 API、Worker、monitor 与前端，部署时保持现有 OCR 流程且保留 Agent 试点关闭。发布后核对旧任务、比较入口和既有通知流程，再确认单仓数据发送范围及 `zt` 预算后手动开启试点。首个只读 MCP 在取得基线后做启停对照。
+- 代码修改：本轮仅追加台账。
+- 本地验证：执行 `curl --max-time 4 -fsS http://127.0.0.1:8781/api/health`，返回 `status=ok` 和 `worker=running`。执行 `curl --max-time 4 -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8792/jobs/1`，返回 200。通过 `.venv/bin/python -` 的 SQLite 只读 URI 查询 `PRAGMA user_version`，返回 54。执行 `git status --short` 及 `git diff --check` 核对工作区。本轮未重跑业务测试或恢复演练。
+- 部署生效：本轮未部署，正式实例尚未切换至第三阶段。未启用真实仓库试点、调用模型或调整运行配置。
+- 关联文件或证据：docs/review-agent-phase3-walkthrough.md、docs/deployment.md、docs/review-agent-pilot-proposal.md 工作包 4。
+- 遗留与下一步：确认隔离走查或发布准备的先后，进入正式窗口前核对备份、队列、恢复和启动条件。按累计三十一条执行只读同步核验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"verifying","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261116-002｜开始发布第三阶段到本机管理台
+
+- 记录日期：2026-11-19（北京时间）。
+- 类型与进展：用户已授权发布到本机，开始部署预检。
+- 关联记录：本编号第三阶段本地验证与发布顺序记录。
+- 现象或目标：让本机 8781 管理台提供双评审对比入口及配套 API。
+- 原因或分析：正式服务仍使用 v54 库，需配套更新前端、API、Worker、monitor 与数据库。
+- 处理与改进：先备份、演练恢复并检查队列，再协调切换。本轮部署范围为本机管理台，保持 Agent 试点关闭。
+- 代码修改：受理时仅追加台账。
+- 本地验证：已执行 `git status --short`，查看部署手册；尚未执行本轮发布检查。
+- 部署生效：待执行，尚未停止正式服务。
+- 关联文件或证据：docs/deployment.md、docs/review-agent-phase3-walkthrough.md。
+- 遗留与下一步：核对进程入口和配置，完成备份、恢复演练、空闲切换和真实页面验收。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}

@@ -1,4 +1,4 @@
-"""提供浏览器验收的临时服务和合成任务；不启动 Worker 或访问外部系统。"""
+"""提供浏览器验收的临时服务和合成任务；双评审样例 Worker 只连接环回端点。"""
 
 from __future__ import annotations
 
@@ -25,6 +25,11 @@ def main() -> None:
             public_url="http://127.0.0.1:8791",
             dev_mode=True,
         )
+        if os.environ.get("OCR_BROWSER_AGENT_COMPARISON") == "1":
+            from agent_comparison_browser_fixture import serve
+
+            serve(settings)
+            return
         app = create_app(settings)
         store = Store(settings.data_dir / "app.db")
         if os.environ.get("OCR_BROWSER_CHAT_CAPTURE") == "1":
