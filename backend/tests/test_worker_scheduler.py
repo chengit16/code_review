@@ -20,6 +20,7 @@ from ocr_manager.premerge import enqueue_premerge, finish_premerge
 from ocr_manager.scheduler_state import finish_slot, scheduler_snapshot
 from ocr_manager.storage import Store
 from ocr_manager.worker_scheduler import WorkerScheduler
+from test_queue import REVIEW_WITH_FINDING
 from test_task_operations import populate
 
 
@@ -41,7 +42,7 @@ def test_long_review_does_not_block_event_or_notification(
     store, repository_id = populate(client, settings, 3)
     finished = store.next_job()
     assert finished
-    store.finish_job(finished["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(finished["id"], "complete", None, REVIEW_WITH_FINDING, None)
     assert store.add_event(repository_id, 99, None, None, None)
     started, release, notified, expanded = (threading.Event() for _ in range(4))
     calls: list[int] = []
@@ -204,7 +205,7 @@ def test_parallel_claim_and_sending_prevent_duplicate_or_stale_notification(
     store, repository_id = populate(client, settings, 1)
     job = store.next_job()
     assert job
-    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     with ThreadPoolExecutor(max_workers=4) as executor:
         deliveries = list(executor.map(lambda _: store.next_delivery(), range(8)))
     claimed = [item for item in deliveries if item]
@@ -311,7 +312,7 @@ def test_deleted_project_invalidates_claimed_notification_before_send(
     store, repository_id = populate(client, settings, 1)
     job = store.next_job()
     assert job
-    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     sent = threading.Event()
     monkeypatch.setattr(worker, "deliver_notification", lambda *_args: sent.set())
     with WorkerScheduler(store, settings) as scheduler:

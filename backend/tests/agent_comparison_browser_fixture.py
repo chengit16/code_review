@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
+from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from threading import Event, Thread
+from unittest.mock import patch
 
+import httpx
 import uvicorn
 from agent_comparison_fixture import seed_comparison, seed_task
 from ocr_manager.agent_review_config import AgentReviewConfig
@@ -33,6 +37,7 @@ def serve(settings: Settings) -> None:
         app = create_app(settings)
         store = Store(settings.data_dir / "app.db")
         job = seed_task(store, settings.data_dir)
+        capabilities = os.environ.get("OCR_BROWSER_AGENT_CAPABILITIES") == "1"
         if managed:
             profile = store.add_model_profile("合成项目模型", "openai", "synthetic-agent",
                 "https://models.example.invalid/v1",
@@ -45,11 +50,19 @@ def serve(settings: Settings) -> None:
                                     if getattr(route, "name", None) != "frontend"]
             app.mount("/", FrontendFiles(directory=Path(frontend), html=True), name="frontend")
         port = int(os.environ.get("OCR_BROWSER_AGENT_COMPARISON_PORT", "8791"))
-        if managed:
+        if managed and not capabilities:
             # 页面授权测试只观察入队前状态，不启动消费模型任务的进程。
             uvicorn.run(app, host="127.0.0.1", port=port)
             return
-        with worker_lock(settings.data_dir), WorkerScheduler(store, settings) as scheduler:
+        def model_response(request: httpx.Request) -> httpx.Response:
+            status, body = endpoint.reply(json.loads(request.content))
+            return httpx.Response(status, stream=httpx.ByteStream(json.dumps(body).encode()))
+
+        model_transport = (patch("ocr_manager.agent_review_worker.httpx.HTTPTransport",
+                                 side_effect=lambda **_: httpx.MockTransport(model_response))
+                           if capabilities else nullcontext())
+        with (model_transport, worker_lock(settings.data_dir),
+              WorkerScheduler(store, settings) as scheduler):
             stop = Event()
 
             def pump() -> None:

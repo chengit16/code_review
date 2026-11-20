@@ -118,6 +118,39 @@ def test_findings_window_and_auth(client: TestClient) -> None:
     assert client.post(BASE + "/batch-feedback", headers=headers, json={}).status_code == 403
 
 
+def test_author_filter_combines_with_finding_search_and_pagination(
+    client: TestClient, settings: Settings,
+) -> None:
+    """发现以来源任务的提交人筛选，命中条数与分页使用相同条件。"""
+
+    repo = _repository(client, "by-author", 114)
+    other = _repository(client, "other-author", 115)
+    store = Store(settings.data_dir / "app.db")
+    first, second, third, fourth = [_finding(store, repo, i, "security") for i in range(1, 5)]
+    fifth = _finding(store, other, 5, "security")
+    with store.connection() as db:
+        db.executemany("UPDATE review_jobs SET commit_author=? WHERE id=?", [
+            ("李明", first), (" 李明 ", second), ("李明德", third), ("周明", fifth),
+        ])
+    options = client.get("/api/review-authors", headers=ADMIN,
+                         params={"scope": "findings", "repository_id": repo})
+    assert options.json() == ["李明", "李明德"]
+    scope = {"repository_id": repo, "author": "李明", "q": "security", "page_size": 1}
+    for page, job in ((1, second), (2, first)):
+        response = client.get(BASE, headers=ADMIN, params=scope | {"page": page})
+        assert response.status_code == 200
+        result = response.json()
+        assert result["total"] == 2
+        assert [(row["job_id"], row["commit_author"].strip()) for row in result["items"]] == [
+            (job, "李明"),
+        ]
+    legacy_scope = {"repository_id": repo, "commit_author": " 李 ", "page_size": 10}
+    legacy = client.get(BASE, headers=ADMIN, params=legacy_scope)
+    assert {row["job_id"] for row in legacy.json()["items"]} == {first, second, third}
+    blank = client.get(BASE, headers=ADMIN, params=legacy_scope | {"commit_author": " "})
+    assert {row["job_id"] for row in blank.json()["items"]} == {first, second, third, fourth}
+
+
 def test_legacy_only_feedback_can_be_undone_without_history_rewrite(
     client: TestClient, settings: Settings,
 ) -> None:

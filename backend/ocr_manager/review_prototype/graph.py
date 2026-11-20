@@ -58,7 +58,9 @@ class AgentProgress:
 class ModelPageFailure(Exception):
     """适配器已记录的终止原因，只允许稳定业务码进入图轨迹。"""
 
-    def __init__(self, reason: Literal["model_budget", "model_unavailable", "model_response"]):
+    def __init__(self, reason: Literal[
+        "model_budget", "model_unavailable", "model_response", "capability_unavailable",
+    ]):
         self.reason = reason
         super().__init__(reason)
 
@@ -80,6 +82,7 @@ def run_agent(
     snapshot: ReviewInput, model: PageModel, *, page_lines: int, max_reads: int | None,
     trace: Trace | None = None, resume: AgentProgress | None = None,
     checkpoint: Callable[[AgentProgress], None] | None = None,
+    prepare: Callable[[DiffPage], None] | None = None,
 ) -> ReviewResult:
     """运行有限读取和校验。保留超时、无效证据及预算停止时的真实覆盖。"""
     if page_lines < 1 or (max_reads is not None and max_reads < 1):
@@ -182,18 +185,38 @@ def run_agent(
                 reason = "covered"
         return {"reason": reason, "steps": event(state["steps"], "finish", reason)}
 
-    def after_read(state: GraphState) -> Literal["inspect", "finish"]:
+    def prepare_context(state: GraphState) -> dict[str, object]:
+        page = state["page"]
+        assert prepare is not None and page is not None
+        try:
+            prepare(page)
+        except ModelPageFailure as error:
+            return {"reason": error.reason, "steps": event(state["steps"], "stopped", error.reason)}
+        return {"steps": event(state["steps"], "prepare", "已完成页内扩展能力装配")}
+
+    def after_read(state: GraphState) -> Literal["prepare", "inspect", "finish"]:
+        if state["reason"]:
+            return "finish"
+        return "prepare" if prepare is not None else "inspect"
+
+    def after_prepare(state: GraphState) -> Literal["inspect", "finish"]:
         return "finish" if state["reason"] else "inspect"
 
     # 1. 由条件边决定续读或终止，单页最多调用模型一次，不在图中自动重试。
     graph = StateGraph(GraphState)
     graph.add_node("start", start)
     graph.add_node("read", read)
+    if prepare is not None:
+        graph.add_node("prepare", prepare_context)
+        graph.add_conditional_edges("prepare", after_prepare)
     graph.add_node("inspect", inspect)
     graph.add_node("finish", finish)
     graph.add_edge(START, "start")
     graph.add_conditional_edges("start", route)
-    graph.add_conditional_edges("read", after_read)
+    targets = ["inspect", "finish"]
+    if prepare is not None:
+        targets.append("prepare")
+    graph.add_conditional_edges("read", after_read, targets)
     graph.add_conditional_edges("inspect", route)
     graph.add_edge("finish", END)
     initial: GraphState = {
@@ -205,7 +228,9 @@ def run_agent(
     }
     # 2. 禁止继承外部 tracing 配置；差异和运行事件只交给当前调用方。
     with tracing_context(enabled=False):
-        final = graph.compile().invoke(initial, {"recursion_limit": 2 * read_limit + 6})
+        final = graph.compile().invoke(initial, {
+            "recursion_limit": (3 if prepare is not None else 2) * read_limit + 6,
+        })
     # 3. 预算停止与异常分别落在部分完成、失败等明确结果上。
     reason = final["reason"]
     status: Literal["complete", "partial", "failed", "skipped"]

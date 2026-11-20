@@ -57,6 +57,7 @@ class WorkerScheduler:
 
     def __init__(self, store: Store, settings: Settings) -> None:
         from ocr_manager import worker
+        from ocr_manager.agent_capability_checks import claim_check, execute_check
         from ocr_manager.agent_review_store import claim as claim_agent
         from ocr_manager.agent_review_worker import execute as execute_agent
         from ocr_manager.checks import run_connection_check
@@ -95,7 +96,9 @@ class WorkerScheduler:
                                worker.execute_backfill),
                         action("git_check", lambda: store.next_connection_check(("git", "gitlab")),
                                run_connection_check),
-                        action("rule_preview", store.next_rule_preview, worker.preview_rule)],
+                        action("rule_preview", store.next_rule_preview, worker.preview_rule),
+                        action("agent_capability_check", lambda: claim_check(store),
+                               execute_check)],
             "delivery": [Action("notification", store.next_delivery, self._deliver),
                          Action("recovery_notification", lambda: claim_delivery(store),
                              self._deliver_supplement),

@@ -27,7 +27,7 @@ def status_sql(alias: str = "j") -> str:
 
 
 def promote(db: sqlite3.Connection, job_id: int) -> None:
-    """调用方持有终态写事务；完整来源校验通过才提升，并同事务创建唯一补充投递。"""
+    """完整来源校验通过才提升；有本批新增发现时在同一事务创建补充投递。"""
 
     document = read_conclusion(db, job_id)
     if document.version.revision == 0:
@@ -45,8 +45,9 @@ def promote(db: sqlite3.Connection, job_id: int) -> None:
         source_attempt=excluded.source_attempt,revision=excluded.revision,
         recovery_id=excluded.recovery_id,document_json=excluded.document_json,
         highest_severity=excluded.highest_severity""", (*values, highest))
-    db.execute("""INSERT INTO review_recovery_deliveries
-        (job_id,source_attempt,revision,recovery_id,document_json) VALUES(?,?,?,?,?)""", values)
+    if any(item.origin.recovery_id == document.version.recovery_id for item in document.findings):
+        db.execute("""INSERT INTO review_recovery_deliveries
+            (job_id,source_attempt,revision,recovery_id,document_json) VALUES(?,?,?,?,?)""", values)
 
 
 def attach_effective(db: sqlite3.Connection, jobs: list[dict[str, Any]], *,

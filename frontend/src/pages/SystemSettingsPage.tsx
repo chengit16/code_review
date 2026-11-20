@@ -9,11 +9,13 @@ import { UsersPage } from "./UsersPage";
 import { RouteButton } from "../ui/RouteButton";
 import { SettingsPage } from "./SettingsPage";
 import { PageHeader } from "../ui/PageHeader";
+import { AgentCapabilitySettings } from "./agentCapabilities/AgentCapabilitySettings";
 
 const tabs = [
   { id: "model", label: "评审模型" },
   { id: "feishu", label: "飞书通知" },
   { id: "rules", label: "评审规则" },
+  { id: "agent", label: "自建 Agent" },
   { id: "users", label: "访问权限" },
 ];
 
@@ -59,6 +61,7 @@ export function SystemSettingsPage({ token }: {
       {tab === "model" && <SettingsPage token={token} embedded />}
       {tab === "feishu" && <FeishuHooksPage token={token} embedded />}
       {tab === "rules" && <ReviewRulesPage token={token} embedded />}
+      {tab === "agent" && <AgentCapabilitySettings token={token} />}
       {tab === "users" && <UsersPage token={token} embedded />}
     </div>
   </div>;

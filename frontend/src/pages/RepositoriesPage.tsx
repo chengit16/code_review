@@ -32,6 +32,7 @@ import { GitLabPublicationSetting } from "./GitLabPublicationSetting";
 import { RepositoryConnectionFields } from "./RepositoryConnectionFields";
 import { PremergeSetting } from "./PremergeSetting";
 import { ProjectReviewLimits } from "./ProjectReviewLimits";
+import { ProjectAgentSettings } from "./agentCapabilities/ProjectAgentSettings";
 import { RepositoryDiagnosis } from "./RepositoryDiagnosis";
 import { WebhookTokenCell } from "./WebhookTokenCell";
 import "../styles/repository-publication.css";
@@ -41,7 +42,7 @@ function editContent(value: RepositoryUpdateInput) {
 }
 
 interface Readiness { repository_id: number; status: "ready" | "needs_check" | "paused"; git: string; gitlab: string; config_revision_id: number | null }
-type RepositoryEditSection = "connection" | "review" | "publication" | "diagnosis";
+type RepositoryEditSection = "connection" | "review" | "agent" | "publication" | "diagnosis";
 
 const initial: RepositoryInput = {
   name: "", gitlab_url: "", project_id: 0, remote_url: "", target_branch: "", target_branches: [],
@@ -68,7 +69,8 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
   const [reviewStatus, setReviewStatus] = useState<DraftStatus>({ dirty: false, pending: false });
   const [premergeStatus, setPremergeStatus] = useState<DraftStatus>({ dirty: false, pending: false });
   const [publicationStatus, setPublicationStatus] = useState<DraftStatus>({ dirty: false, pending: false });
-  const editDirty = Boolean(editing) && (editContent(editForm) !== editBaseline || reviewStatus.dirty || premergeStatus.dirty || publicationStatus.dirty);
+  const [agentStatus, setAgentStatus] = useState<DraftStatus>({ dirty: false, pending: false });
+  const editDirty = Boolean(editing) && (editContent(editForm) !== editBaseline || reviewStatus.dirty || premergeStatus.dirty || publicationStatus.dirty || agentStatus.dirty);
   const [feedback, setFeedback] = useState("");
   const [callbackCopied, setCallbackCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
@@ -161,6 +163,7 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     setEditing(repo);
     setEditSection("connection");
     setReviewStatus({ dirty: false, pending: false }); setPremergeStatus({ dirty: false, pending: false });
+    setAgentStatus({ dirty: false, pending: false });
     const next = {
       name: repo.name,
       gitlab_url: repo.gitlab_url,
@@ -187,13 +190,13 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     const repo = query.data?.find((item) => item.id === targetId);
     if (repo && editing?.id !== repo.id) loadEditor(repo);
     if (!targetId && editing) { setEditing(null); setEditForm({}); }
-    if (["connection", "review", "publication", "diagnosis"].includes(targetSection ?? "")) setEditSection(targetSection as RepositoryEditSection);
+    if (["connection", "review", "agent", "publication", "diagnosis"].includes(targetSection ?? "")) setEditSection(targetSection as RepositoryEditSection);
   }, [targetId, targetSection, query.data, editing, loadEditor]);
   function selectSection(section: RepositoryEditSection) { const next = new URLSearchParams(listParams); next.set("section", section); setListParams(next, { replace: true }); }
 
   useLayoutEffect(() => { if (editorBody.current) editorBody.current.scrollTop = 0; }, [editSection, editing?.id]);
 
-  const editPending = update.isPending || reviewStatus.pending || premergeStatus.pending || publicationStatus.pending;
+  const editPending = update.isPending || reviewStatus.pending || premergeStatus.pending || publicationStatus.pending || agentStatus.pending;
   function closeAdd() { if (!mutation.isPending && confirmDiscard(JSON.stringify(form) !== JSON.stringify(initial))) { setOpen(false); setForm(initial); } }
   function closeEditor() { if (editPending || (!hasDataRouter && !confirmDiscard(editDirty))) return; const next = new URLSearchParams(listParams); next.delete("repository"); next.delete("section"); setListParams(next); }
 
@@ -269,6 +272,8 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
     <div className="repository-editor-tabs" role="tablist" aria-label="仓库设置">
       <button className={`repository-editor-tab${editSection === "connection" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "connection"} onClick={() => selectSection("connection")}>基础接入</button>
       <button className={`repository-editor-tab${editSection === "review" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "review"} onClick={() => selectSection("review")}>评审参数</button>
+      <Button type={editSection === "agent" ? "primary" : "text"} role="tab"
+        aria-selected={editSection === "agent"} onClick={() => selectSection("agent")}>自建 Agent</Button>
       <button className={`repository-editor-tab${editSection === "publication" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "publication"} onClick={() => selectSection("publication")}>结果发布</button>
       <button className={`repository-editor-tab${editSection === "diagnosis" ? " is-active" : ""}`} type="button" role="tab" aria-selected={editSection === "diagnosis"} onClick={() => selectSection("diagnosis")}>接入诊断</button>
     </div>
@@ -293,6 +298,10 @@ export function RepositoriesPage({ token }: { /** 内存中的管理口令。 */
       {update.isSuccess && editContent(editForm) === editBaseline && <p className="form-success wide" role="status">基础接入配置已保存</p>}
     </fieldset></form>
     <div hidden={editSection !== "review"} className="repository-editor-panel repository-editor-stack"><EffectiveConfiguration token={token} repositoryId={editing.id} /><ProjectReviewLimits token={token} repositoryId={editing.id} onStatusChange={setReviewStatus} /><PremergeSetting token={token} repositoryId={editing.id} targetBranch={(editing.target_branches ?? [editing.target_branch]).join("、")} contextOnly onOpenDiagnosis={() => selectSection("diagnosis")} onStatusChange={setPremergeStatus} /></div>
+    <div hidden={editSection !== "agent"} className="repository-editor-panel">
+      {(editSection === "agent" || agentStatus.dirty || agentStatus.pending) && <ProjectAgentSettings
+        key={editing.id} token={token} repositoryId={editing.id} onStatusChange={setAgentStatus} />}
+    </div>
     <div hidden={editSection !== "publication"} className="repository-editor-panel"><GitLabPublicationSetting token={token} repositoryId={editing.id} onStatusChange={setPublicationStatus} /></div>
     <div hidden={editSection !== "diagnosis"} className="repository-editor-panel"><RepositoryDiagnosis token={token} repository={editing} targets={targets.data ?? []} /></div>
     </div>

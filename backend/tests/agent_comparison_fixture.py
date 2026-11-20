@@ -57,9 +57,7 @@ def seed_task(store: Store, data_dir: Path) -> int:
     old_job = store.next_job()
     assert old_job is not None
     store.finish_job(old_job["id"], "complete", None, {"comments": []}, None)
-    delivery = store.next_delivery()
-    assert delivery is not None
-    store.finish_delivery(delivery["id"], None)
+    assert store.next_delivery() is None
     return job_id
 
 

@@ -30,6 +30,7 @@ class Finding:
     trigger: str
     impact: str
     evidence: Evidence
+    capability_refs: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@ from ocr_manager.review_contracts import TaskSearchResponse
 from ocr_manager.review_recovery_domain import RecoveryConflict
 from ocr_manager.secrets import SecretBox
 from ocr_manager.storage import Store
-from ocr_manager.tasks import job_neighbors, report_projection, search_jobs
+from ocr_manager.tasks import job_neighbors, list_review_authors, report_projection, search_jobs
 from ocr_manager.workspace_queries import overview_snapshot, search_premerge
 
 
@@ -46,6 +46,8 @@ def task_filters(
     feedback_state: Literal["pending", "handled"] | None = None,
     notification_failed: bool = False,
     source: Literal["premerge","mr","push"] | None = None,
+    commit_author: str | None = Query(None, max_length=200, description="Git 提交人姓名片段"),
+    author: str | None = Query(None, min_length=1, description="Git 提交人全名"),
 ) -> dict[str, Any]:
     """列表和相邻任务统一校验条件；时间按 UTC 比较，无时区输入默认 UTC。"""
 
@@ -66,6 +68,8 @@ def task_filters(
         "issue_state": issue_state,
         "feedback_state": feedback_state,
         "notification_failed": notification_failed, "source": source,
+        "commit_author": commit_author,
+        "author": author,
     }
 
 
@@ -217,6 +221,15 @@ def register_operations(app: FastAPI, store: Store, settings: Settings, admin: A
                 409, "版本恢复被拒绝，请核对关联配置、项目身份及待处理队列",
             ) from error
         return {"status": "restored"}
+
+    @app.get("/api/review-authors", dependencies=[admin])
+    def review_authors(
+        scope: Literal["tasks", "findings"],
+        repository_id: int | None = Query(None, gt=0),
+    ) -> list[str]:
+        """从当前项目的完整任务或有效发现集合读取提交人姓名。"""
+
+        return list_review_authors(store, repository_id, scope)
 
     @app.get("/api/task-search", dependencies=[admin], response_model=TaskSearchResponse)
     def task_search(

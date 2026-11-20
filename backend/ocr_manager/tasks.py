@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from typing import Any, Literal
 
 from ocr_manager.model_pricing import estimate_cost
 from ocr_manager.review_effective import status_sql
 from ocr_manager.review_observability import enrich_jobs
-from ocr_manager.review_quality import QUALITY_CTE
+from ocr_manager.review_quality import ALL_FINDINGS_WINDOW, QUALITY_CTE
 from ocr_manager.storage import Store
 from ocr_manager.task_issue_summary import TASK_FACTS_CTE, attach_task_facts
 
@@ -72,10 +72,8 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
             (
                 None,
                 None,
-                "1970-01-01 00:00:00",
-                "9999-12-31 00:00:00",
-                "1970-01-01 00:00:00",
-                "9999-12-31 00:00:00",
+                *ALL_FINDINGS_WINDOW,
+                *ALL_FINDINGS_WINDOW,
             )
         )
     if filters.get("notification_failed"):
@@ -83,11 +81,35 @@ def _job_filters(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
     if filters.get("sha"):
         clauses.append("j.commit_sha LIKE ?")
         values.append(f"{filters['sha']}%")
+    commit_author = (filters.get("commit_author") or "").strip()
+    if author := filters.get("author"):
+        clauses.append("trim(j.commit_author)=?")
+        values.append(author)
+    elif commit_author:
+        clauses.append("instr(lower(j.commit_author),lower(?))>0")
+        values.append(commit_author)
     for field, operator in (("since", ">="), ("until", "<=")):
         if filters.get(field):
             clauses.append(f"j.created_at {operator} ?")
             values.append(filters[field])
     return clauses, values
+
+
+def list_review_authors(store: Store, repository_id: int | None,
+                        scope: Literal["tasks", "findings"]) -> list[str]:
+    """选项独立于当前页；发现范围只包含当前有效发现的来源作者。"""
+
+    with store.connection() as db:
+        if scope == "findings":
+            rows = db.execute(f"""{QUALITY_CTE}
+                SELECT DISTINCT trim(commit_author) AS author FROM scoped
+                WHERE trim(commit_author)<>'' ORDER BY author COLLATE NOCASE,author""",
+                (repository_id, repository_id, *ALL_FINDINGS_WINDOW, *ALL_FINDINGS_WINDOW))
+        else:
+            rows = db.execute("""SELECT DISTINCT trim(commit_author) AS author FROM review_jobs
+                WHERE (? IS NULL OR repository_id=?) AND trim(commit_author)<>''
+                ORDER BY author COLLATE NOCASE,author""", (repository_id, repository_id))
+        return [str(row["author"]) for row in rows]
 
 
 def search_jobs(store: Store, filters: dict[str, Any], page: int, page_size: int) -> dict[str, Any]:

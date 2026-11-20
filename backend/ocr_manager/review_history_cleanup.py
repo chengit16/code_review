@@ -38,8 +38,8 @@ def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     if datetime.strptime(cutoff, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M:%S") != cutoff:
         raise ValueError("清理边界必须是规范 UTC 时间")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {54, 55, 56, 57}:
-        raise ValueError("仅支持已核对的 schema 54 至 56，不自动迁移")
+    if version not in {54, 55, 56, 57, 58}:
+        raise ValueError("仅支持已核对的 schema 54 至 58，不自动迁移")
     if db.execute("PRAGMA foreign_key_check").fetchall():
         raise ValueError("现有外键不完整，拒绝清理")
     active = {
@@ -60,6 +60,8 @@ def _validate(db: sqlite3.Connection, cutoff: str) -> None:
     }
     if version >= 55:
         active["agent_reviews"] = "status IN ('queued','running')"
+    if version >= 58:
+        active["agent_capability_checks"] = "status IN ('queued','running')"
     for table, predicate in active.items():
         if db.execute(f'SELECT 1 FROM "{table}" WHERE {predicate} LIMIT 1').fetchone():
             raise ValueError(f"{table} 存在在途或待处理记录，拒绝清理")
@@ -131,6 +133,11 @@ def _expected(db: sqlite3.Connection, plan: CleanupPlan) -> dict[str, str]:
         "WHERE job_id IN (SELECT id FROM cleanup_jobs))",
         "agent_comparison_curations": "agent_review_id NOT IN (SELECT id FROM agent_reviews "
         "WHERE job_id IN (SELECT id FROM cleanup_jobs))",
+        "agent_run_capabilities": "run_id NOT IN (SELECT id FROM agent_reviews "
+        "WHERE job_id IN (SELECT id FROM cleanup_jobs))",
+        "agent_capability_events": "run_id NOT IN (SELECT id FROM agent_reviews "
+        "WHERE job_id IN (SELECT id FROM cleanup_jobs))",
+        "agent_capability_checks": f"job_id IS NULL OR ({by_job})",
     })
     expected = {table: _digest(db, table, filters.get(table, "1")) for table in _tables(db)}
     rows = [list(row) for row in db.execute('SELECT * FROM merged_review_ranges')]

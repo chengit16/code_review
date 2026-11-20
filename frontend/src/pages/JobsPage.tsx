@@ -81,7 +81,7 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
           })}
         </div>
       </div>
-      <TaskFilters params={params} repositories={repositories.data ?? []} repositoriesKnown={repositories.isSuccess} disabled={batchPending} onApply={applyFilters} />
+      <TaskFilters token={token} params={params} repositories={repositories.data ?? []} repositoriesKnown={repositories.isSuccess} disabled={batchPending} onApply={applyFilters} />
       <ReadFeedback name="项目筛选" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} />
     <ReadFeedback name="任务" loading={false} error={jobs.error} onRetry={() => void jobs.refetch()} />
     {canEdit && <TaskSelectionBar token={token} ids={targets} disabled={jobs.isFetching || Boolean(jobs.error)} onClear={() => setSelected([])} onAccepted={(accepted) => setSelected((current) => current.filter((id) => !accepted.includes(id)))} onPendingChange={setBatchPending} />}

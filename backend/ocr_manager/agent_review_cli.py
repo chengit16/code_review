@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 
-from ocr_manager.agent_pilot import repository_agent_config
-from ocr_manager.agent_review_profile import resolve_model
-from ocr_manager.agent_review_store import cancel, enqueue, report
+from ocr_manager.agent_comparison_contracts import ComparisonCreate
+from ocr_manager.agent_comparisons import create_comparison
+from ocr_manager.agent_review_store import cancel, report
 from ocr_manager.config import load_settings
 from ocr_manager.storage import SCHEMA_VERSION, Store
 
@@ -35,18 +35,18 @@ def main() -> None:
     try:
         if args.command == "enqueue":
             with store.connection() as db:
-                job = db.execute("SELECT repository_id FROM review_jobs WHERE id=?",
-                                 (args.job_id,)).fetchone()
+                job = db.execute("""SELECT COALESCE((
+                    SELECT o.attempt_number FROM agent_reviews a
+                    JOIN review_attempts o ON o.id=a.source_attempt_id
+                    WHERE a.job_id=j.id AND a.request_key=?),j.attempts) AS source_attempt
+                    FROM review_jobs j WHERE j.id=?""", (args.request_key, args.job_id)).fetchone()
                 if job is None:
                     parser.error("任务不存在")
-                repository_id = int(job["repository_id"])
-                config = repository_agent_config(db, settings, repository_id)
-            if config is None:
-                parser.error(settings.agent_review_error or "未启用 Agent 试点")
-            if config.model_source == "project":
-                config = resolve_model(store, config, repository_id)
-            value: object = {"id": enqueue(
-                store, config, args.job_id, args.request_key, args.previous_id,
+            value: object = {"id": create_comparison(
+                store, settings, args.job_id, ComparisonCreate(
+                    source_attempt=job["source_attempt"], previous_id=args.previous_id,
+                    request_key=args.request_key,
+                ),
             )}
         elif args.command == "report":
             value = report(store, args.id)

@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.agent_capability_migration import AGENT_CAPABILITY_MIGRATION
 from ocr_manager.agent_comparison_migration import AGENT_COMPARISON_MIGRATION
 from ocr_manager.agent_pilot_migration import AGENT_PILOT_MIGRATION
 from ocr_manager.agent_review_migration import AGENT_REVIEW_MIGRATION
@@ -49,14 +50,14 @@ from ocr_manager.review_observability import enrich_jobs, reason_code
 from ocr_manager.review_observability_migration import OBSERVABILITY_MIGRATION
 from ocr_manager.review_policy_migration import REVIEW_POLICY_MIGRATION
 from ocr_manager.review_recovery_migration import RECOVERY_MIGRATION
-from ocr_manager.review_results import project_review_result
+from ocr_manager.review_results import REVIEW_HAS_FINDINGS_SQL, project_review_result
 from ocr_manager.scheduler_config import BUSY_MODEL_REPOSITORIES, CONCURRENCY_MIGRATION
 from ocr_manager.scheduler_state import SCHEDULER_MIGRATION
 from ocr_manager.task_control_migration import CONTROL_MIGRATION
 from ocr_manager.task_issue_summary import attach_task_facts
 from ocr_manager.unified_review_migration import MIGRATION as UNIFIED_REVIEW_MIGRATION
 
-SCHEMA_VERSION = 57
+SCHEMA_VERSION = 58
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS repositories (
   id INTEGER PRIMARY KEY,
@@ -384,6 +385,7 @@ class Store:
                 (55, AGENT_REVIEW_MIGRATION),
                 (56, AGENT_COMPARISON_MIGRATION),
                 (57, AGENT_PILOT_MIGRATION),
+                (58, AGENT_CAPABILITY_MIGRATION),
             )
             for target_version, script in migrations:
                 if version >= target_version:
@@ -1481,6 +1483,8 @@ class Store:
                 raise ValueError("请先启用其他模型")
             if db.execute(
                 "SELECT 1 FROM project_review_limits WHERE model_profile_id=?", (profile_id,)
+            ).fetchone() or db.execute(
+                "SELECT 1 FROM agent_project_settings WHERE model_profile_id=?", (profile_id,)
             ).fetchone():
                 raise ValueError("模型已关联项目，请先解除关联")
             db.execute("DELETE FROM model_profiles WHERE id=?", (profile_id,))
@@ -1543,7 +1547,7 @@ class Store:
         result: dict[str, Any] | None,
         error: str | None,
     ) -> None:
-        """保存评审结论并原子创建独立飞书投递任务；已删除任务不再写回。"""
+        """保存评审结论，有发现时在同一事务建立飞书投递；已删除任务不再写回。"""
 
         # 1. 原始 OCR JSON 留在受控工件；事务前只投影页面与通知必需的字段。
         projection = project_review_result(result) if result is not None else None
@@ -1578,7 +1582,7 @@ class Store:
                     job_id,
                 ),
             )
-            if status != "cancelled":
+            if status != "cancelled" and projection and projection["comments"]:
                 db.execute(
                     """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
                     SELECT id, correlation_id FROM review_jobs WHERE id=?""",
@@ -1708,8 +1712,8 @@ class Store:
                     projected_json,
                 ),
             )
-            # 3. 只在最终失败建立独立通知；退避中的尝试不产生重复投递。
-            if final and not cancelled:
+            # 3. 最终失败仍可保留可信发现；只有这些发现需要投递。
+            if final and not cancelled and projection and projection["comments"]:
                 db.execute(
                     """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
                     SELECT id, correlation_id FROM review_jobs WHERE id=?""",
@@ -1960,6 +1964,13 @@ class Store:
 
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            # 旧版本可能给零发现结果排过通知，补审也需要等这类记录退出待发送状态。
+            db.execute(f"""UPDATE notification_deliveries AS d
+                SET status='skipped', error='本次评审未报告问题，未发送'
+                WHERE d.status='pending' AND EXISTS (
+                    SELECT 1 FROM review_jobs j WHERE j.id=d.job_id
+                    AND NOT {REVIEW_HAS_FINDINGS_SQL}
+                )""")
             row = db.execute(
                 """SELECT d.*, j.repository_id, j.commit_sha, j.commit_author, j.mr_iid,
                 j.status AS review_status, j.attempts AS review_attempt_number,j.source,
@@ -2016,12 +2027,13 @@ class Store:
 
         with self.connection() as db:
             cursor = db.execute(
-                """UPDATE notification_deliveries SET status='pending', attempts=0,
+                f"""UPDATE notification_deliveries SET status='pending', attempts=0,
                 error=NULL, next_run_at=CURRENT_TIMESTAMP, sent_at=NULL
                 WHERE job_id=? AND status IN ('failed', 'sent')
-                AND EXISTS (SELECT 1 FROM review_jobs WHERE id=?
-                  AND status IN ('complete', 'partial', 'failed', 'skipped'))""",
-                (job_id, job_id),
+                AND EXISTS (SELECT 1 FROM review_jobs j WHERE j.id=notification_deliveries.job_id
+                  AND j.superseded=0 AND j.status IN ('complete', 'partial', 'failed', 'skipped')
+                  AND {REVIEW_HAS_FINDINGS_SQL})""",
+                (job_id,),
             )
             return cursor.rowcount == 1
 
@@ -2029,6 +2041,9 @@ class Store:
         """独占 Worker 重启后记录中断尝试，并按原有限重试上限恢复。"""
 
         with self.connection() as db:
+            db.execute("""UPDATE agent_capability_checks SET status='failed',
+                result_json='{"message":"Worker 中断，请重新检查"}',
+                finished_at=CURRENT_TIMESTAMP WHERE status='running'""")
             db.execute("""UPDATE repository_discoveries SET status='failed',token_ciphertext='',
                 error='Worker 中断，请重新获取',finished_at=CURRENT_TIMESTAMP
                 WHERE status='running' OR (status='queued'
@@ -2150,12 +2165,6 @@ class Store:
                         """UPDATE review_attempts SET retry_ready_at=CURRENT_TIMESTAMP
                         WHERE job_id=? AND attempt_number=?""",
                         (job["id"], job["attempts"]),
-                    )
-                if final:
-                    db.execute(
-                        """INSERT OR IGNORE INTO notification_deliveries(job_id, correlation_id)
-                        SELECT id, correlation_id FROM review_jobs WHERE id=?""",
-                        (job["id"],),
                     )
             # 响应丢失时飞书可能已收消息；有限重试并在卡片中保留任务 ID 供识别。
             db.execute(

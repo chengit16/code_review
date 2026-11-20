@@ -11,6 +11,10 @@ from ocr_manager import storage
 from ocr_manager.storage import SCHEMA, SCHEMA_VERSION, Store
 from ocr_manager.worker import worker_lock
 
+REVIEW_WITH_FINDING = {
+    "comments": [{"path": "main.py", "content": "合成低危发现", "severity": "low"}],
+}
+
 
 def make_store(tmp_path: Path) -> tuple[Store, int]:
     """建立最小仓库记录，测试数据库唯一约束和事务顺序。"""
@@ -73,13 +77,43 @@ def test_retry_does_not_send_stale_result(tmp_path: Path) -> None:
     store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "failed", None, None, "模型失败")
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     assert store.retry_job(job["id"])
     assert store.next_delivery() is None
     retried = store.next_job()
     assert retried is not None
     store.finish_job(job["id"], "complete", "result.json", {"comments": []}, None)
-    assert store.next_delivery() is not None
+    assert store.next_delivery() is None
+    assert not store.retry_delivery(job["id"])
+
+
+@pytest.mark.parametrize("status", ["complete", "partial", "failed", "skipped"])
+def test_zero_findings_do_not_create_feishu_delivery(tmp_path: Path, status: str) -> None:
+    """零发现结论保留在任务中，旧版待发送和手动重发也不会产生通知。"""
+
+    store, repository_id = make_store(tmp_path)
+    store.add_event(repository_id, 7, None, None, None)
+    event = store.next_event()
+    assert event is not None
+    store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
+    job = store.next_job()
+    assert job is not None
+    store.finish_job(job["id"], status, None, {"comments": []}, None)
+    detail = store.get_job(job["id"])
+    assert detail and detail["status"] == status and detail["result"]["comments"] == []
+    assert detail["delivery"] is None
+    with store.connection() as db:
+        db.execute("INSERT INTO notification_deliveries(job_id,status) VALUES(?,'sent')", (
+            job["id"],
+        ))
+    assert not store.retry_delivery(job["id"])
+    assert store.get_job(job["id"])["delivery"]["status"] == "sent"
+    with store.connection() as db:
+        db.execute("UPDATE notification_deliveries SET status='pending' WHERE job_id=?", (
+            job["id"],
+        ))
+    assert store.next_delivery() is None
+    assert store.get_job(job["id"])["delivery"]["status"] == "skipped"
 
 
 def test_recovery_requeues_claimed_work(tmp_path: Path) -> None:
@@ -150,7 +184,7 @@ def test_recovery_records_interrupted_job_and_retry_limit(tmp_path: Path) -> Non
         assert detail is not None
         assert detail["status"] == ("failed" if attempt == 3 else "queued")
         assert len(detail["attempt_history"]) == attempt
-    assert detail["delivery"]["status"] == "pending"
+    assert detail["delivery"] is None
     assert store.next_job() is None
 
 
@@ -164,7 +198,7 @@ def test_permanent_feishu_failure_stops_automatic_retry(tmp_path: Path) -> None:
     store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     delivery = store.next_delivery()
     assert delivery is not None
     store.finish_delivery(delivery["id"], "飞书返回 HTTP 401", retryable=False)
@@ -186,7 +220,7 @@ def test_temporary_feishu_failure_schedules_valid_retry(tmp_path: Path) -> None:
     store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     delivery = store.next_delivery()
     assert delivery is not None
     store.finish_delivery(delivery["id"], "飞书暂时不可用")
@@ -220,7 +254,7 @@ def test_recovery_honors_event_and_delivery_limits(tmp_path: Path) -> None:
     store.finish_event(event["id"], ["a" * 40], snapshots(["a" * 40]), None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", None, {}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     delivery = store.next_delivery()
     assert delivery is not None
     with store.connection() as db:
@@ -232,7 +266,7 @@ def test_recovery_honors_event_and_delivery_limits(tmp_path: Path) -> None:
 
 
 def test_temporary_failure_is_bounded_and_records_attempts(tmp_path: Path) -> None:
-    """临时故障不会立即丢任务，第三次失败后保留历史并生成通知。"""
+    """临时故障不会立即丢任务，第三次失败后保留历史及可信发现的通知。"""
 
     store, repository_id = make_store(tmp_path)
     store.add_event(repository_id, 7, "delivery-1", "a" * 40, None)
@@ -242,10 +276,11 @@ def test_temporary_failure_is_bounded_and_records_attempts(tmp_path: Path) -> No
     for attempt in range(1, 4):
         job = store.next_job()
         assert job is not None
-        store.defer_job(job["id"], "模型暂时不可用")
+        store.defer_job(job["id"], "模型暂时不可用", result=REVIEW_WITH_FINDING)
         detail = store.get_job(job["id"])
         assert detail is not None
         assert detail["status"] == ("failed" if attempt == 3 else "queued")
+        assert (detail["delivery"] is not None) == (attempt == 3)
         with store.connection() as db:
             delayed = db.execute(
                 """SELECT next_run_at > CURRENT_TIMESTAMP FROM review_jobs WHERE id=?""",
@@ -447,7 +482,7 @@ def test_delivery_keeps_repository_path_and_budget_flag(tmp_path: Path) -> None:
         "partial",
         "result.json",
         {
-            "comments": [],
+            "comments": REVIEW_WITH_FINDING["comments"],
             "summary": {"budget_exceeded": True, "thinking": "private-reasoning"},
             "manifest": {
                 "coverage": {
@@ -482,7 +517,7 @@ def test_paused_repository_holds_jobs_and_notifications(tmp_path: Path) -> None:
     assert store.update_repository(repository_id, {"enabled": True})
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", "result.json", {}, None)
+    store.finish_job(job["id"], "complete", "result.json", REVIEW_WITH_FINDING, None)
     assert store.update_repository(repository_id, {"enabled": False})
     assert store.next_delivery() is None
     assert store.update_repository(repository_id, {"enabled": True})

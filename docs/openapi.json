@@ -11,6 +11,11 @@
             "title": "Base Sha",
             "type": "string"
           },
+          "capability_recorded": {
+            "default": false,
+            "title": "Capability Recorded",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -78,6 +83,11 @@
             },
             "title": "Suggestions",
             "type": "array"
+          },
+          "trial": {
+            "default": false,
+            "title": "Trial",
+            "type": "boolean"
           }
         },
         "required": [
@@ -101,6 +111,23 @@
       "AgentComparisonResult": {
         "description": "由冻结清单与已落库执行进度组成，不读取 Git 文件或模型原始回执。",
         "properties": {
+          "capabilities": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CapabilityRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capability_events": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityEvent"
+            },
+            "title": "Capability Events",
+            "type": "array"
+          },
           "excluded_paths": {
             "items": {
               "type": "string"
@@ -142,6 +169,13 @@
           },
           "usage": {
             "$ref": "#/components/schemas/ComparisonUsage"
+          },
+          "workflow_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Workflow Steps",
+            "type": "array"
           }
         },
         "required": [
@@ -171,6 +205,16 @@
             "title": "Reviewed",
             "type": "integer"
           },
+          "rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRuleVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total": {
             "default": 0,
             "title": "Total",
@@ -181,6 +225,30 @@
           "path"
         ],
         "title": "AgentCoverageFile",
+        "type": "object"
+      },
+      "AgentRuleVersion": {
+        "description": "仅展示解析出的规则来源、命中模式和内容摘要。",
+        "properties": {
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "pattern",
+          "sha256"
+        ],
+        "title": "AgentRuleVersion",
         "type": "object"
       },
       "AlertConfig": {
@@ -408,6 +476,271 @@
           "budget_tokens"
         ],
         "title": "BudgetGate",
+        "type": "object"
+      },
+      "CapabilityCatalog": {
+        "description": "发布中心的管理目录。",
+        "properties": {
+          "default_id": {
+            "title": "Default Id",
+            "type": "integer"
+          },
+          "inheriting_projects": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Inheriting Projects",
+            "type": "array"
+          },
+          "project_bindings": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Project Bindings",
+            "type": "object"
+          },
+          "schemes": {
+            "items": {
+              "$ref": "#/components/schemas/SchemeSummary"
+            },
+            "title": "Schemes",
+            "type": "array"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/McpService"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillVersion"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "default_id",
+          "inheriting_projects",
+          "project_bindings",
+          "schemes",
+          "skills",
+          "services"
+        ],
+        "title": "CapabilityCatalog",
+        "type": "object"
+      },
+      "CapabilityCheck": {
+        "description": "后台检查只公开结构化结果。",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "preview",
+              "mcp"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "complete",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "result"
+        ],
+        "title": "CapabilityCheck",
+        "type": "object"
+      },
+      "CapabilityEvent": {
+        "description": "执行步骤及持久化的辅助证据。",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "step",
+          "path",
+          "source",
+          "status",
+          "evidence",
+          "created_at"
+        ],
+        "title": "CapabilityEvent",
+        "type": "object"
+      },
+      "CapabilityRun": {
+        "description": "按次记录，仅展示选择及版本，不包含提示或凭据。",
+        "properties": {
+          "config_mode": {
+            "default": "current",
+            "enum": [
+              "current",
+              "original"
+            ],
+            "title": "Config Mode",
+            "type": "string"
+          },
+          "mcp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcp"
+          },
+          "mcp_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcp Signature"
+          },
+          "model_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Id"
+          },
+          "model_profile_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Version"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "original_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Run Id"
+          },
+          "scheme_id": {
+            "title": "Scheme Id",
+            "type": "integer"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "enum": [
+                "skills",
+                "read_file",
+                "mcp"
+              ],
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "trial": {
+            "title": "Trial",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "scheme_id",
+          "name",
+          "trial",
+          "steps",
+          "skills",
+          "mcp",
+          "model_profile_id",
+          "model_profile_version"
+        ],
+        "title": "CapabilityRun",
         "type": "object"
       },
       "ChatBinding": {
@@ -673,6 +1006,41 @@
         "additionalProperties": false,
         "description": "提交时确认当前 OCR 尝试与上一条 Agent 版本，按请求键去重。",
         "properties": {
+          "config_mode": {
+            "default": "current",
+            "enum": [
+              "current",
+              "original"
+            ],
+            "title": "Config Mode",
+            "type": "string"
+          },
+          "expected_scheme_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Scheme Id"
+          },
+          "original_run_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Run Id"
+          },
           "previous_id": {
             "anyOf": [
               {
@@ -694,6 +1062,19 @@
             "minimum": 1.0,
             "title": "Source Attempt",
             "type": "integer"
+          },
+          "trial_scheme_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Scheme Id"
           }
         },
         "required": [
@@ -753,6 +1134,13 @@
       "ComparisonFinding": {
         "description": "当前比较内的发现身份；缺失或文件级证据不假定 Git 的一侧。",
         "properties": {
+          "capability_refs": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Capability Refs",
+            "type": "array"
+          },
           "content": {
             "default": "",
             "title": "Content",
@@ -830,6 +1218,28 @@
               }
             ],
             "title": "Active Id"
+          },
+          "current_scheme_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Scheme Id"
+          },
+          "current_scheme_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Scheme Name"
           },
           "current_source_attempt": {
             "anyOf": [
@@ -940,6 +1350,11 @@
       "ComparisonSummary": {
         "description": "历史选择项；OCR 修订号固定为初审原始结果。",
         "properties": {
+          "capability_recorded": {
+            "default": false,
+            "title": "Capability Recorded",
+            "type": "boolean"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -986,6 +1401,11 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "trial": {
+            "default": false,
+            "title": "Trial",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1531,6 +1951,23 @@
         "title": "CurationUpdate",
         "type": "object"
       },
+      "DefaultSchemeInput": {
+        "additionalProperties": false,
+        "description": "切换平台默认前确认此前读取的版本。",
+        "properties": {
+          "expected_id": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_id"
+        ],
+        "title": "DefaultSchemeInput",
+        "type": "object"
+      },
       "DeleteTaskRequest": {
         "additionalProperties": false,
         "description": "确认框看到的任务版本；重审或后台状态变化后必须重新确认。",
@@ -1648,6 +2085,21 @@
           "gitlab_token"
         ],
         "title": "DiscoveryInput",
+        "type": "object"
+      },
+      "EnabledInput": {
+        "additionalProperties": false,
+        "description": "显式的开关操作。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "EnabledInput",
         "type": "object"
       },
       "FailureAnalysis": {
@@ -1802,6 +2254,46 @@
           "finding_id"
         ],
         "title": "FeedbackTarget",
+        "type": "object"
+      },
+      "FileLookup": {
+        "additionalProperties": false,
+        "description": "当前差异文件匹配时，读同一仓库固定头提交的指定普通文件。",
+        "properties": {
+          "lines": {
+            "default": 30,
+            "maximum": 80.0,
+            "minimum": 1.0,
+            "title": "Lines",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 240,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f\\\\]+$",
+            "title": "Path",
+            "type": "string"
+          },
+          "pattern": {
+            "maxLength": 240,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f]+$",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "start_line": {
+            "default": 1,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Start Line",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pattern",
+          "path"
+        ],
+        "title": "FileLookup",
         "type": "object"
       },
       "FindingEvaluation": {
@@ -4132,6 +4624,176 @@
         "title": "MaintenanceStatus",
         "type": "object"
       },
+      "McpGrant": {
+        "additionalProperties": false,
+        "description": "工具授权仅在一个仓库内有效。",
+        "properties": {
+          "repository_id": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Repository Id",
+            "type": "integer"
+          },
+          "tool": {
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "tool"
+        ],
+        "title": "McpGrant",
+        "type": "object"
+      },
+      "McpInput": {
+        "additionalProperties": false,
+        "description": "外部服务登记，令牌仅写入。",
+        "properties": {
+          "endpoint": {
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 8,
+            "maximum": 15.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "token": {
+            "default": "",
+            "maxLength": 2048,
+            "pattern": "^[!-~]*$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "endpoint"
+        ],
+        "title": "McpInput",
+        "type": "object"
+      },
+      "McpLookup": {
+        "additionalProperties": false,
+        "description": "仅调用已发现并授权的单一规范检索工具。",
+        "properties": {
+          "argument": {
+            "default": "query",
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Argument",
+            "type": "string"
+          },
+          "failure": {
+            "default": "continue",
+            "enum": [
+              "continue",
+              "stop"
+            ],
+            "title": "Failure",
+            "type": "string"
+          },
+          "pattern": {
+            "maxLength": 240,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f]+$",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "service_id": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Service Id",
+            "type": "integer"
+          },
+          "tool": {
+            "pattern": "^[A-Za-z0-9_.-]{1,128}$",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "tool",
+          "pattern",
+          "query"
+        ],
+        "title": "McpLookup",
+        "type": "object"
+      },
+      "McpService": {
+        "description": "安全的服务元数据和已发现的工具。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "grants": {
+            "items": {
+              "$ref": "#/components/schemas/McpGrant"
+            },
+            "title": "Grants",
+            "type": "array"
+          },
+          "has_token": {
+            "title": "Has Token",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "tools": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Tools",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "endpoint",
+          "timeout_seconds",
+          "enabled",
+          "has_token",
+          "tools",
+          "grants"
+        ],
+        "title": "McpService",
+        "type": "object"
+      },
       "MissedFinding": {
         "additionalProperties": false,
         "description": "人工补录的共同漏报，不参与任何引擎结果或发布。",
@@ -4570,6 +5232,149 @@
           }
         },
         "title": "PremergeSetting",
+        "type": "object"
+      },
+      "PreviewInput": {
+        "additionalProperties": false,
+        "description": "选择有固定差异范围的历史任务。",
+        "properties": {
+          "job_id": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Job Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "PreviewInput",
+        "type": "object"
+      },
+      "ProjectAgentInput": {
+        "additionalProperties": false,
+        "description": "以界面读取的版本检测项目保存冲突。",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "model_profile_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Id"
+          },
+          "scheme_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheme Id"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled"
+        ],
+        "title": "ProjectAgentInput",
+        "type": "object"
+      },
+      "ProjectAgentSettings": {
+        "additionalProperties": false,
+        "description": "项目选择以及解析后的有效方案和模型。",
+        "properties": {
+          "effective_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Model"
+          },
+          "effective_scheme": {
+            "$ref": "#/components/schemas/SchemeSummary"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "manageable": {
+            "title": "Manageable",
+            "type": "boolean"
+          },
+          "model_profile_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Profile Id"
+          },
+          "scheme_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheme Id"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled",
+          "manageable",
+          "effective_scheme",
+          "effective_model"
+        ],
+        "title": "ProjectAgentSettings",
         "type": "object"
       },
       "ProjectLimits": {
@@ -5985,6 +6790,289 @@
         "title": "SchedulerConfigRequest",
         "type": "object"
       },
+      "SchemeDocument": {
+        "additionalProperties": false,
+        "description": "约束选项与节点依赖，基础差异读取及证据确认由执行器保留。",
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileLookup"
+            },
+            "maxItems": 3,
+            "title": "Files",
+            "type": "array"
+          },
+          "mcp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpLookup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skill_ids": {
+            "items": {
+              "maximum": 9.223372036854776e+18,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "title": "Skill Ids",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "enum": [
+                "skills",
+                "read_file",
+                "mcp"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "title": "SchemeDocument",
+        "type": "object"
+      },
+      "SchemeInput": {
+        "additionalProperties": false,
+        "description": "保存新的方案草稿。",
+        "properties": {
+          "basis_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Id"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileLookup"
+            },
+            "maxItems": 3,
+            "title": "Files",
+            "type": "array"
+          },
+          "mcp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpLookup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "skill_ids": {
+            "items": {
+              "maximum": 9.223372036854776e+18,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "title": "Skill Ids",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "enum": [
+                "skills",
+                "read_file",
+                "mcp"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SchemeInput",
+        "type": "object"
+      },
+      "SchemeSummary": {
+        "description": "不变的方案修订与当前发布状态。",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "basis_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "$ref": "#/components/schemas/SchemeDocument"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "published",
+              "disabled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "basis_id",
+          "state",
+          "document",
+          "actor",
+          "created_at"
+        ],
+        "title": "SchemeSummary",
+        "type": "object"
+      },
+      "SchemeTrial": {
+        "description": "方案的最新试跑链接和持久化状态。",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "status",
+          "created_at"
+        ],
+        "title": "SchemeTrial",
+        "type": "object"
+      },
+      "SkillInput": {
+        "additionalProperties": false,
+        "description": "每次保存形成不可变的检查方法版本。",
+        "properties": {
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "maxLength": 240,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f]+$",
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "pattern",
+          "body"
+        ],
+        "title": "SkillInput",
+        "type": "object"
+      },
+      "SkillVersion": {
+        "additionalProperties": false,
+        "description": "可用于组装方案的 Skill 修订。",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "maxLength": 240,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x1f]+$",
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "pattern",
+          "body",
+          "id",
+          "actor",
+          "created_at"
+        ],
+        "title": "SkillVersion",
+        "type": "object"
+      },
       "TaskExecutionResponse": {
         "additionalProperties": true,
         "description": "保留已有动态任务字段，新增可观测性字段提供明确 OpenAPI 契约。",
@@ -6475,6 +7563,546 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent-capabilities": {
+      "get": {
+        "operationId": "read_catalog_api_agent_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Catalog"
+      }
+    },
+    "/api/agent-capabilities/checks/{check_id}": {
+      "get": {
+        "operationId": "get_check_api_agent_capabilities_checks__check_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "check_id",
+            "required": true,
+            "schema": {
+              "title": "Check Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Check"
+      }
+    },
+    "/api/agent-capabilities/schemes": {
+      "post": {
+        "operationId": "create_scheme_api_agent_capabilities_schemes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Create Scheme Api Agent Capabilities Schemes Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scheme"
+      }
+    },
+    "/api/agent-capabilities/schemes/{scheme_id}/default": {
+      "put": {
+        "operationId": "set_default_api_agent_capabilities_schemes__scheme_id__default_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefaultSchemeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Default"
+      }
+    },
+    "/api/agent-capabilities/schemes/{scheme_id}/previews": {
+      "post": {
+        "operationId": "preview_api_agent_capabilities_schemes__scheme_id__previews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Preview Api Agent Capabilities Schemes  Scheme Id  Previews Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview"
+      }
+    },
+    "/api/agent-capabilities/schemes/{scheme_id}/publication": {
+      "put": {
+        "operationId": "set_publication_api_agent_capabilities_schemes__scheme_id__publication_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnabledInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Publication"
+      }
+    },
+    "/api/agent-capabilities/schemes/{scheme_id}/trials": {
+      "get": {
+        "operationId": "trials_api_agent_capabilities_schemes__scheme_id__trials_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "scheme_id",
+            "required": true,
+            "schema": {
+              "title": "Scheme Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SchemeTrial"
+                  },
+                  "title": "Response Trials Api Agent Capabilities Schemes  Scheme Id  Trials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trials"
+      }
+    },
+    "/api/agent-capabilities/services": {
+      "post": {
+        "operationId": "create_service_api_agent_capabilities_services_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Create Service Api Agent Capabilities Services Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Service"
+      }
+    },
+    "/api/agent-capabilities/services/{service_id}/checks": {
+      "post": {
+        "operationId": "check_service_api_agent_capabilities_services__service_id__checks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Check Service Api Agent Capabilities Services  Service Id  Checks Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Service"
+      }
+    },
+    "/api/agent-capabilities/services/{service_id}/enabled": {
+      "put": {
+        "operationId": "set_service_enabled_api_agent_capabilities_services__service_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnabledInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Service Enabled"
+      }
+    },
+    "/api/agent-capabilities/services/{service_id}/grants": {
+      "put": {
+        "operationId": "grant_api_agent_capabilities_services__service_id__grants_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant"
+      }
+    },
+    "/api/agent-capabilities/services/{service_id}/grants/{repository_id}/{tool}": {
+      "delete": {
+        "operationId": "revoke_api_agent_capabilities_services__service_id__grants__repository_id___tool__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_id",
+            "required": true,
+            "schema": {
+              "title": "Service Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool",
+            "required": true,
+            "schema": {
+              "title": "Tool",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke"
+      }
+    },
+    "/api/agent-capabilities/skills": {
+      "post": {
+        "operationId": "create_skill_api_agent_capabilities_skills_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Create Skill Api Agent Capabilities Skills Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Skill"
+      }
+    },
     "/api/alerts": {
       "get": {
         "description": "返回配置、当前状态和最近投递。",
@@ -10051,6 +11679,44 @@
               ],
               "title": "Source"
             }
+          },
+          {
+            "description": "Git 提交人姓名片段",
+            "in": "query",
+            "name": "commit_author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人姓名片段",
+              "title": "Commit Author"
+            }
+          },
+          {
+            "description": "Git 提交人全名",
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人全名",
+              "title": "Author"
+            }
           }
         ],
         "responses": {
@@ -11961,6 +13627,92 @@
         "summary": "Update Repository"
       }
     },
+    "/api/repositories/{repository_id}/agent-settings": {
+      "get": {
+        "operationId": "get_project_api_repositories__repository_id__agent_settings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAgentSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project"
+      },
+      "put": {
+        "operationId": "update_project_api_repositories__repository_id__agent_settings_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "title": "Repository Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAgentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectAgentSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Project"
+      }
+    },
     "/api/repositories/{repository_id}/effective-configuration": {
       "get": {
         "description": "读取当前配置；在途及历史任务仍以自己的执行快照为准。",
@@ -13054,6 +14806,71 @@
         "summary": "Repository Readiness"
       }
     },
+    "/api/review-authors": {
+      "get": {
+        "description": "从当前项目的完整任务或有效发现集合读取提交人姓名。",
+        "operationId": "review_authors_api_review_authors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": true,
+            "schema": {
+              "enum": [
+                "tasks",
+                "findings"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repository_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Repository Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Review Authors Api Review Authors Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Authors"
+      }
+    },
     "/api/review-effectiveness": {
       "get": {
         "description": "按项目和最近天数统计，样本量判断留给界面明确展示。",
@@ -13444,6 +15261,44 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "description": "Git 提交人姓名片段",
+            "in": "query",
+            "name": "commit_author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人姓名片段",
+              "title": "Commit Author"
+            }
+          },
+          {
+            "description": "Git 提交人全名",
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人全名",
+              "title": "Author"
             }
           },
           {
@@ -14645,6 +16500,44 @@
                 }
               ],
               "title": "Source"
+            }
+          },
+          {
+            "description": "Git 提交人姓名片段",
+            "in": "query",
+            "name": "commit_author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人姓名片段",
+              "title": "Commit Author"
+            }
+          },
+          {
+            "description": "Git 提交人全名",
+            "in": "query",
+            "name": "author",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Git 提交人全名",
+              "title": "Author"
             }
           }
         ],

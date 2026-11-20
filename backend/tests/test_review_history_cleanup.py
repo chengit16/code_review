@@ -152,6 +152,13 @@ def test_cleanup_cascades_only_old_agent_comparisons(database: sqlite3.Connectio
     database.execute("""INSERT INTO agent_review_calls
         (id,agent_review_id,hunk_id,page_offset,reserved_tokens)
         VALUES ('old',1,1,0,512),('retained',2,1,0,512)""")
+    database.execute("INSERT INTO agent_run_capabilities VALUES (1,'{}'),(2,'{}')")
+    database.execute("""INSERT INTO agent_capability_events
+        (run_id,step,path,source,status) VALUES (1,'mcp','','old','complete'),
+        (2,'mcp','','retained','complete')""")
+    database.execute("""INSERT INTO agent_capability_checks(kind,subject_id,job_id,status)
+        VALUES ('preview',1,1,'complete'),('preview',1,2,'complete'),
+        ('mcp',1,NULL,'complete')""")
     database.commit()
     with pytest.raises(ValueError, match="agent_reviews 存在在途"):
         plan_cleanup(database, CUTOFF)
@@ -160,3 +167,8 @@ def test_cleanup_cascades_only_old_agent_comparisons(database: sqlite3.Connectio
     apply_cleanup(database, plan_cleanup(database, CUTOFF))
     assert database.execute("SELECT id FROM agent_reviews").fetchall() == [(2,)]
     assert database.execute("SELECT id FROM agent_review_calls").fetchall() == [("retained",)]
+    assert database.execute("SELECT run_id FROM agent_run_capabilities").fetchall() == [(2,)]
+    assert database.execute("SELECT run_id FROM agent_capability_events").fetchall() == [(2,)]
+    assert database.execute("SELECT id FROM agent_capability_checks ORDER BY id").fetchall() == [
+        (2,), (3,),
+    ]

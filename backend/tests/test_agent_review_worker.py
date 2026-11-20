@@ -104,9 +104,7 @@ def pilot(
     store.finish_job(job["id"], "complete", None, {
         "comments": [], "manifest": {"terminal_state": "complete"},
     }, None)
-    delivery = store.next_delivery()
-    assert delivery
-    store.finish_delivery(delivery["id"], None)
+    assert store.next_delivery() is None
     config = AgentReviewConfig(endpoint.url, "synthetic", frozenset({repository_id}),
                                "test-agent-key", page_lines=5)
     return store, replace(settings, agent_review=config)
@@ -174,7 +172,7 @@ def test_scheduler_timeout_partial_and_single_side_rerun(
     assert third["agent"]["calls"][0]["provider_model"] == "synthetic-version-1"
     with store.connection() as db:
         assert db.execute("SELECT count(*) FROM review_attempts").fetchone()[0] == 1
-        assert db.execute("SELECT count(*) FROM notification_deliveries").fetchone()[0] == 1
+        assert db.execute("SELECT count(*) FROM notification_deliveries").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM gitlab_publications").fetchone()[0] == 0
 
     monkeypatch.setattr("ocr_manager.agent_review_cli.load_settings", lambda: settings)
@@ -194,7 +192,7 @@ def test_scheduler_timeout_partial_and_single_side_rerun(
     ("fail", "model_unavailable", "unknown"),
 ])
 def test_provider_errors_stop_before_next_page(
-    pilot: tuple[Store, Settings], endpoint: AgentEndpoint,
+    pilot: tuple[Store, Settings], endpoint: AgentEndpoint, caplog: pytest.LogCaptureFixture,
     failure: str, reason: str, usage_status: str,
 ) -> None:
     """已知用量和证据有效性各自裁决，缺用量或响应失败不会继续调用。"""
@@ -211,6 +209,10 @@ def test_provider_errors_stop_before_next_page(
     assert agent["result"]["coverage"][0]["reviewed_end"] == 0
     assert [call["status"] for call in agent["calls"]] == [usage_status]
     assert len(endpoint.calls) == 1
+    if failure == "fail":
+        messages = [record.getMessage() for record in caplog.records
+                    if record.name == "ocr_manager.agent_review_model"]
+        assert messages == [f"Agent 调用 {agent['calls'][0]['id']} 网关响应 HTTP 503"]
 
 
 def test_resume_checkpoint_only_when_previous_calls_are_confirmed(
@@ -496,7 +498,7 @@ def test_project_model_rejects_overrides_and_unsafe_endpoint(pilot: tuple[Store,
 def test_zt_review_checks_all_pages_without_run_budgets(
     pilot: tuple[Store, Settings], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """两个历史策略按原快照执行，新尝试越过旧总时限并核对全部页面。"""
+    """旧快照保留原预算和 HTTP 策略，新尝试使用较长读取等待核对全部页面。"""
 
     store, settings = pilot
     profile_id = store.add_model_profile(
@@ -510,12 +512,15 @@ def test_zt_review_checks_all_pages_without_run_budgets(
     )
     settings = replace(settings, agent_review=config)
     resolved = resolve_model(store, config, 1)
-    token_only = replace(resolved, max_reads=8, timeout_seconds=90)
+    prior_unlimited = replace(resolved, read_timeout_seconds=None)
+    token_only = replace(prior_unlimited, max_reads=8, timeout_seconds=90)
     legacy = queue.enqueue(store, replace(token_only, enforce_token_budget=True), 1, "zt-legacy")
     requests: list[dict[str, Any]] = []
+    timeouts: list[dict[str, float]] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
         requests.append(json.loads(request.content))
+        timeouts.append(request.extensions["timeout"])
         output = 9 if len(requests) <= 10 else 600
         body = json.dumps({
             "choices": [{"finish_reason": "stop", "message": {"content": '{"findings":[]}'}}],
@@ -555,3 +560,11 @@ def test_zt_review_checks_all_pages_without_run_budgets(
     assert all("max_completion_tokens" not in item and "max_tokens" not in item
                for item in requests[1:])
     assert [call["completion_tokens"] for call in result["calls"]] == [9, *([600] * 12)]
+    assert all(timeout["read"] == 20 for timeout in timeouts[:9])
+    assert timeouts[9:] == [{"connect": 20, "read": 120, "write": 20, "pool": 20}] * 13
+
+    earlier = queue.enqueue(store, prior_unlimited, 1, "zt-original-io", current)
+    assert queue.claim(store)
+    execute(store, settings, earlier)
+    assert agent_state(store, earlier)["status"] == "complete"
+    assert all(timeout["read"] == 20 for timeout in timeouts[22:])

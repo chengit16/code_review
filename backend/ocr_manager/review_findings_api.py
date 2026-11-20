@@ -69,6 +69,9 @@ def register_review_findings(app: FastAPI, store: Store, admin: Any) -> None:
                     None, pattern="^(critical|high|medium|low|unclassified)$"),
                 issue_id: int | None = Query(None, gt=0),
                 q: str | None = Query(None, max_length=200),
+                commit_author: str | None = Query(
+                    None, max_length=200, description="Git 提交人姓名片段"),
+                author: str | None = Query(None, min_length=1, description="Git 提交人全名"),
                 since: str | None = None, until: str | None = None,
                 page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
                 ) -> dict[str, Any]:
@@ -79,7 +82,8 @@ def register_review_findings(app: FastAPI, store: Store, admin: Any) -> None:
             db.execute("BEGIN")
             return quality_findings(db, repository_id, 0, feedback, category, page, page_size,
                                     since, until, severity, handling=handling,
-                                    issue_id=issue_id, keyword=q)
+                                    issue_id=issue_id, keyword=q, commit_author=commit_author,
+                                    author=author)
 
     @app.get("/api/review-findings/{finding_id}", dependencies=[admin])
     def detail(finding_id: str) -> dict[str, Any]:

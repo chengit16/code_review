@@ -1,5 +1,6 @@
 """验证对账只报告数据库与工件差异，且诊断包不包含评审正文。"""
 
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from ocr_manager.api import create_app
 from ocr_manager.config import Settings
 from ocr_manager.reconciliation import reconcile
 from ocr_manager.storage import Store
+from test_queue import REVIEW_WITH_FINDING
 
 
 def test_reconcile_detects_orphan_artifact_and_missing_result(tmp_path: Path) -> None:
@@ -39,7 +41,14 @@ def test_reconcile_detects_orphan_artifact_and_missing_result(tmp_path: Path) ->
     codes = {issue["code"] for issue in result["issues"]}
     assert "result_artifact_missing" in codes
     assert "artifact_without_job" in codes
+    assert "job_without_delivery" not in codes
     assert orphan.is_dir()
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET result_json=? WHERE id=?", (
+            json.dumps(REVIEW_WITH_FINDING), job["id"],
+        ))
+    assert any(issue["code"] == "job_without_delivery"
+               for issue in reconcile(store, tmp_path)["issues"])
 
 
 def test_diagnostic_export_is_redacted_and_carries_request_id(settings: Settings) -> None:
@@ -92,7 +101,7 @@ def test_correlation_id_spans_event_job_attempt_and_delivery(tmp_path: Path) -> 
     assert event is not None
     store.finish_event(event["id"], ["b" * 40], {"b" * 40: ("snapshot", "")}, None)
     job = store.list_jobs()[0]
-    store.finish_job(job["id"], "skipped", None, None, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     with store.connection() as db:
         correlations = [row[0] for row in db.execute(
             """SELECT correlation_id FROM merge_events WHERE id=?

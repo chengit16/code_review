@@ -15,6 +15,7 @@ function setup(canEdit = true, path = "/findings") {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     requests.push({ path: url, body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
+    if (url.startsWith("/api/review-authors?")) return new Response(JSON.stringify([row.commit_author]));
     if (url.includes("/batch-feedback")) return new Response(JSON.stringify({ updated: 1, results: [{ finding_id: row.finding_id, status: "updated" }, { finding_id: "j2:a2:c0", status: "conflict", code: "feedback_version_changed" }] }));
     if (url.includes("/finding-feedback/")) return new Response(JSON.stringify({ detail: { code: "feedback_version_changed" } }), { status: 409 });
     if (url.startsWith("/api/review-findings/")) return new Response(JSON.stringify({ ...row, content: "问题描述：检查授权边界\n修复建议：补充授权检查", start_line: 4 }));
@@ -31,8 +32,9 @@ function setup(canEdit = true, path = "/findings") {
 it("默认待处理在服务端筛选，显式窗口和反馈沿用地址，不映射历史问题修复状态", async () => {
   const requests = setup(false, "/findings?handling=all&feedback=ignored&since=2026-11-01+00%3A00%3A00&until=2026-11-09+00%3A00%3A00");
   await screen.findByText("共 2 条发现");
-  expect(requests.find((item) => item.path.startsWith("/api/review-findings?"))?.path).toContain("feedback=ignored");
-  expect(requests[0].path).toContain("since=2026-11-01");
+  const search = requests.find((item) => item.path.startsWith("/api/review-findings?"))?.path;
+  expect(search).toContain("feedback=ignored");
+  expect(search).toContain("since=2026-11-01");
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(screen.queryByText("已修复")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "检查授权边界" }));

@@ -1,0 +1,36 @@
+.agent-scheme-toolbar,
+.agent-workflow-order,
+.agent-capability-grants li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-scheme-select {
+  min-width: min(100%, 16rem);
+  max-width: 100%;
+}
+
+.agent-workflow-order {
+  margin-block-end: 16px;
+}
+
+.agent-editor-actions {
+  margin-block-start: 12px;
+}
+
+.agent-capability-grants {
+  display: grid;
+  gap: 8px;
+  padding-inline-start: 0;
+}
+
+.agent-skill-body,
+.agent-break {
+  overflow-wrap: anywhere;
+}
+
+.agent-skill-body {
+  white-space: pre-wrap;
+}

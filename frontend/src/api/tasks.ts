@@ -27,6 +27,13 @@ export function searchTasks(token: string, params: URLSearchParams, signal?: Abo
   return apiRequest<TaskPage>(token, `/api/task-search?${params}`, { signal });
 }
 
+/** 获取当前项目的提交人选项；范围由服务端按完整集合确定。 */
+export function getReviewAuthors(token: string, scope: "tasks" | "findings", repository: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ scope });
+  if (repository) params.set("repository_id", repository);
+  return apiRequest<string[]>(token, `/api/review-authors?${params}`, { signal });
+}
+
 /** 按仓库和 IID 补触发已合并 MR；请求只创建后台事件，不在页面请求内访问 GitLab。 */
 export function enqueueMergedMrs(token: string, repositoryId: string, ids: number[]) {
   return apiRequest<MrEnqueueResult[]>(token, `/api/repositories/${repositoryId}/mrs/batch-enqueue`, {

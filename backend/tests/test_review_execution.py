@@ -148,7 +148,7 @@ def test_failed_result_is_saved_with_bounded_retry(
         assert Path(attempt["result_path"]).is_file()
         assert "synthetic-private" not in attempt["result_json"]
         assert json.loads(attempt["result_json"])["retry_summary"]["total_retries"] == 2
-        assert (detail["delivery"] is not None) is final
+        assert detail["delivery"] is None
         if not final:
             with store.connection() as db:
                 assert (
@@ -163,7 +163,7 @@ def test_failed_result_is_saved_with_bounded_retry(
                 )
     assert store.next_job() is None
     with store.connection() as db:
-        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize(
@@ -241,7 +241,7 @@ def test_premerge_uses_same_failure_policy(
     monkeypatch: pytest.MonkeyPatch,
     code: int,
 ) -> None:
-    """合并前审查共享空评论兼容与两次上限，并在终态创建独立通知。"""
+    """合并前审查共享空评论兼容与两次上限，零发现失败只保存记录。"""
 
     store, repository_id = environment
     with store.connection() as db:
@@ -261,9 +261,7 @@ def test_premerge_uses_same_failure_policy(
             assert row["status"] == ("queued" if code == 429 and attempt == 1 else "failed")
             assert f"HTTP {code}" in row["error"]
             assert json.loads(row["result_json"])["comments"] == []
-            assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == (
-                0 if code == 429 and attempt == 1 else 1
-            )
+            assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 0
             db.execute(
                 "UPDATE review_jobs SET next_run_at=CURRENT_TIMESTAMP WHERE legacy_premerge_id=?",
                 (review["id"],),

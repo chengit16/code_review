@@ -1,6 +1,7 @@
 /** @description 双评审读写契约。HTTP 访问沿用管理会话，裁定和重跑分别提交。 */
 
 import { apiRequest } from "./client";
+import type { AgentCapabilityEvent, AgentCapabilityRun } from "./agentCapabilities";
 
 export type Verdict = "valid" | "invalid" | "insufficient";
 export type EvidenceSide = "base" | "head";
@@ -12,6 +13,8 @@ export interface ComparisonSummary {
   status: RunStatus;
   created_at: string;
   finished_at: string | null;
+  trial?: boolean;
+  capability_recorded?: boolean;
 }
 /** 任务所属仓库的当前授权；管理资格还需叠加管理员权限。 */
 export interface ComparisonPilot {
@@ -27,6 +30,8 @@ export interface ComparisonIndex {
   unavailable_reason: string | null;
   items: ComparisonSummary[];
   next_before_id: number | null;
+  current_scheme_id?: number | null;
+  current_scheme_name?: string | null;
 }
 export interface ComparisonFinding {
   id: string;
@@ -37,6 +42,7 @@ export interface ComparisonFinding {
   content: string;
   impact: string;
   excerpt: string;
+  capability_refs?: number[];
 }
 export interface ComparisonUsage {
   model: string | null;
@@ -79,16 +85,29 @@ export interface AgentComparison extends ComparisonSummary {
   };
   agent: {
     reason: string | null;
-    files: { path: string; delivered: number; reviewed: number; total: number }[] | null;
+    files: {
+      path: string;
+      delivered: number;
+      reviewed: number;
+      total: number;
+      rule?: { source: string; pattern: string; sha256: string } | null;
+    }[] | null;
     excluded_paths: string[];
     findings: ComparisonFinding[];
     usage: ComparisonUsage;
+    capabilities?: AgentCapabilityRun | null;
+    capability_events?: AgentCapabilityEvent[];
+    workflow_steps?: string[];
   };
   suggestions: FindingMatch[];
   curation: CurationSnapshot;
   latest_curation_version: number;
 }
-export interface ComparisonCreate { source_attempt: number; previous_id: number | null; request_key: string }
+export interface ComparisonCreate {
+  source_attempt: number; previous_id: number | null; request_key: string;
+  config_mode?: "current" | "original"; trial_scheme_id?: number; expected_scheme_id?: number;
+  original_run_id?: number;
+}
 
 /** 按稳定版本号读取历史页及当前运行资格。 */
 export function getAgentComparisons(token: string, jobId: number, beforeId: number | null, signal?: AbortSignal) {

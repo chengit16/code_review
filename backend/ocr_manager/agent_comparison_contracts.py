@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from ocr_manager.agent_capability_contracts import CapabilityEvent, CapabilityRun, Id
 from ocr_manager.review_conclusion_contracts import ConclusionCoverage
 
 FindingId = Annotated[str, StringConstraints(pattern=r"^(ocr|agent):[0-9]{1,6}$")]
@@ -19,6 +20,10 @@ class ComparisonCreate(BaseModel):
     source_attempt: int = Field(ge=1)
     previous_id: int | None = Field(ge=1)
     request_key: str = Field(pattern=r"^[A-Za-z0-9_.:-]{1,100}$")
+    config_mode: Literal["current", "original"] = "current"
+    trial_scheme_id: Id | None = None
+    expected_scheme_id: Id | None = None
+    original_run_id: Id | None = None
 
 
 class ComparisonCreated(BaseModel):
@@ -36,6 +41,8 @@ class ComparisonSummary(BaseModel):
     status: RunStatus
     created_at: str
     finished_at: str | None
+    trial: bool = False
+    capability_recorded: bool = False
 
 
 class ComparisonPilot(BaseModel):
@@ -63,6 +70,8 @@ class ComparisonIndex(BaseModel):
     unavailable_reason: str | None
     items: list[ComparisonSummary]
     next_before_id: int | None
+    current_scheme_id: int | None = None
+    current_scheme_name: str | None = None
 
 
 class ComparisonFinding(BaseModel):
@@ -76,6 +85,7 @@ class ComparisonFinding(BaseModel):
     content: str = ""
     impact: str = ""
     excerpt: str = ""
+    capability_refs: list[int] = Field(default_factory=list)
 
 
 class ComparisonUsage(BaseModel):
@@ -98,6 +108,14 @@ class OcrComparisonResult(BaseModel):
     usage: ComparisonUsage
 
 
+class AgentRuleVersion(BaseModel):
+    """仅展示解析出的规则来源、命中模式和内容摘要。"""
+
+    source: str
+    pattern: str
+    sha256: str
+
+
 class AgentCoverageFile(BaseModel):
     """按文件聚合实际送达、证据验收和清单记录数；单位是差异记录。"""
 
@@ -105,12 +123,16 @@ class AgentCoverageFile(BaseModel):
     delivered: int = 0
     reviewed: int = 0
     total: int = 0
+    rule: AgentRuleVersion | None = None
 
 
 class AgentComparisonResult(BaseModel):
     """由冻结清单与已落库执行进度组成，不读取 Git 文件或模型原始回执。"""
 
     reason: str | None
+    capabilities: CapabilityRun | None = None
+    capability_events: list[CapabilityEvent] = Field(default_factory=list)
+    workflow_steps: list[str] = Field(default_factory=list)
     files: list[AgentCoverageFile] | None
     excluded_paths: list[str]
     findings: list[ComparisonFinding]

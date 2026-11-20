@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import subprocess
 import time
 from dataclasses import replace
 
@@ -12,9 +14,13 @@ from pydantic import TypeAdapter
 from unidiff.errors import UnidiffParseError
 
 from ocr_manager import agent_review_store as queue
+from ocr_manager.agent_capability_contracts import CapabilityRun
+from ocr_manager.agent_capability_runtime import CapabilityRuntime
 from ocr_manager.agent_pilot import repository_agent_config
+from ocr_manager.agent_review_config import source_rule_fingerprint
 from ocr_manager.agent_review_model import ChatPageModel
 from ocr_manager.agent_review_profile import resolve_model
+from ocr_manager.agent_review_rules import resolve_file_rules
 from ocr_manager.cancellation import ReviewCancelled, cancellation_scope, check_cancellation
 from ocr_manager.config import Settings
 from ocr_manager.gitlab import GitLabClient
@@ -68,19 +74,28 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
         return
     configured = config
     try:
+        frozen = (CapabilityRun.model_validate_json(run["capability_snapshot"])
+                  if run["capability_snapshot"] else None)
         config = resolve_model(
             store, config, run["repository_id"], master_key=settings.master_key,
+            profile_id=frozen.model_profile_id if frozen else None,
         )
     except (InvalidToken, ValueError):
         queue.finish(store, run_id, reason="model_config_invalid")
         return
-    if run["model_snapshot"] != config.snapshot():
-        # 两版历史快照仍按入队时的页数、总时限和 Token 策略执行。
-        previous = replace(config, max_reads=configured.max_reads,
+    rule_fingerprint = json.loads(run["model_snapshot"]).get("ocr_rule_sha256")
+    if (rule_fingerprint is not None
+            and rule_fingerprint != source_rule_fingerprint(run["ocr_snapshot"])):
+        queue.finish(store, run_id, reason="ocr_rules_unavailable")
+        return
+    if run["model_snapshot"] != config.snapshot(rule_fingerprint):
+        # 历史快照沿用原 HTTP 等待、页数、总时限和 Token 策略。
+        original_io = replace(config, read_timeout_seconds=None)
+        previous = replace(original_io, max_reads=configured.max_reads,
                            timeout_seconds=configured.timeout_seconds)
         original = replace(previous, enforce_token_budget=True)
-        for candidate in (previous, original):
-            if run["model_snapshot"] == candidate.snapshot():
+        for candidate in (original_io, previous, original):
+            if run["model_snapshot"] == candidate.snapshot(rule_fingerprint):
                 config = candidate
                 break
         else:
@@ -112,7 +127,22 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
             except (OSError, ValueError, UnidiffParseError, TimeoutError):
                 queue.finish(store, run_id, reason="input_unavailable")
                 return
-            if not queue.pin_input(store, run_id, snapshot):
+            rules = None
+            if rule_fingerprint is not None:
+                try:
+                    rules = resolve_file_rules(
+                        settings, settings.data_dir / "repositories" / str(run["repository_id"]),
+                        ocr_snapshot=run["ocr_snapshot"], head_sha=run["head_sha"],
+                        checkout_sha=(run["base_sha"] if run["source"] == "premerge"
+                                      else run["head_sha"]),
+                        paths=tuple(dict.fromkeys(hunk.path for hunk in snapshot.hunks)),
+                    )
+                except (ValueError, OSError, TimeoutError, subprocess.TimeoutExpired):
+                    queue.finish(store, run_id, reason="ocr_rules_unavailable")
+                    return
+            versions = ({path: rule.evidence() for path, rule in rules.items()}
+                        if rules is not None else None)
+            if not queue.pin_input(store, run_id, snapshot, versions):
                 queue.finish(store, run_id, reason="input_changed")
                 return
 
@@ -121,11 +151,22 @@ def execute(store: Store, settings: Settings, run_id: int) -> None:
                 PROGRESS.validate_json(run["progress_json"]) if run["progress_json"] is not None
                 else None
             )
+            capabilities = None
+            if frozen:
+                try:
+                    capabilities = CapabilityRuntime(store, settings, run, frozen, deadline)
+                except (LookupError, ValueError):
+                    queue.finish(store, run_id, reason="capability_unavailable")
+                    return
             with httpx.Client(trust_env=False, transport=httpx.HTTPTransport(retries=0)) as client:
                 result = run_agent(
-                    snapshot, ChatPageModel(store, run_id, config, client, deadline=deadline),
+                    snapshot, ChatPageModel(store, run_id, config, client,
+                                            deadline=deadline, rules=rules,
+                                            capabilities=capabilities),
                     page_lines=config.page_lines, max_reads=config.max_reads, resume=progress,
                     checkpoint=save,
+                    prepare=(capabilities.prepare if capabilities and frozen and frozen.steps
+                             else None),
                 )
             check_cancellation()
             if not _mr_matches(settings, run):

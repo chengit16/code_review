@@ -11,6 +11,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
+from test_queue import REVIEW_WITH_FINDING
 
 
 def create_repository(client: TestClient, token: str, kind: str = "secret") -> int:
@@ -218,7 +219,7 @@ def test_project_and_feishu_hook_deletion_are_separate(
     store.finish_event(event["id"], [commit_sha], {commit_sha: ("config", "")}, None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", "result.json", {"comments": []}, None)
+    store.finish_job(job["id"], "complete", "result.json", REVIEW_WITH_FINDING, None)
     delivery = store.next_delivery()
     assert delivery is not None
 

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import cast
 
 from ocr_manager import agent_review_store as queue
+from ocr_manager.agent_capabilities import effective_scheme, freeze_capabilities, get_scheme
+from ocr_manager.agent_capabilities import project_selection as agent_selection
+from ocr_manager.agent_capability_contracts import CapabilityRun
 from ocr_manager.agent_comparison_contracts import (
     AgentComparison,
     ComparisonCreate,
@@ -45,6 +49,7 @@ def comparison_index(store: Store, settings: Settings, job_id: int,
         if repository is None:
             raise LookupError("任务不存在")
         config = repository_agent_config(db, settings, repository["id"])
+        scheme = effective_scheme(db, repository["id"])
         pilot = ComparisonPilot(repository_name=repository["name"], enabled=config is not None,
             manageable=(bool(repository["enabled"]) or config is not None)
             and can_manage_pilot(settings, repository["id"]))
@@ -54,14 +59,18 @@ def comparison_index(store: Store, settings: Settings, job_id: int,
         previous = db.execute("""SELECT id FROM agent_reviews WHERE source_attempt_id=?
             ORDER BY id DESC LIMIT 1""", (source["attempt_id"],)).fetchone() if source else None
         rows = db.execute("""SELECT a.id,a.previous_id,a.status,a.created_at,a.finished_at,
+            COALESCE(json_extract(c.snapshot,'$.trial'),0) AS trial,
+            c.snapshot IS NOT NULL AS capability_recorded,
             o.attempt_number AS source_attempt FROM agent_reviews a
             JOIN review_attempts o ON o.id=a.source_attempt_id
+            LEFT JOIN agent_run_capabilities c ON c.run_id=a.id
             WHERE a.job_id=? AND (? IS NULL OR a.id<?) ORDER BY a.id DESC LIMIT ?""",
             (job_id, before_id, before_id, limit + 1)).fetchall()
     return ComparisonIndex(current_source_attempt=source["attempts"] if source else None,
         previous_id=previous["id"] if previous else None,
         active_id=active["id"] if active else None,
         pilot=pilot,
+        current_scheme_id=scheme.id, current_scheme_name=scheme.name,
         unavailable_reason=_unavailable(config, source, active is not None),
         items=[ComparisonSummary.model_validate(dict(row)) for row in rows[:limit]],
         next_before_id=rows[limit - 1]["id"] if len(rows) > limit else None)
@@ -91,24 +100,83 @@ def create_comparison(store: Store, settings: Settings, job_id: int, body: Compa
         row = db.execute("SELECT repository_id FROM review_jobs WHERE id=?", (job_id,)).fetchone()
         if row is None:
             raise LookupError("任务不存在")
-        existing = db.execute("""SELECT a.id,a.previous_id,o.attempt_number FROM agent_reviews a
+        existing = db.execute("""SELECT a.id,a.previous_id,c.snapshot AS capability_snapshot,
+            o.attempt_number
+            FROM agent_reviews a
             JOIN review_attempts o ON o.id=a.source_attempt_id
+            LEFT JOIN agent_run_capabilities c ON c.run_id=a.id
             WHERE a.job_id=? AND a.request_key=?""", (job_id, body.request_key)).fetchone()
         repository_id = int(row["repository_id"])
+        if existing:
+            if _same_request(existing, body):
+                return int(existing["id"])
+            raise ComparisonConflict("request_key_mismatch", "同一请求键已用于其他评审版本")
         config = repository_agent_config(db, settings, repository_id)
-    if existing:
-        if (existing["previous_id"] == body.previous_id
-                and existing["attempt_number"] == body.source_attempt):
-            return int(existing["id"])
-        raise ComparisonConflict("request_key_mismatch", "同一请求键已用于其他评审版本")
-    if config is None:
-        raise ComparisonConflict("agent_disabled", "Agent 试点尚未启用")
+        if config is None:
+            raise ComparisonConflict("agent_disabled", "Agent 试点尚未启用")
+        try:
+            config, frozen = _resolve_run(db, store, config, repository_id, job_id, body)
+        except (LookupError, ValueError) as error:
+            raise ComparisonConflict("agent_enqueue_conflict", str(error)) from error
     try:
-        config = resolve_model(store, config, repository_id)
         return queue.enqueue(store, config, job_id, body.request_key, body.previous_id,
-                             source_attempt=body.source_attempt)
+                             source_attempt=body.source_attempt, capabilities=frozen)
     except ValueError as error:
         raise ComparisonConflict("agent_enqueue_conflict", str(error)) from error
+
+
+def _same_request(row: sqlite3.Row, body: ComparisonCreate) -> bool:
+    frozen = json.loads(row["capability_snapshot"] or "{}")
+    return (
+        row["previous_id"] == body.previous_id and row["attempt_number"] == body.source_attempt
+        and frozen.get("config_mode", "current") == body.config_mode
+        and (body.config_mode == "original" or bool(frozen.get("trial")) ==
+             (body.trial_scheme_id is not None))
+        and (body.trial_scheme_id is None or body.trial_scheme_id == frozen.get("scheme_id"))
+        and (body.config_mode != "original" or (body.original_run_id or body.previous_id)
+             == frozen.get("original_run_id"))
+        and (body.expected_scheme_id is None or body.expected_scheme_id == frozen.get("scheme_id"))
+    )
+
+
+def _resolve_run(
+    db: sqlite3.Connection, store: Store, config: AgentReviewConfig, repository_id: int,
+    job_id: int, body: ComparisonCreate,
+) -> tuple[AgentReviewConfig, CapabilityRun]:
+    selected = agent_selection(db, repository_id)
+    model_id = selected["model_profile_id"] if selected else None
+    if body.config_mode == "original":
+        if body.trial_scheme_id is not None or body.expected_scheme_id is not None:
+            raise ValueError("按原配置重跑不能选择其他方案")
+        original_id = body.original_run_id or body.previous_id
+        original = db.execute("""SELECT c.snapshot AS capability_snapshot,a.model_snapshot
+            FROM agent_reviews a JOIN agent_run_capabilities c ON c.run_id=a.id
+            JOIN review_attempts o ON o.id=a.source_attempt_id
+            WHERE a.job_id=? AND a.id=? AND o.attempt_number=?""",
+            (job_id, original_id, body.source_attempt)).fetchone()
+        if not original or not original["capability_snapshot"]:
+            raise ValueError("上一次运行没有可复用的配置快照")
+        frozen = CapabilityRun.model_validate_json(original["capability_snapshot"])
+        config = resolve_model(store, config, repository_id,
+                               profile_id=frozen.model_profile_id, db=db)
+        previous_model = json.loads(original["model_snapshot"])
+        if config.snapshot(previous_model.get("ocr_rule_sha256")) != original["model_snapshot"]:
+            raise ValueError("原模型档案或执行参数已变化，请按当前项目配置运行")
+        scheme = get_scheme(db, frozen.scheme_id)
+        current = freeze_capabilities(db, scheme, repository_id, config, trial=frozen.trial)
+        if current.mcp_signature != frozen.mcp_signature:
+            raise ValueError("原 MCP 工具契约已变化，请按当前项目配置运行")
+        return config, current.model_copy(update={"config_mode": "original",
+                                                  "original_run_id": original_id})
+    if body.original_run_id is not None:
+        raise ValueError("原运行编号只适用于按原配置重跑")
+    scheme = (get_scheme(db, body.trial_scheme_id) if body.trial_scheme_id
+              else effective_scheme(db, repository_id))
+    if body.expected_scheme_id is not None and scheme.id != body.expected_scheme_id:
+        raise ValueError("项目方案已更新，请核对后重新确认")
+    config = resolve_model(store, config, repository_id, profile_id=model_id, db=db)
+    return config, freeze_capabilities(db, scheme, repository_id, config,
+                                      trial=body.trial_scheme_id is not None)
 
 
 def _run(db: sqlite3.Connection, job_id: int, run_id: int) -> sqlite3.Row:
@@ -146,6 +214,8 @@ def comparison_detail(store: Store, job_id: int, run_id: int,
         curation = latest if curation_version is None or latest.version == curation_version else (
             _curation(db, run_id, curation_version))
     return AgentComparison(id=row["id"], source_attempt=row["ocr_attempt"],
+        trial=bool(agent.capabilities and agent.capabilities.trial),
+        capability_recorded=agent.capabilities is not None,
         previous_id=row["previous_id"], status=row["status"], created_at=row["created_at"],
         finished_at=row["finished_at"], base_sha=row["base_sha"], head_sha=row["head_sha"],
         ocr=ocr, agent=agent, suggestions=suggest_matches(ocr, agent), curation=curation,

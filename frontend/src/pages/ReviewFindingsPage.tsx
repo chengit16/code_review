@@ -8,6 +8,7 @@ import { apiRequest } from "../api/client";
 import { batchFindingFeedback, getReviewFindings } from "../api/reviewFindings";
 import type { ReviewFinding } from "../api/reviewFindings";
 import type { Repository } from "../api/types";
+import { CommitAuthorSelect } from "../ui/CommitAuthorSelect";
 import { ListTime } from "../ui/ListControls";
 import { ListTable } from "../ui/ListTable";
 import { PageHeader } from "../ui/PageHeader";
@@ -57,11 +58,14 @@ function FindingsContent({ token, canEdit }: { token: string; canEdit: boolean }
     onError: () => setNeedsReview(true),
   });
   const locked = batch.isPending || confirming;
-  function change(key: string, value: string) {
+  function applyFilters(filters: Record<string, string>) {
+    if (locked) return;
     const next = new URLSearchParams(params);
     next.delete("page");
     next.delete("finding");
-    if (value) next.set(key, value); else next.delete(key);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) next.set(key, value); else next.delete(key);
+    }
     setParams(next);
   }
   function selectDetail(value: string | null) {
@@ -83,12 +87,18 @@ function FindingsContent({ token, canEdit }: { token: string; canEdit: boolean }
   return <div className="page"><PageHeader title="评审发现" subtitle="有帮助、误报或忽略均表示已处理；撤销后回到待处理" actions={<Space><Link to="/issues?status=all">历史问题与修复记录</Link><Button disabled={locked} onClick={() => void findings.refetch()}>刷新发现</Button></Space>} />
     <section className="list-surface">
       <Space wrap className="finding-list-filters">
-        <div><Select virtual={false} aria-label="发现处理状态" disabled={locked} value={query.get("handling")} onChange={(value) => change("handling", value)} options={[{ value: "all", label: "全部发现" }, { value: "pending", label: "待处理" }, { value: "handled", label: "已处理" }]} /></div>
-        <div><Select virtual={false} aria-label="发现价值反馈" disabled={locked} value={params.get("feedback") ?? "all"} onChange={(value) => change("feedback", value === "all" ? "" : value)} options={[{ value: "all", label: "全部反馈" }, { value: "unmarked", label: "未评价" }, ...findingFeedbackOptions.map(({ value, label }) => ({ value, label }))]} /></div>
-        <div><Select virtual={false} aria-label="发现项目" disabled={locked} value={params.get("repository_id") ?? "all"} onChange={(value) => change("repository_id", value === "all" ? "" : value)} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} /></div>
-        <div><Select virtual={false} aria-label="发现级别" disabled={locked} value={params.get("severity") ?? "all"} onChange={(value) => change("severity", value === "all" ? "" : value)} options={[{ value: "all", label: "全部级别" }, ...["critical", "high", "medium", "low", "unclassified"].map((value) => ({ value, label: formatSeverity(value) }))]} /></div>
-        <form onSubmit={(event) => { event.preventDefault(); change("q", keyword.trim()); }}><Space><Input aria-label="搜索发现" placeholder="搜索描述或文件" value={keyword} maxLength={200} disabled={locked} onChange={(event) => setKeyword(event.target.value)} /><Button htmlType="submit" disabled={locked}>搜索</Button></Space></form>
-        <Button disabled={locked} onClick={() => setParams({ handling: "pending" })}>重置筛选</Button>
+        <div><Select virtual={false} aria-label="发现处理状态" disabled={locked} value={query.get("handling")} onChange={(value) => applyFilters({ handling: value })} options={[{ value: "all", label: "全部发现" }, { value: "pending", label: "待处理" }, { value: "handled", label: "已处理" }]} /></div>
+        <div><Select virtual={false} aria-label="发现价值反馈" disabled={locked} value={params.get("feedback") ?? "all"} onChange={(value) => applyFilters({ feedback: value === "all" ? "" : value })} options={[{ value: "all", label: "全部反馈" }, { value: "unmarked", label: "未评价" }, ...findingFeedbackOptions.map(({ value, label }) => ({ value, label }))]} /></div>
+        <div><Select virtual={false} aria-label="发现项目" disabled={locked} value={params.get("repository_id") ?? "all"} onChange={(value) => applyFilters({ repository_id: value === "all" ? "" : value })} options={[{ value: "all", label: "全部项目" }, ...(repositories.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))]} /></div>
+        <div><Select virtual={false} aria-label="发现级别" disabled={locked} value={params.get("severity") ?? "all"} onChange={(value) => applyFilters({ severity: value === "all" ? "" : value })} options={[{ value: "all", label: "全部级别" }, ...["critical", "high", "medium", "low", "unclassified"].map((value) => ({ value, label: formatSeverity(value) }))]} /></div>
+        <CommitAuthorSelect token={token} scope="findings" repository={params.get("repository_id") ?? ""} value={params.get("author") ?? ""} legacyKeyword={params.get("commit_author") ?? ""} disabled={locked} onChange={(author) => applyFilters({ author, commit_author: "" })} />
+        <form onSubmit={(event) => { event.preventDefault(); applyFilters({ q: keyword.trim() }); }}>
+          <Space>
+            <Input aria-label="搜索发现" placeholder="搜索描述或文件" value={keyword} maxLength={200} disabled={locked} onChange={(event) => setKeyword(event.target.value)} />
+            <Button htmlType="submit" disabled={locked}>搜索</Button>
+          </Space>
+        </form>
+        <Button disabled={locked} onClick={() => { setKeyword(""); setParams({ handling: "pending" }); }}>重置筛选</Button>
       </Space>
       <p>{params.has("since") ? `来源窗口：${params.get("since")} 至 ${params.get("until")}（不含终点，UTC）` : "全部时间 · 仅当前有效发现"}{params.get("category") && ` · 类别 ${params.get("category")}`}{params.get("issue_id") && ` · 原问题 #${params.get("issue_id")} 的关联发现，各条分别反馈`}</p>
       <QueryState loading={findings.isLoading} error={findings.error || repositories.error} onRetry={() => void findings.refetch()} />

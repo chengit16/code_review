@@ -7,11 +7,13 @@ import re
 import sqlite3
 from collections import defaultdict
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter
 
+from ocr_manager.agent_capability_contracts import CapabilityEvent, CapabilityRun
 from ocr_manager.agent_comparison_contracts import (
     AgentComparisonResult,
     AgentCoverageFile,
+    AgentRuleVersion,
     ComparisonFinding,
     ComparisonUsage,
     FindingMatch,
@@ -38,6 +40,7 @@ class InputManifest(BaseModel):
 
     hunks: list[ManifestHunk]
     excluded_paths: list[str]
+    rule_versions: dict[str, AgentRuleVersion] = Field(default_factory=dict)
 
 
 def _model(snapshot: str | None) -> str | None:
@@ -83,7 +86,9 @@ def agent_result(db: sqlite3.Connection, row: sqlite3.Row) -> AgentComparisonRes
     by_file: dict[str, AgentCoverageFile] = {}
     if manifest:
         for item in manifest.hunks:
-            file = by_file.setdefault(item.path, AgentCoverageFile(path=item.path))
+            file = by_file.setdefault(item.path, AgentCoverageFile(
+                path=item.path, rule=manifest.rule_versions.get(item.path),
+            ))
             file.total += item.records
             records = by_hunk.get(item.id)
             if records:
@@ -94,13 +99,23 @@ def agent_result(db: sqlite3.Connection, row: sqlite3.Row) -> AgentComparisonRes
         SUM(completion_tokens) AS output_tokens,COUNT(*) FILTER(WHERE status='unknown') AS unknown,
         CASE WHEN COUNT(DISTINCT provider_model)=1 THEN MIN(provider_model) END AS model
         FROM agent_review_calls WHERE agent_review_id=?""", (row["id"],)).fetchone()
+    frozen = (CapabilityRun.model_validate_json(row["capability_snapshot"])
+              if row["capability_snapshot"] else None)
+    events = [CapabilityEvent.model_validate({
+        **dict(item), "evidence": json.loads(item["evidence"] or "null"),
+    }) for item in db.execute("""SELECT * FROM agent_capability_events
+        WHERE run_id=? ORDER BY id""", (row["id"],))] if frozen else []
+    steps = result.steps if result else progress.steps if progress else ()
     return AgentComparisonResult(reason=row["reason"],
+        capabilities=frozen, capability_events=events,
+        workflow_steps=[f"{step.stage} · {step.detail}" for step in steps] if frozen else [],
         files=list(by_file.values()) if manifest else None,
         excluded_paths=manifest.excluded_paths if manifest else [],
         findings=[ComparisonFinding(id=f"agent:{index}", path=item.evidence.path,
             line=item.evidence.line, side=item.evidence.side, title=item.title,
             content=item.trigger,
             impact=item.impact, excerpt=item.evidence.excerpt[:800],
+            capability_refs=list(item.capability_refs),
         ) for index, item in enumerate(result.findings if result else ())],
         usage=ComparisonUsage(model=calls["model"] or _model(row["model_snapshot"]),
             input_tokens=calls["input_tokens"], output_tokens=calls["output_tokens"],

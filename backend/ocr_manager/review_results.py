@@ -8,6 +8,13 @@ from ocr_manager.recovery_budget import budget_gate
 from ocr_manager.review_diagnostics import failure_analysis
 from ocr_manager.review_failures import ReviewFailure, result_failure, retry_summary
 
+# 旧投递按卡片相同的口径识别已保存的评论对象；j 是评审任务的固定 SQL 别名。
+REVIEW_HAS_FINDINGS_SQL = """EXISTS (
+    SELECT 1 FROM json_each(
+        CASE WHEN json_valid(j.result_json) THEN j.result_json ELSE '{}' END, '$.comments'
+    ) AS finding WHERE finding.type='object' AND typeof(finding.key)='integer'
+)"""
+
 
 def review_comments(result: dict[str, Any]) -> list[dict[str, Any]]:
     """兼容失败结果的空评论，拒绝把错误集合类型静默解释为无发现。"""

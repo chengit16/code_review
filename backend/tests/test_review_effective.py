@@ -136,7 +136,9 @@ def test_feedback_summary_counts_each_stable_identity_once(
         assert api.get('/api/review-feedback/summary', headers=ADMIN).json()[0]['total'] == 0
 
 
-@pytest.mark.parametrize('initial_status', ['pending', 'sending', 'sent', 'failed', None])
+@pytest.mark.parametrize(
+    'initial_status', ['pending', 'sending', 'sent', 'failed', 'skipped', None],
+)
 def test_supplement_waits_for_initial_and_is_versioned(
     recovered: tuple[Store, Settings, dict[str, Any]], initial_status: str | None,
 ) -> None:
@@ -165,6 +167,34 @@ def test_supplement_waits_for_initial_and_is_versioned(
     with store.connection() as db:
         assert db.execute('SELECT count(*) FROM review_recovery_deliveries').fetchone()[0] == 2
         assert db.execute('SELECT count(*) FROM review_recoveries').fetchone()[0] == 2
+
+
+def test_supplement_without_new_findings_keeps_conclusion_without_delivery(
+    client: TestClient, settings: Settings,
+) -> None:
+    """累计已有初审问题且本批零发现时仍提升结论，旧投递也不会重发。"""
+
+    store, enabled, raw = make_source(client, settings)
+    enqueue(store, enabled, 1, command())
+    batch = claim(store)
+    assert batch and finish(store, batch, child_result(raw) | {"comments": []})
+    job = store.get_job(1)
+    assert job and job["effective_status"] == "complete" and job["finding_count"] == 1
+    with store.connection() as db:
+        assert db.execute("SELECT count(*) FROM review_recovery_deliveries").fetchone()[0] == 0
+        db.execute("""INSERT INTO review_recovery_deliveries
+            (job_id,source_attempt,revision,recovery_id,document_json,status)
+            SELECT job_id,source_attempt,revision,recovery_id,document_json,'failed'
+            FROM review_effective_conclusions""")
+        db.execute("UPDATE notification_deliveries SET status='sent'")
+    assert not retry_delivery(store, 1)
+    with store.connection() as db:
+        db.execute("UPDATE review_recovery_deliveries SET status='pending'")
+    assert claim_delivery(store) is None
+    with store.connection() as db:
+        assert tuple(db.execute(
+            "SELECT status,attempts FROM review_recovery_deliveries"
+        ).fetchone()) == ("superseded", 0)
 
 
 def test_supplement_retry_token_fence_restart_and_source_change(
@@ -424,34 +454,6 @@ def test_corrupt_intermediate_coverage_blocks_new_execution_and_pending_notifica
     with store.connection() as db:
         assert db.execute('SELECT status FROM review_recovery_deliveries'
                           ).fetchone()[0] == 'superseded'
-
-
-def test_supplement_no_new_findings_never_hides_previous_issues(
-    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """本批无新增不等于整个任务无问题，补充卡片明确累计并保留非绿色。"""
-
-    from ocr_manager import feishu
-    from test_feishu import card_text
-
-    store, enabled, raw = make_source(client, settings)
-    enqueue(store, enabled, 1, command())
-    task = claim(store)
-    child = child_result(raw)
-    child['comments'] = []
-    assert task and finish(store, task, child)
-    with store.connection() as db:
-        db.execute("UPDATE notification_deliveries SET status='sent'")
-    delivery = claim_delivery(store)
-    assert delivery
-    captured: list[dict[str, Any]] = []
-    monkeypatch.setattr(feishu, 'post_message', lambda _url, body: captured.append(body))
-    feishu.send_review('https://feishu.example.test/synthetic', delivery)
-    assert captured[0]['card']['header']['template'] != 'green'
-    assert '当前累计 1 条发现' in captured[0]['card']['header']['title']['content']
-    assert '不代表整体没有问题' in card_text(captured[0])
-    assert '不撤销或改写初审消息' in card_text(captured[0])
-    assert '未发现问题' not in card_text(captured[0])
 
 
 def test_parent_wide_budget_does_not_reset_after_full_rereview(

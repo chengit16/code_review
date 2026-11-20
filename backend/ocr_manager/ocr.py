@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -45,6 +46,24 @@ OCR_ENV_PASSTHROUGH = frozenset(
         "no_proxy",
     }
 )
+
+
+def command_fingerprint(command_name: str) -> dict[str, Any]:
+    """识别当前 OCR 安装，供规则解析与初审共用同一版本身份。"""
+
+    fingerprint: dict[str, Any] = {"name": command_name}
+    if command := shutil.which(command_name):
+        executable = Path(command).resolve()
+        metadata = executable.stat()
+        fingerprint.update(path=str(executable), size=metadata.st_size,
+                           modified_ns=metadata.st_mtime_ns)
+        # npm 启动器可能保持不变，包版本覆盖其背后的二进制升级。
+        package = executable.parent.parent / "package.json"
+        if executable.name == "ocr.js" and package.is_file():
+            fingerprint["package_version"] = json.loads(package.read_text(encoding="utf-8")).get(
+                "version"
+            )
+    return fingerprint
 
 
 def _ocr_environment(settings: Settings, home: Path) -> dict[str, str]:

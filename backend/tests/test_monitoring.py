@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from ocr_manager.config import Settings
 from ocr_manager.storage import Store
+from test_queue import REVIEW_WITH_FINDING
 
 
 def test_monitor_and_prune_keep_database_history(
@@ -28,7 +29,7 @@ def test_monitor_and_prune_keep_database_history(
     job = store.next_job()
     assert job is not None
     store.finish_job(job["id"], "complete", "runs/1/1/result.json",
-                     {"comments": []}, None)
+                     REVIEW_WITH_FINDING, None)
     with store.connection() as db:
         db.execute("UPDATE review_jobs SET finished_at='2020-01-01 00:00:00' WHERE id=?",
                    (job["id"],))

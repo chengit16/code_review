@@ -9,7 +9,12 @@ import json
 from typing import Any
 
 import pytest
-from ocr_manager import feishu
+from fastapi.testclient import TestClient
+from ocr_manager import feishu, worker
+from ocr_manager.config import Settings
+from ocr_manager.secrets import SecretBox
+from test_queue import REVIEW_WITH_FINDING
+from test_task_operations import populate
 
 
 def card_text(body: dict[str, Any]) -> str:
@@ -20,6 +25,31 @@ def card_text(body: dict[str, Any]) -> str:
         for element in body["card"]["elements"]
         if element["tag"] == "div"
     )
+
+
+def test_worker_sends_only_reviews_with_findings(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """经正式队列和发送路径，只请求一张有发现的卡片。"""
+
+    store, repository_id = populate(client, settings, 2)
+    webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/example"
+    assert store.update_repository(repository_id, {
+        "feishu_webhook": SecretBox(settings.master_key).encrypt(webhook),
+    })
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(feishu, "post_message", lambda _url, body: sent.append(body))
+    for result in ({"comments": []}, REVIEW_WITH_FINDING):
+        job = store.next_job()
+        assert job is not None
+        store.finish_job(job["id"], "complete", None, result, None)
+    delivery = store.next_delivery()
+    assert delivery and delivery["job_id"] == 2
+    worker.deliver_notification(store, settings, delivery)
+    assert store.next_delivery() is None
+    assert len(sent) == 1 and "低危 1" in sent[0]["card"]["header"]["title"]["content"]
+    assert "重点发现" not in card_text(sent[0])
+    assert store.get_job(2)["delivery"]["status"] == "sent"
 
 
 def test_review_card_keeps_coverage_and_no_thinking(monkeypatch: pytest.MonkeyPatch) -> None:

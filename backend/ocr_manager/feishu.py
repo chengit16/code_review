@@ -258,8 +258,7 @@ def send_review(webhook_url: str, job: dict[str, Any], signing_secret: str = "")
             body["card"]["header"]["template"] = (
                 "red" if job.get("effective_has_high") else "orange")
         body["card"]["elements"][2] = _plain_section(
-            f"本消息只展示本批新增发现；当前版本累计 {total} 条发现。"
-            "本批没有新增不代表整体没有问题，请结合当前覆盖及完整结论核对。")
+            f"当前版本累计 {total} 条发现，请结合覆盖情况和完整结论核对。")
         body["card"]["elements"].insert(0, _plain_section(
             f"原任务 #{job['job_id']} · 第 {job['source_attempt']} 次初审 · "
             f"结论版本 {job['revision']} · 补审 #{job['recovery_id']}。"

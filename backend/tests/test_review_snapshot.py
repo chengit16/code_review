@@ -46,4 +46,4 @@ def test_queued_job_rejects_changed_configuration(settings: Settings, monkeypatc
     assert detail is not None
     assert detail["status"] == "failed"
     assert "配置已变化" in detail["error"]
-    assert detail["delivery"]["status"] == "pending"
+    assert detail["delivery"] is None

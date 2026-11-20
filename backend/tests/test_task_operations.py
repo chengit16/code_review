@@ -152,3 +152,36 @@ def test_task_list_and_detail_return_persisted_commit_author(
         detail = client.get(f"/api/jobs/{job_id}", headers=headers)
         assert detail.status_code == 200
         assert detail.json()["commit_author"] == author
+
+
+def test_author_filter_applies_before_task_pagination_and_navigation(
+    client: TestClient, settings: Settings,
+) -> None:
+    """下拉选项取全量历史且去重，完整姓名筛选不匹配相似姓名，旧片段链接可用。"""
+
+    store, repository_id = populate(client, settings, 5)
+    with store.connection() as db:
+        db.execute("UPDATE review_jobs SET commit_author='ALICE_甲' WHERE id IN (1, 3)")
+        db.execute("UPDATE review_jobs SET commit_author='aliceX甲' WHERE id=4")
+        db.execute("UPDATE review_jobs SET commit_author=' ALICE_甲乙 ' WHERE id=5")
+    headers = {"X-Admin-Token": settings.admin_token}
+    authors = "/api/review-authors"
+    author_scope = {"scope": "tasks", "repository_id": repository_id}
+    assert client.get(authors, params=author_scope).status_code == 401
+    assert client.get(authors, headers=headers, params=author_scope).json() == [
+        "ALICE_甲", "ALICE_甲乙", "aliceX甲",
+    ]
+    assert client.get(authors, headers=headers,
+                      params=author_scope | {"repository_id": 999}).json() == []
+    scope = {"repository_id": repository_id, "author": "ALICE_甲", "page_size": 1}
+    for page, job in ((1, 3), (2, 1)):
+        result = client.get("/api/task-search", headers=headers,
+                            params=scope | {"page": page}).json()
+        assert result["total"] == result["status_counts"]["queued"] == 2
+        assert [item["id"] for item in result["items"]] == [job]
+    assert client.get("/api/jobs/3/neighbors", headers=headers, params=scope).json() == {
+        "previous_id": None, "next_id": 1,
+    }
+    legacy = client.get("/api/task-search", headers=headers,
+                        params={"commit_author": "  alice_  "}).json()
+    assert [item["id"] for item in legacy["items"]] == [5, 3, 1]

@@ -66,10 +66,12 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
   });
   const selectedLoaded = selected !== null && runs.some((entry) => entry.id === selected);
   const options = runs.map((entry) => ({ value: entry.id,
-    label: `Agent #${entry.id} · OCR ${entry.source_attempt} · ${statusLabels[entry.status]}`,
+    label: `Agent #${entry.id} · ${entry.trial ? "试跑 · " : ""}OCR ${entry.source_attempt} · ${statusLabels[entry.status]}`,
     title: formatTime(entry.created_at) }));
   if (selected !== null && !selectedLoaded) options.push({ value: selected, label: `Agent #${selected}`, title: "指定历史比较" });
   const canRun = canEdit && current?.current_source_attempt != null && !current.unavailable_reason;
+  const rerunBasis = runs.find((entry) => entry.id === selected && entry.capability_recorded
+    && entry.source_attempt === current?.current_source_attempt);
   return <section id="job-agent-comparison" className="job-detail-region agent-comparison" aria-labelledby="job-agent-comparison-title">
     <div className="agent-comparison-main-heading">
       <div><h2 id="job-agent-comparison-title">双评审对比</h2><p>阿里 OCR 初审与自建 Agent</p></div>
@@ -79,7 +81,7 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
           enqueue.reset();
           try {
             setDraft({ source_attempt: current.current_source_attempt, previous_id: current.previous_id,
-              request_key: createCommandId() });
+              request_key: createCommandId(), expected_scheme_id: current.current_scheme_id ?? undefined });
           } catch (error) {
             void message.error(error instanceof Error ? error.message : "无法生成本次请求标识");
           }
@@ -111,6 +113,15 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
       mask={{ closable: !enqueue.isPending }} cancelButtonProps={{ disabled: enqueue.isPending }}
       onCancel={enqueue.isPending ? undefined : () => setDraft(null)} onOk={() => draft && enqueue.mutate(draft)}>
       <p>对任务 #{jobId} 的 OCR 初审第 {draft?.source_attempt} 次运行 Agent。{draft?.previous_id != null ? `保留比较 #${draft.previous_id} 及其裁定。` : ""}</p>
+      {draft && rerunBasis && current?.current_scheme_id != null && <Select aria-label="重跑配置"
+        value={draft.config_mode ?? "current"} disabled={enqueue.isPending}
+        options={[{ value: "current", label: `使用当前方案 #${current.current_scheme_id} · ${current.current_scheme_name}` },
+          { value: "original", label: `沿用所选比较 #${rerunBasis.id} 的配置` }]}
+        onChange={(mode) => setDraft({ ...draft, config_mode: mode, request_key: createCommandId(),
+          original_run_id: mode === "original" ? rerunBasis.id : undefined,
+          expected_scheme_id: mode === "current" ? current.current_scheme_id ?? undefined : undefined })} />}
+      {draft && !rerunBasis && current?.current_scheme_id != null &&
+        <p>使用方案 #{current.current_scheme_id} · {current.current_scheme_name}</p>}
       <p>Worker 会发送固定提交差异给配置的模型，可能产生费用。OCR 与通知沿用原记录。</p>
       {enqueue.error && <Alert type="error" showIcon title={enqueue.error.message}
         description={enqueue.error instanceof ApiError && enqueue.error.status === 409

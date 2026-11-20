@@ -12,6 +12,13 @@ from ocr_manager.review_recovery_domain import RecoveryConflict
 if TYPE_CHECKING:
     from ocr_manager.storage import Store
 
+# 补充卡片只摘录该批发现；历史批次的累计发现不能成为本批的投递依据。
+HAS_BATCH_FINDINGS = """EXISTS (
+    SELECT 1 FROM json_each(d.document_json, '$.findings') AS finding
+    WHERE CASE WHEN finding.type='object'
+        THEN json_extract(finding.value, '$.origin.recovery_id') END=d.recovery_id
+)"""
+
 
 def claim_delivery(store: Store) -> dict[str, Any] | None:
     """短写事务领取并设置令牌；初审投递仍在途时等待，旧源待发送记录标记失效。"""
@@ -22,13 +29,17 @@ def claim_delivery(store: Store) -> dict[str, Any] | None:
             WHERE status IN ('pending','failed') AND NOT EXISTS (
             SELECT 1 FROM review_jobs j WHERE j.id=job_id AND j.attempts=source_attempt
             AND j.status='partial' AND j.cancel_requested=0 AND j.superseded=0)""")
+        db.execute(f"""UPDATE review_recovery_deliveries AS d SET status='superseded',
+            error='本批补审未报告新增问题，未发送'
+            WHERE d.status='pending' AND NOT {HAS_BATCH_FINDINGS}""")
         row = db.execute("""SELECT d.*,j.repository_id,j.commit_sha,j.commit_author,j.mr_iid,
             j.notification_min_severity,j.source,r.name AS repository_name,j.target_branch,
             n.status AS initial_delivery_status FROM review_recovery_deliveries d
             JOIN review_jobs j ON j.id=d.job_id JOIN repositories r ON r.id=j.repository_id
             LEFT JOIN notification_deliveries n ON n.job_id=j.id
             WHERE d.status='pending' AND d.next_run_at<=CURRENT_TIMESTAMP AND r.enabled=1
-            AND COALESCE(n.status,'sent') IN ('sent','failed') ORDER BY d.id LIMIT 1""").fetchone()
+            AND COALESCE(n.status,'sent') IN ('sent','failed','skipped')
+            ORDER BY d.id LIMIT 1""").fetchone()
         if row is None:
             return None
         # 冻结版本也必须能从当前证据重新核验；源损坏时宁可停发，不发布假成功。
@@ -80,12 +91,12 @@ def retry_delivery(store: Store, delivery_id: int) -> bool:
     """只重发仍属于当前源的失败通知，成功通知不自动重发，也不复活旧根尝试。"""
 
     with store.connection() as db:
-        row = db.execute("""UPDATE review_recovery_deliveries SET status='pending',attempts=0,
+        row = db.execute(f"""UPDATE review_recovery_deliveries AS d SET status='pending',attempts=0,
             error=NULL,next_run_at=CURRENT_TIMESTAMP WHERE id=? AND status='failed'
             AND EXISTS (SELECT 1 FROM review_jobs j WHERE j.id=job_id
             AND j.attempts=source_attempt AND j.status='partial'
             AND j.cancel_requested=0 AND j.superseded=0
-            )""", (delivery_id,))
+            ) AND {HAS_BATCH_FINDINGS}""", (delivery_id,))
         return row.rowcount == 1
 
 

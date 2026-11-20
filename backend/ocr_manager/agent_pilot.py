@@ -55,6 +55,8 @@ def set_task_pilot(store: Store, settings: Settings, job_id: int, enabled: bool,
                    actor: str) -> None:
     """由已授权的管理员保存任务所属仓库的试点状态，不登记模型任务。"""
 
+    from ocr_manager.agent_capabilities import audit, check_scheme, effective_scheme
+
     with store.connection() as db:
         # 1. 从任务关联确定授权仓库，与入队串行检查，调用方不能指定其他仓库。
         db.execute("BEGIN IMMEDIATE")
@@ -63,23 +65,50 @@ def set_task_pilot(store: Store, settings: Settings, job_id: int, enabled: bool,
         if repository is None:
             raise LookupError("任务不存在")
         repository_id = int(repository["id"])
-        if not can_manage_pilot(settings, repository_id):
-            raise PilotConflict("pilot_config_managed", "此仓库的 Agent 试点由服务配置管理")
-        if managed_pilot_enabled(db, repository_id) == enabled:
-            return
-        # 2. 启用时只校验模型档案元数据；撤回前等待已经确认的尝试结束。
-        if enabled:
-            if not repository["enabled"]:
-                raise PilotConflict("pilot_repository_disabled", "请先启用该仓库")
-            try:
-                resolve_model(store, _project_config(repository_id), repository_id)
-            except ValueError as error:
-                raise PilotConflict("pilot_model_unavailable", str(error)) from error
-            db.execute("INSERT INTO agent_review_pilots(repository_id,enabled_by) VALUES (?,?)",
-                       (repository_id, actor))
-        else:
-            if db.execute("""SELECT 1 FROM agent_reviews a JOIN review_jobs j ON j.id=a.job_id
-                WHERE j.repository_id=? AND a.status IN ('queued','running') LIMIT 1""",
-                          (repository_id,)).fetchone():
-                raise PilotConflict("pilot_active_runs", "请等此仓库的 Agent 任务结束后再关闭试点")
-            db.execute("DELETE FROM agent_review_pilots WHERE repository_id=?", (repository_id,))
+        selected = db.execute("SELECT model_profile_id FROM agent_project_settings WHERE "
+                              "repository_id=?", (repository_id,)).fetchone()
+        changed = set_repository_pilot(
+            db, store, settings, repository, enabled, actor, selected[0] if selected else None,
+        )
+        if changed:
+            if enabled:
+                try:
+                    check_scheme(db, effective_scheme(db, repository_id), trial=False,
+                                 repository_id=repository_id)
+                except ValueError as error:
+                    raise PilotConflict("pilot_scheme_unavailable", str(error)) from error
+            db.execute("UPDATE agent_project_settings SET version=version+1 WHERE repository_id=?",
+                       (repository_id,))
+            db.execute("""INSERT OR IGNORE INTO agent_project_settings(repository_id,version)
+                VALUES (?,1)""", (repository_id,))
+            audit(db, actor, "project_pilot", repository_id, before=not enabled, after=enabled)
+
+
+def set_repository_pilot(
+    db: sqlite3.Connection, store: Store, settings: Settings, repository: sqlite3.Row,
+    enabled: bool, actor: str, profile_id: int | None,
+) -> bool:
+    """在调用方写事务内复用仓库试点授权与正在运行的保护。"""
+
+    repository_id = int(repository["id"])
+    if not can_manage_pilot(settings, repository_id):
+        raise PilotConflict("pilot_config_managed", "此仓库的 Agent 试点由服务配置管理")
+    if managed_pilot_enabled(db, repository_id) == enabled:
+        return False
+    if enabled:
+        if not repository["enabled"]:
+            raise PilotConflict("pilot_repository_disabled", "请先启用该仓库")
+        try:
+            resolve_model(store, _project_config(repository_id), repository_id,
+                          profile_id=profile_id, db=db)
+        except ValueError as error:
+            raise PilotConflict("pilot_model_unavailable", str(error)) from error
+        db.execute("INSERT INTO agent_review_pilots(repository_id,enabled_by) VALUES (?,?)",
+                   (repository_id, actor))
+    else:
+        if db.execute("""SELECT 1 FROM agent_reviews a JOIN review_jobs j ON j.id=a.job_id
+            WHERE j.repository_id=? AND a.status IN ('queued','running') LIMIT 1""",
+                      (repository_id,)).fetchone():
+            raise PilotConflict("pilot_active_runs", "请等此仓库的 Agent 任务结束后再关闭试点")
+        db.execute("DELETE FROM agent_review_pilots WHERE repository_id=?", (repository_id,))
+    return True

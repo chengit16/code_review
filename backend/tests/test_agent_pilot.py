@@ -79,7 +79,7 @@ def test_managed_pilot_reuses_project_model_without_enqueuing_on_enable(
         ).status_code == 409
     with store.connection() as db:
         assert db.execute("SELECT COUNT(*) FROM agent_review_pilots").fetchone()[0] == 0
-        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 1
         assert db.execute("SELECT COUNT(*) FROM gitlab_publications").fetchone()[0] == 0
 
 

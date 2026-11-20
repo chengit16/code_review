@@ -7,7 +7,6 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import signal
 import time
 from collections.abc import Iterator
@@ -30,7 +29,7 @@ from ocr_manager.finding_policy import VERSION as FINDING_POLICY_VERSION
 from ocr_manager.git_repo import GitRepository
 from ocr_manager.gitlab import GitLabClient, project_web_url
 from ocr_manager.model_pricing import pricing_snapshot
-from ocr_manager.ocr import check_rule, read_preview, run_review
+from ocr_manager.ocr import check_rule, command_fingerprint, read_preview, run_review
 from ocr_manager.premerge import (
     SHA,
     defer_premerge,
@@ -140,27 +139,12 @@ def configuration_snapshot(
     project_limits = get_limits(store, repository_id)
     profile_id = project_limits["model_profile_id"]
     profile = store.get_model_profile(repository_id)
-    command = shutil.which(settings.ocr_command)
-    command_fingerprint: dict[str, Any] = {"name": settings.ocr_command}
-    if command:
-        executable = Path(command).resolve()
-        metadata = executable.stat()
-        command_fingerprint |= {
-            "path": str(executable),
-            "size": metadata.st_size,
-            "modified_ns": metadata.st_mtime_ns,
-        }
-        # npm 启动脚本可能保持不变，包版本用于识别其背后的 OCR 二进制升级。
-        package = executable.parent.parent / "package.json"
-        if executable.name == "ocr.js" and package.is_file():
-            package_data = json.loads(package.read_text(encoding="utf-8"))
-            command_fingerprint["package_version"] = package_data.get("version")
     snapshot = {
         "provider": model_settings.ocr_provider,
         "model": model_settings.ocr_model,
         "base_url": model_settings.ocr_base_url,
         "model_version": model_version,
-        "command": command_fingerprint,
+        "command": command_fingerprint(settings.ocr_command),
         "timeout_seconds": model_settings.ocr_timeout_seconds,
         "review_language": model_settings.review_language,
         "max_files": model_settings.ocr_max_files,
@@ -686,8 +670,12 @@ def run_once(
 ) -> tuple[bool, int | None]:
     """处理一个工作单元，并记住上次评审的仓库供下次轮转。"""
 
+    from ocr_manager.agent_capability_checks import claim_check, execute_check
     from ocr_manager.repository_discovery import claim_discovery, execute_discovery
 
+    if capability_check := claim_check(store):
+        execute_check(store, settings, capability_check)
+        return True, last_repository_id
     discovery = claim_discovery(store)
     if discovery:
         execute_discovery(store, settings, discovery)

@@ -6,6 +6,7 @@ import pytest
 from ocr_manager import monitoring
 from ocr_manager.artifact_lock import artifact_lock
 from ocr_manager.storage import Store
+from test_queue import REVIEW_WITH_FINDING
 
 
 def old_job(tmp_path: Path) -> tuple[Store, int, Path]:
@@ -25,7 +26,7 @@ def old_job(tmp_path: Path) -> tuple[Store, int, Path]:
     store.finish_event(event["id"], [sha], {sha: ("snapshot", "")}, None)
     job = store.next_job()
     assert job is not None
-    store.finish_job(job["id"], "complete", None, {"comments": []}, None)
+    store.finish_job(job["id"], "complete", None, REVIEW_WITH_FINDING, None)
     delivery = store.next_delivery()
     assert delivery is not None
     store.finish_delivery(delivery["id"], None)

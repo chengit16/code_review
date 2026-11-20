@@ -12,6 +12,7 @@ from ocr_manager.review_effective import EFFECTIVE
 
 FeedbackFilter = Literal["all", "helpful", "false_positive", "ignored", "fixed", "unmarked"]
 DispositionFilter = Literal["all", "open", "fixed", "ignored", "false_positive", "unknown"]
+ALL_FINDINGS_WINDOW = ("1970-01-01 00:00:00", "9999-12-31 00:00:00")
 
 # 时间窗以外的完整性校验也复用同一主身份约束。
 VALID_FINDING = """typeof(finding_id)='text' AND typeof(path)='text' AND trim(path)!=''
@@ -19,7 +20,7 @@ VALID_FINDING = """typeof(finding_id)='text' AND typeof(path)='text' AND trim(pa
 
 # 初审镜像只取一次；有效补审只取主身份，不展开 also_seen_in，不复活历史尝试。
 QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
- SELECT j.id AS job_id,j.repository_id,j.attempts AS source_attempt,j.finished_at,
+ SELECT j.id AS job_id,j.repository_id,j.attempts AS source_attempt,j.finished_at,j.commit_author,
  e.revision,COALESCE(e.document_json,j.result_json) AS document,
  CASE WHEN e.job_id IS NULL THEN 0 ELSE 1 END AS promoted
  FROM review_jobs j LEFT JOIN effective e ON e.job_id=j.id
@@ -38,8 +39,8 @@ QUALITY_CTE = f"""WITH effective AS ({EFFECTIVE}), documents AS (
  CASE WHEN promoted=1 THEN '$.findings' ELSE '$.comments' END) x
  WHERE x.type='object'
 ), current_findings AS (
- SELECT f.job_id,f.repository_id,f.source_attempt,COALESCE(f.revision,0) AS revision,
- f.finding_id,f.recovery_id,f.comment_index,
+ SELECT f.job_id,f.repository_id,f.source_attempt,f.commit_author,
+ COALESCE(f.revision,0) AS revision,f.finding_id,f.recovery_id,f.comment_index,
  CASE WHEN f.recovery_id IS NULL THEN f.finished_at ELSE o.created_at END AS generated_at,
  COALESCE(NULLIF(CAST(json_extract(f.finding,'$.category') AS TEXT),''),'未分类') AS category,
  CASE WHEN json_extract(f.finding,'$.severity') IN ('critical','high','medium','low')
@@ -160,7 +161,8 @@ def quality_findings(db: sqlite3.Connection, repository_id: int | None, days: in
                      until: str | None = None, severity: str | None = None,
                      status: DispositionFilter = "all", *, handling: str = "all",
                      issue_id: int | None = None, finding_id: str | None = None,
-                     keyword: str | None = None, detail: bool = False) -> dict[str, Any]:
+                     keyword: str | None = None, commit_author: str | None = None,
+                     author: str | None = None, detail: bool = False) -> dict[str, Any]:
     """汇总、发现列表与历史关联共用集合；筛选在分页前执行，详情按稳定身份读取。"""
 
     if repository_id is not None and not db.execute(
@@ -168,8 +170,8 @@ def quality_findings(db: sqlite3.Connection, repository_id: int | None, days: in
     ).fetchone():
         raise HTTPException(404, "项目不存在")
     _, default_since, default_until = quality_window(days)
-    start = since or (default_since if days else "1970-01-01 00:00:00")
-    end = until or (default_until if days else "9999-12-31 00:00:00")
+    start = since or (default_since if days else ALL_FINDINGS_WINDOW[0])
+    end = until or (default_until if days else ALL_FINDINGS_WINDOW[1])
     # 旧修复筛选兼容为未评价，不再单列与价值无关的修复反馈。
     if feedback == "fixed":
         feedback = "unmarked"
@@ -179,11 +181,14 @@ def quality_findings(db: sqlite3.Connection, repository_id: int | None, days: in
         ELSE issue_status END=?) AND
         (?='all' OR (?='pending' AND verdict IS NULL) OR (?='handled' AND verdict IS NOT NULL))
         AND (? IS NULL OR issue_id=?) AND (? IS NULL OR finding_id=?)
-        AND (? IS NULL OR instr(lower(content),lower(?))>0 OR instr(lower(path),lower(?))>0)"""
+        AND (? IS NULL OR instr(lower(content),lower(?))>0 OR instr(lower(path),lower(?))>0)
+        AND (? IS NULL OR trim(commit_author)=?)
+        AND (? IS NULL OR instr(lower(commit_author),lower(?))>0)"""
+    author_fragment = ((commit_author or "").strip() or None) if author is None else None
     args = (repository_id, repository_id, start, end, start, end, feedback, feedback,
             category, category, severity, severity, status, status,
             handling, handling, handling, issue_id, issue_id, finding_id, finding_id,
-            keyword, keyword, keyword)
+            keyword, keyword, keyword, author, author, author_fragment, author_fragment)
     total = db.execute(
         f"{QUALITY_CTE} SELECT COUNT(*) FROM scoped WHERE {where}", args).fetchone()[0]
     rows = [dict(row) for row in db.execute(f"""{QUALITY_CTE} SELECT
@@ -191,9 +196,9 @@ def quality_findings(db: sqlite3.Connection, repository_id: int | None, days: in
         s.revision,s.recovery_id,s.comment_index,s.generated_at,s.category,s.severity,
         s.path,substr(s.content,1,160) AS excerpt,s.issue_id,s.issue_status,
         {"s.content,s.start_line," if detail else ""}
-        j.commit_author,COALESCE(s.verdict,'unmarked') AS feedback,
+        s.commit_author,COALESCE(s.verdict,'unmarked') AS feedback,
         CASE WHEN s.verdict IS NULL THEN 'pending' ELSE 'handled' END AS handling FROM scoped s
-        JOIN repositories r ON r.id=s.repository_id JOIN review_jobs j ON j.id=s.job_id
+        JOIN repositories r ON r.id=s.repository_id
         WHERE {where}
         ORDER BY generated_at DESC,s.job_id DESC,s.finding_id LIMIT ? OFFSET ?""",
         (*args, page_size, (page - 1) * page_size))]

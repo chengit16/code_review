@@ -4,7 +4,7 @@
 .jobs-search-card { background: linear-gradient(110deg, #fff, #fcfdff); }
 .jobs-quick-filters, .jobs-active-filters, .jobs-filter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .jobs-filter-form { margin-top: 10px; }
-.jobs-filter-main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 160px auto; align-items: center; gap: 8px; }
+.jobs-filter-main { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 160px auto; align-items: center; gap: 8px; }
 .jobs-filter-main > .ant-select { width: 100%; min-width: 0; }
 .jobs-created-date { min-width: 0; width: 100%; }
 .jobs-created-date .ant-picker-input > input { min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }

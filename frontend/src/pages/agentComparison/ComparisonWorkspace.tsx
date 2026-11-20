@@ -11,13 +11,20 @@ import { formatTime, shortSha } from "../../ui/format";
 import { FindingDescription } from "../FindingDescription";
 import { evaluateFinding, verdictLabels } from "./comparisonEdits";
 import type { ComparisonEdit } from "./comparisonEdits";
+import { CapabilityEventDetails, CapabilityEvidence } from "./CapabilityEvidence";
 
 const reasonLabels: Record<string, string> = {
   read_budget: "达到读取页数限制", model_budget: "达到模型预算限制", model_timeout: "模型响应超时",
   model_response: "模型响应未通过校验", model_unavailable: "模型网关不可用", input_unavailable: "固定 Git 输入不可用",
   input_changed: "固定差异快照不一致", source_changed: "初审来源已变化", mr_version_changed: "MR 版本已变化",
   model_config_changed: "模型配置已更新", model_config_invalid: "模型配置无效", not_enabled: "已关闭 Agent",
+  ocr_rules_unavailable: "无法还原 OCR 初审规则",
+  capability_unavailable: "方案已停用，或必需的取证步骤不可用",
   interrupted: "运行中断", cancelled: "已取消", no_text_diff: "没有文本差异",
+};
+
+const ruleSources: Record<string, string> = {
+  custom: "项目配置", project: "仓库规则", global: "全局规则", system: "内置规则",
 };
 
 function FindingLocation({ finding }: { finding: Pick<ComparisonFinding, "side" | "path" | "line"> }) {
@@ -122,10 +129,19 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
         <div className="agent-coverage"><strong>{totals ? `${totals.reviewed}/${totals.total}` : "未知"}</strong> 条差异已核对
           {totals && <span>已交付 {totals.delivered} 条 · 排除 {agent.excluded_paths.length} 个文件</span>}</div>
         <Usage usage={agent.usage} />
+        <CapabilityEvidence agent={agent} />
         {agent.reason && agent.reason !== "covered" && <p className="agent-comparison-reason">{reasonLabels[agent.reason] ?? `结束原因：${agent.reason}`}</p>}
         {agent.files && (agent.files.length > 0 || agent.excluded_paths.length > 0) && <Collapse size="small" ghost
           items={[{ key: "scope", label: "查看文件覆盖", children: <ul className="agent-coverage-files">
-            {agent.files.map((file) => <li key={file.path}><span>{file.path}</span><span>{file.reviewed}/{file.total} 已核对</span></li>)}
+            {agent.files.map((file) => <li key={file.path}>
+              <div>
+                <div>{file.path}</div>
+                {file.rule && <Typography.Text type="secondary" title={file.rule.sha256}>
+                  规则 · {ruleSources[file.rule.source] ?? file.rule.source} · {file.rule.pattern} · {file.rule.sha256.slice(0, 12)}
+                </Typography.Text>}
+              </div>
+              <span>{file.reviewed}/{file.total} 已核对</span>
+            </li>)}
             {agent.excluded_paths.map((path) => <li key={path}><span>{path}</span><span>无文本差异</span></li>)}
           </ul> }]} />}
         {(filter === "all" ? agent.findings : agentOnly).length > 0
@@ -154,6 +170,8 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
         <h3>{evidence.title}</h3><FindingLocation finding={evidence} />
         <Typography.Text code>{evidence.side === "base" ? comparison.base_sha : evidence.side === "head" ? comparison.head_sha : `${shortSha(comparison.base_sha)} → ${shortSha(comparison.head_sha)}`}</Typography.Text>
         {evidence.excerpt && <pre>{evidence.excerpt}</pre>}
+        {agent.capability_events?.filter((item) => evidence.capability_refs?.includes(item.id))
+          .map((item) => <CapabilityEventDetails key={item.id} event={item} />)}
         <FindingDescription content={evidence.content} />
         {evidence.impact && <p><strong>影响</strong> {evidence.impact}</p>}
         {evaluation && <div><Tag>{verdictLabels[evaluation.verdict]}</Tag>{evaluation.worth_fixing !== null && <Tag>{evaluation.worth_fixing ? "值得处理" : "无需处理"}</Tag>}{evaluation.note && <p>{evaluation.note}</p>}</div>}

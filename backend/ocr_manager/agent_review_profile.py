@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 
 from ocr_manager.agent_review_config import (
@@ -16,10 +17,12 @@ API_ROOTS = {
     "openai": "https://api.openai.com/v1",
     "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1",
 }
+ZT_READ_TIMEOUT_SECONDS = 120
 
 
 def resolve_model(
     store: Store, config: AgentReviewConfig, repository_id: int, *, master_key: str | None = None,
+    profile_id: int | None = None, db: sqlite3.Connection | None = None,
 ) -> AgentReviewConfig:
     """按项目覆盖优先解析；凭据只在 Worker 的主密钥可用时解密。"""
 
@@ -27,7 +30,13 @@ def resolve_model(
         raise ValueError("仓库未获准运行 Agent")
     if config.model_source == "dedicated":
         return config
-    profile = store.get_model_profile(repository_id)
+    if db is None:
+        with store.connection() as connection:
+            return resolve_model(store, config, repository_id, master_key=master_key,
+                                 profile_id=profile_id, db=connection)
+    profile = db.execute("""SELECT * FROM model_profiles WHERE id=COALESCE(?,
+        (SELECT model_profile_id FROM project_review_limits WHERE repository_id=?),
+        (SELECT id FROM model_profiles WHERE enabled=1))""", (profile_id, repository_id)).fetchone()
     if profile is None:
         raise ValueError("此项目没有可复用的模型配置")
     provider = profile["provider"]
@@ -41,7 +50,7 @@ def resolve_model(
     ciphertext = profile["api_key_ciphertext"]
     if not ciphertext:
         raise ValueError("项目模型缺少已保存的凭据")
-    # zt 按固定差异清单逐页完成，保留单次 HTTP 超时和取消检查。
+    # zt 可能需要更长的推理等待。只延长响应读取阶段，连接和取消检查沿用原策略。
     bounded = profile["name"] != "zt"
     return replace(
         config, model=model, endpoint=endpoint,
@@ -49,5 +58,6 @@ def resolve_model(
         enforce_token_budget=bounded,
         max_reads=config.max_reads if bounded else None,
         timeout_seconds=config.timeout_seconds if bounded else None,
+        read_timeout_seconds=None if bounded else ZT_READ_TIMEOUT_SECONDS,
         api_key=SecretBox(master_key).decrypt(ciphertext) if master_key is not None else "",
     )

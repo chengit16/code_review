@@ -10,11 +10,18 @@ import { DesignProvider } from "../app/DesignProvider";
 import { TaskFilters } from "../pages/TaskFilters";
 import { TaskSelectionBar } from "../pages/TaskSelectionBar";
 
+function renderFilters(params: URLSearchParams, onApply: (params: URLSearchParams) => void) {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("[]"));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<DesignProvider><QueryClientProvider client={client}>
+    <TaskFilters token="" params={params} repositories={[]} onApply={onApply} />
+  </QueryClientProvider></DesignProvider>);
+}
+
 it("单日筛选集中提交且包含整天，旧链接条件与每页条数保留", async () => {
   const apply = vi.fn();
   const user = userEvent.setup();
-  render(<DesignProvider><TaskFilters params={new URLSearchParams("page=3&page_size=50&view=attention&issue_state=open&sha=abcd")}
-    repositories={[]} onApply={apply} /></DesignProvider>);
+  renderFilters(new URLSearchParams("page=3&page_size=50&view=attention&issue_state=open&sha=abcd"), apply);
   expect(screen.queryByLabelText("分支", { exact: true })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("提交 SHA", { exact: true })).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("创建日期", { exact: true }), "2026-01-01");
@@ -36,7 +43,7 @@ it("旧范围未经修改继续生效，清空筛选仅保留每页条数", asyn
   const apply = vi.fn();
   const user = userEvent.setup();
   const original = new URLSearchParams("page_size=50&page=3&sha=abcd&target_branch=main&notification_failed=true&since=2026-11-01T00:00:00Z&until=2026-11-03T23:59:59Z");
-  render(<DesignProvider><TaskFilters params={original} repositories={[]} onApply={apply} /></DesignProvider>);
+  renderFilters(original, apply);
   expect(screen.getByLabelText("创建日期", { exact: true })).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "查询" }));
   const params = apply.mock.calls[0][0] as URLSearchParams;

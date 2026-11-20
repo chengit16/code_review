@@ -108,7 +108,7 @@ def test_merged_mr_runs_review_and_notification(
     monkeypatch.setattr(worker, "GitRepository", FakeGit)
     monkeypatch.setattr(
         worker, "run_review", lambda *_args, **_kwargs: (
-            "complete", {"comments": [], "manifest": {}})
+            "complete", {"comments": [{"path": "main.py", "content": "合成发现"}], "manifest": {}})
     )
     monkeypatch.setattr(
         worker,

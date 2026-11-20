@@ -10,8 +10,10 @@ from dataclasses import asdict
 from typing import Literal, cast
 from uuid import uuid4
 
+from ocr_manager.agent_capabilities import freeze_capabilities, get_scheme
+from ocr_manager.agent_capability_contracts import CapabilityRun
 from ocr_manager.agent_pilot import managed_pilot_enabled
-from ocr_manager.agent_review_config import AgentReviewConfig
+from ocr_manager.agent_review_config import AgentReviewConfig, source_rule_fingerprint
 from ocr_manager.review_prototype.graph import AgentProgress
 from ocr_manager.review_prototype.input import ReviewInput
 from ocr_manager.review_prototype.result import ReviewResult
@@ -23,15 +25,18 @@ RUN_SQL = """SELECT a.*,j.repository_id,j.source,j.mr_iid,j.target_branch,j.cont
     j.commit_sha,j.superseded,j.attempts,j.status AS job_status,j.config_hash,j.context_json,
     MAX(0,(julianday('now')-julianday(a.started_at))*86400) AS elapsed_seconds,
     r.enabled,r.project_id,r.gitlab_url,r.gitlab_token_ciphertext,
-    o.attempt_number AS ocr_attempt,o.status AS ocr_status
+    o.attempt_number AS ocr_attempt,o.status AS ocr_status,o.config_snapshot AS ocr_snapshot,
+    c.snapshot AS capability_snapshot
     FROM agent_reviews a JOIN review_jobs j ON j.id=a.job_id
     JOIN repositories r ON r.id=j.repository_id
-    JOIN review_attempts o ON o.id=a.source_attempt_id WHERE a.id=?"""
+    JOIN review_attempts o ON o.id=a.source_attempt_id
+    LEFT JOIN agent_run_capabilities c ON c.run_id=a.id WHERE a.id=?"""
 
 
 def enqueue(
     store: Store, config: AgentReviewConfig, job_id: int, request_key: str,
     previous_id: int | None = None, *, source_attempt: int | None = None,
+    capabilities: CapabilityRun | None = None,
 ) -> int:
     """本机运维触发；写锁下固定 OCR 初审版本和已验证的 Git 范围，禁止并行重跑。"""
 
@@ -39,20 +44,26 @@ def enqueue(
         raise ValueError("请求键须为 1 到 100 个 ASCII 字母、数字或 ._:-")
     if config.model_source == "project" and config.profile_reference is None:
         raise ValueError("入队前须解析项目的模型配置版本")
-    snapshot = config.snapshot()
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
         # 1. 幂等查询先于当前任务校验，终态后重复同一请求也只返回原版本。
         existing = db.execute(
-            """SELECT a.id,a.previous_id,a.model_snapshot,o.attempt_number
+            """SELECT a.id,a.previous_id,a.model_snapshot,c.snapshot AS capability_snapshot,
+            o.attempt_number,o.config_snapshot
             FROM agent_reviews a JOIN review_attempts o ON o.id=a.source_attempt_id
+            LEFT JOIN agent_run_capabilities c ON c.run_id=a.id
             WHERE a.job_id=? AND a.request_key=?""",
             (job_id, request_key),
         ).fetchone()
         if existing:
             same_source = source_attempt is None or existing["attempt_number"] == source_attempt
-            if (existing["previous_id"] != previous_id or existing["model_snapshot"] != snapshot
-                    or not same_source):
+            snapshots = {config.snapshot(), config.snapshot(
+                source_rule_fingerprint(existing["config_snapshot"]),
+            )}
+            if (existing["previous_id"] != previous_id
+                    or existing["model_snapshot"] not in snapshots or not same_source
+                    or existing["capability_snapshot"] != (
+                        capabilities.model_dump_json() if capabilities else None)):
                 raise ValueError("同一请求键已绑定其他参数")
             return int(existing["id"])
         # 2. 旧任务缺少实际预检范围时默认拒绝，避免把当前分支当成历史 OCR 输入。
@@ -65,7 +76,17 @@ def enqueue(
             raise ValueError("仓库未获准运行 Agent")
         if config.managed_pilot and not managed_pilot_enabled(db, source["repository_id"]):
             raise ValueError("仓库的 Agent 试点已关闭")
+        if capabilities:
+            scheme = get_scheme(db, capabilities.scheme_id)
+            current = freeze_capabilities(db, scheme, source["repository_id"], config,
+                                          trial=capabilities.trial)
+            if current.model_copy(update={
+                "config_mode": capabilities.config_mode,
+                "original_run_id": capabilities.original_run_id,
+            }) != capabilities:
+                raise ValueError("方案授权或工具版本已更新，请重新确认")
         base, head = source_range(source)
+        snapshot = config.snapshot(source_rule_fingerprint(source["ocr_snapshot"]))
         latest = db.execute("""SELECT id,status FROM agent_reviews
             WHERE source_attempt_id=? ORDER BY id DESC LIMIT 1""", (source["attempt_id"],)
         ).fetchone()
@@ -83,13 +104,17 @@ def enqueue(
             (job_id, source["attempt_id"], previous_id, request_key, base, head,
              source["config_hash"], _context_digest(source), snapshot))
         assert cursor.lastrowid is not None
+        if capabilities:
+            db.execute("INSERT INTO agent_run_capabilities VALUES (?,?)",
+                       (cursor.lastrowid, capabilities.model_dump_json()))
         return cursor.lastrowid
 
 
 def current_source(db: sqlite3.Connection, job_id: int) -> sqlite3.Row | None:
     """从调用方事务读取当前 OCR 尝试，要求任务与尝试状态一致。"""
 
-    return cast(sqlite3.Row | None, db.execute("""SELECT j.*,o.id AS attempt_id,r.enabled
+    return cast(sqlite3.Row | None, db.execute("""SELECT j.*,o.id AS attempt_id,r.enabled,
+        o.config_snapshot AS ocr_snapshot
         FROM review_jobs j JOIN repositories r ON r.id=j.repository_id
         JOIN review_attempts o ON o.job_id=j.id AND o.attempt_number=j.attempts
           AND o.status=j.status WHERE j.id=?""", (job_id,)).fetchone())
@@ -155,21 +180,30 @@ def source_is_current(row: sqlite3.Row) -> bool:
     )
 
 
-def pin_input(store: Store, run_id: int, snapshot: ReviewInput) -> bool:
+def pin_input(
+    store: Store, run_id: int, snapshot: ReviewInput,
+    rule_versions: dict[str, dict[str, str]] | None = None,
+) -> bool:
     """以实际差异固定内容身份和清单，不把差异全文写入业务库。"""
 
     key = snapshot.key
-    manifest = json.dumps({
+    facts: dict[str, object] = {
         "hunks": [{"id": hunk.hunk_id, "path": hunk.path, "records": len(hunk.lines)}
                   for hunk in snapshot.hunks],
         "excluded_paths": snapshot.excluded_paths,
-    }, ensure_ascii=False)
+    }
+    if rule_versions is not None:
+        facts["rule_versions"] = rule_versions
+    manifest = json.dumps(facts, ensure_ascii=False)
     with store.connection() as db:
         cursor = db.execute("""UPDATE agent_reviews SET input_key=?,input_manifest_json=?
-            WHERE id=? AND status='running' AND NOT EXISTS (
+            WHERE id=? AND status='running'
+              AND (input_manifest_json IS NULL OR input_manifest_json=?)
+              AND NOT EXISTS (
               SELECT 1 FROM agent_reviews p
               WHERE p.source_attempt_id=agent_reviews.source_attempt_id
-                AND p.input_key IS NOT NULL AND p.input_key!=?)""", (key, manifest, run_id, key))
+                AND p.input_key IS NOT NULL AND p.input_key!=?)""",
+                            (key, manifest, run_id, manifest, key))
         return cursor.rowcount == 1
 
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ocr_manager.review_results import REVIEW_HAS_FINDINGS_SQL
 from ocr_manager.storage import Store
 
 
@@ -25,8 +26,9 @@ def reconcile(store: Store, data_dir: Path) -> dict[str, Any]:
         events = db.execute("""SELECT e.id, e.status,
             (SELECT COUNT(*) FROM review_event_links WHERE event_id=e.id) AS job_count
             FROM merge_events e ORDER BY e.id""").fetchall()
-        jobs = db.execute("""SELECT j.id, j.status, j.attempts, j.result_path,
+        jobs = db.execute(f"""SELECT j.id, j.status, j.attempts, j.result_path,
             j.correlation_id,j.historical_import,j.legacy_premerge_id,
+            {REVIEW_HAS_FINDINGS_SQL} AS has_findings,
             (SELECT COUNT(*) FROM review_attempts a WHERE a.job_id=j.id) AS attempt_count,
             (SELECT status FROM review_attempts a WHERE a.job_id=j.id
              ORDER BY attempt_number DESC LIMIT 1) AS attempt_status,
@@ -76,9 +78,10 @@ def reconcile(store: Store, data_dir: Path) -> dict[str, Any]:
         if (
             job["status"] in {"complete", "partial", "failed", "skipped"}
             and job["delivery_count"] == 0
+            and job["has_findings"]
             and not job["historical_import"]
         ):
-            report("job_without_delivery", "job", job["id"], "已结束的评审任务没有通知投递记录。")
+            report("job_without_delivery", "job", job["id"], "有发现的终态评审缺少通知投递记录。")
         if job["attempt_correlation_mismatch"]:
             report(
                 "attempt_correlation_mismatch", "job", job["id"], "评审尝试与任务的关联标识不一致。"

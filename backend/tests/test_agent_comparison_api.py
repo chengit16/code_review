@@ -87,7 +87,7 @@ def test_agent_history_is_frozen_and_rerun_has_no_ocr_side_effect(settings: Sett
     with store.connection() as db:
         assert db.execute("SELECT COUNT(*) FROM agent_reviews").fetchone()[0] == 2
         assert db.execute("SELECT COUNT(*) FROM review_attempts").fetchone()[0] == 2
-        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0] == 1
         assert db.execute("SELECT COUNT(*) FROM gitlab_publications").fetchone()[0] == 0
 
 

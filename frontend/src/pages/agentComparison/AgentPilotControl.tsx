@@ -24,6 +24,7 @@ export function AgentPilotControl({ token, jobId, pilot }: PilotProps) {
     mutationFn: (enabled: boolean) => updateAgentPilot(token, jobId, enabled),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["agent-comparisons"] });
+      void client.invalidateQueries({ queryKey: ["agent-project"] });
       setDesired(null);
     },
   });
