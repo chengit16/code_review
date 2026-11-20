@@ -50,7 +50,7 @@ export function ConfigHistoryPage({ token }: { /** 内存中的管理口令。 *
     if (key === "kind") next.delete("object_id");
     setDetail(null); setFeedback(""); setParams(next);
   }
-  return <div className="page"><PageHeader title="配置历史" subtitle="项目、飞书与模型的完整配置历史；恢复会建立新版本" />
+  return <div className="page"><PageHeader title="配置历史" />
     <section className="list-surface">
       <ListToolbar advanced={<>
         <ListSelect label="变更动作" value={params.get("action") ?? "all"} onValueChange={(value) => update("action", value)} disabled={restore.isPending} options={[{ value: "all", label: "全部动作" }, ...Object.entries(actions).map(([value, label]) => ({ value, label }))]} />
@@ -68,7 +68,6 @@ export function ConfigHistoryPage({ token }: { /** 内存中的管理口令。 *
       <ListConditions disabled={restore.isPending} items={[{ key: "action", label: "动作", value: actions[params.get("action") ?? ""] ?? "" }, { key: "since", label: "起始", value: localDateInput(params.get("since")) }, { key: "until", label: "结束", value: localDateInput(params.get("until")) }]} onClear={(key) => update(key, "")} />
       {dateError && <p role="alert">{dateError}</p>}{feedback && <p role="status">{feedback}</p>}
       <QueryState loading={history.isLoading} error={history.error || objects.error || restore.error} onRetry={() => { void history.refetch(); void objects.refetch(); }} />
-      <p className="form-note">凭据只展示是否变更；恢复不改变模型启用状态，也不保证历史凭据仍然有效。</p>
       <ListTable onOpenRow={setDetail} rowLabel={(revision) => `查看版本 ${revision.id}`} rowKey="id" dataSource={history.data?.items ?? []} loading={history.isFetching} pagination={false} scroll={{ x: 850 }} locale={{ emptyText: history.error ? "无法读取配置历史" : "暂无配置版本" }} columns={[
         { title: "版本 / 动作", key: "version", width: 120, render: (_, revision) => <>#{revision.id}<span className="list-secondary">{actions[revision.action] ?? revision.action}</span></> },
         { title: "对象", key: "object", width: 200, render: (_, revision) => <>{objects.data?.find((item) => item.id === revision.object_id)?.name ?? (objects.isSuccess ? `已删除对象 #${revision.object_id}` : `对象 #${revision.object_id} · 名称待确认`)}<span className="list-secondary">{kinds.find((item) => item.value === kind)?.label}</span></> },

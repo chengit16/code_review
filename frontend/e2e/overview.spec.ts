@@ -64,7 +64,13 @@ for (const width of [1440, 1280, 768, 390, 320]) {
       await expect(quality.getByText(share, { exact: true })).toBeVisible();
     }
     await expect(quality.getByText("占 14.3%", { exact: true })).toHaveCount(2);
+    await expect(quality.getByText(/全部 210 条有效发现为分母（含未评价）/)).toHaveCount(0);
+    const method = quality.getByRole("button", { name: "反馈统计口径" });
+    await method.click();
     await expect(quality.getByText(/全部 210 条有效发现为分母（含未评价）/)).toBeVisible();
+    await method.click();
+    await expect(page.getByText(/成功读取于/)).toHaveCount(0);
+    await expect(page.locator(".overview-kpis small, .quality-share-caption")).toHaveCount(0);
     expect(await quality.locator(".quality-facts > div").evaluateAll((facts) => facts.every((fact) => {
       const bounds = fact.getBoundingClientRect();
       const share = fact.querySelector(".quality-fact-share")?.getBoundingClientRect();

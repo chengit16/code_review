@@ -44,9 +44,10 @@ it("合并前说明展示已保存目标分支，切到诊断不提交草稿", a
   render(<QueryClientProvider client={client}><PremergeSetting token="" repositoryId={1} targetBranch="test" onOpenDiagnosis={onOpenDiagnosis} /></QueryClientProvider>);
   const user = userEvent.setup();
   await screen.findByRole("switch");
-  expect(screen.getByRole("note")).toHaveTextContent("按项目通知配置推送飞书");
+  expect(screen.queryByText(/开启并保存后，新建 MR/)).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "自动触发需要哪些配置？" }));
   await waitFor(() => expect(screen.getByText("Merge request events")).toBeVisible());
+  expect(screen.getByText(/按项目配置通知飞书/)).toBeVisible();
   expect(screen.getByText("test", { exact: true })).toBeVisible();
   expect(screen.getByText(/未收到过事件的已有 MR 不会自动补扫/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "查看接入诊断" }));

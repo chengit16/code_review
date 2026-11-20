@@ -1,6 +1,4 @@
 /* 发现阅读区沿用灰白蓝变量；颜色只区分风险与建议，不接管组件库交互样式。 */
-.findings-section .finding-help { margin: 0 0 var(--space-4); color: var(--color-muted); font-size: 13px; line-height: 1.8; }
-.finding-help strong { color: var(--color-ink); margin-inline-end: var(--space-2); }
 .findings-section .finding-filters { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) repeat(2, minmax(120px, 1fr)); gap: var(--space-4); padding: var(--space-4); margin-bottom: var(--space-6); }
 .finding-filters > div { min-width: 0; }
 .finding-filters .ant-select { width: 100%; min-width: 0; }

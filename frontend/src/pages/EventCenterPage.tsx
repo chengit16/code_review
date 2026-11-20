@@ -191,7 +191,7 @@ export function EventCenterPage({ token, canEdit }: {
   }
 
   return <div className="page event-center-page">
-    <PageHeader title="合并事件" subtitle="检查 GitLab 事件处理状态，恢复异常并补扫历史 MR" actions={
+    <PageHeader title="合并事件" actions={
       <button className="icon-button" type="button" aria-label="刷新事件" onClick={() => { void events.refetch(); void repositories.refetch(); }}><RefreshCw size={18} /></button>
     } />
     <Card className="event-inbox-card list-surface" size="small">

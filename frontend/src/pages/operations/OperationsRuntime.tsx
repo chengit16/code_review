@@ -22,10 +22,10 @@ export function OperationsRuntime({ data, token, active }: {
     <div className="operations-summary" aria-label="运行指标">
       {[
         ["初审排队", data?.execution_jobs ? data.execution_jobs.queued ?? 0 : "未知", `最早待处理 ${formatTime(data?.oldest_pending_at ?? null)}`],
-        ["初审运行", data?.execution_jobs ? data.execution_jobs.running ?? 0 : "未知", "原始执行状态，不含补审与合并前审查"],
-        ["模型执行 / 已应用上限", `${data?.scheduler?.running_model_tasks ?? "未知"} / ${data?.scheduler?.applied_concurrency ?? "未知"}`, "模型诊断、初审及补审共用容量"],
-        ["待关注评审", attention ?? "未知", "全历史当前有效结论：失败与部分覆盖"],
-      ].map(([title, value, note]) => <Card key={String(title)} size="small"><span className="operations-caption">{title}</span><strong className="operations-number">{value}</strong><small>{note}</small></Card>)}
+        ["初审运行", data?.execution_jobs ? data.execution_jobs.running ?? 0 : "未知"],
+        ["模型执行 / 已应用上限", `${data?.scheduler?.running_model_tasks ?? "未知"} / ${data?.scheduler?.applied_concurrency ?? "未知"}`],
+        ["待关注评审", attention ?? "未知"],
+      ].map(([title, value, note]) => <Card key={String(title)} size="small"><span className="operations-caption">{title}</span><strong className="operations-number">{value}</strong>{note && <small>{note}</small>}</Card>)}
     </div>
     {data && <div className="operations-attention">
       <Alert type="info" showIcon title={`历史评审待关注 ${attention} 项 · 初审通知失败 ${data.deliveries.failed ?? 0} 项`} description={<>
@@ -38,7 +38,8 @@ export function OperationsRuntime({ data, token, active }: {
       <Card title="模型任务并发设置" className="operations-capacity"><WorkerConcurrency token={token} active={active} execution={data?.scheduler} /></Card>
     </div>
     {data && <Collapse className="operations-extra" items={[{ key: "summary", label: `服务端完整摘要（含历史问题）· ${data.alerts.length} 项`, children: <>
-      <p>原文保留供核对，不从告警文本推测系统故障或自动执行恢复。初审历史整批重试 {data.retry_count} 次。</p>
+      <p>初审排队与运行按原始执行状态计数，不含补审与合并前审查。模型诊断、初审及补审共用模型容量；事件与投递独立执行。</p>
+      <p>待关注评审统计全历史当前有效结论中的失败与部分覆盖，各类异常可能关联同一链路，不相加。初审历史整批重试 {data.retry_count} 次。</p>
       {data.alerts.length ? <ul>{data.alerts.map((alert, index) => <li key={`${index}-${alert}`}>{alert}</li>)}</ul> : <p>当前没有达到服务端告警阈值的项目。</p>}
       <Link to="/operations?tab=alerts">配置主动告警与查看通知</Link>
     </> }]} />}

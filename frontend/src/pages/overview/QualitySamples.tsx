@@ -49,8 +49,8 @@ export function QualitySamples({ token, days, repositoryId }: {
     setParams(next);
   }
   return <Drawer open title="评审质量样本" onClose={close} size={1000} className="quality-samples">
-    <p>同一有效发现集合 · 项目 {scopedRepository ? `#${scopedRepository}` : "全部"} · 类别 {category ? formatCategory(category) : "全部"}</p>
-    <p className="quality-caption">来源窗口：{params.get("sample_since") ?? `近 ${days} 天`} 至 {params.get("sample_until") ?? "当前"}（不含终点，UTC）。样本为当前读取，当前状态或价值反馈变化后数量可能更新。</p>
+    <p>项目 {scopedRepository ? `#${scopedRepository}` : "全部"} · 类别 {category ? formatCategory(category) : "全部"}</p>
+    <p className="quality-caption">来源窗口：{params.get("sample_since") ?? `近 ${days} 天`} 至 {params.get("sample_until") ?? "当前"}（不含终点，UTC）</p>
     <div className="quality-sample-controls"><div><Select aria-label="样本反馈" value={feedback} onChange={(value) => change("sample_feedback", value === "all" ? "" : value)} options={[{ value: "all", label: "全部反馈" }, ...feedbackSeries.map((series) => ({ value: series.feedback, label: series.label }))]} /></div>
       <div><Select aria-label="样本严重级别" value={severity} onChange={(value) => change("sample_severity", value === "all" ? "" : value)} options={[{ value: "all", label: "全部级别" }, ...["critical", "high", "medium", "low", "unclassified"].map((value) => ({ value, label: value === "unclassified" ? "未分级" : formatSeverity(value) }))]} /></div><Button onClick={clear}>清除样本筛选</Button></div>
     <QueryState loading={samples.isLoading} error={samples.error} onRetry={() => void samples.refetch()} />
@@ -61,6 +61,6 @@ export function QualitySamples({ token, days, repositoryId }: {
 
     ]} /></>}
     {params.has("sample_status") && <p>旧问题处置筛选已停用，此处按当前发现反馈展示。历史处置请进入历史问题与修复记录。</p>}
-    <p className="quality-caption">此处只读。任务入口展示该任务当前结论；请核对样本所列来源身份与版本，重审后当前结论可能变化。</p>
+    <p className="quality-caption">重审后任务结论可能变化，请核对来源版本。</p>
   </Drawer>;
 }

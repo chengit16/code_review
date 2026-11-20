@@ -45,7 +45,6 @@ export function FindingsPanel({ comments, findingIds, findingSources, feedback, 
   return <section className="section findings-section">
     <div className="section-head"><h2>评审发现</h2><span>{visible.length} / {comments.length} 条</span></div>
     {comments.length > 0 && <>
-      <p className="finding-help"><strong>这条 review 对你有用吗？</strong>选择有帮助、误报或忽略即表示这条发现已处理，再次点击可撤销。代码修复记录可进入跟进问题查看。</p>
       <div className="filter-bar finding-filters">
         <div><Select disabled={filtersLocked} aria-label="发现的严重级别" value={severity} onChange={setSeverity} options={[{ value: "all", label: "全部级别" }, ...[...new Set(comments.map((comment) => comment.severity ?? "none"))].map((value) => ({ value, label: value === "none" ? "未分级" : formatSeverity(value) }))]} /></div>
         <div><Select disabled={filtersLocked} aria-label="发现的文件" value={file} onChange={setFile} options={[{ value: "all", label: "全部文件" }, ...files.map((value) => ({ value, label: value }))]} /></div>

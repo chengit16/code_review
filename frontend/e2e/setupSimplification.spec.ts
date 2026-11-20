@@ -53,7 +53,9 @@ test("非默认模型和未关联通知独立确认；取消、打开及嵌套 E
     } else await route.fulfill({ json: [] });
   });
   await page.goto("/settings?tab=model");
-  await expect(page.getByText("配置完整 · 1 个项目指定")).toBeVisible();
+  const model = page.getByRole("article", { name: "模型 非默认合成模型" });
+  await expect(model.getByText("配置完整", { exact: true })).toBeVisible();
+  await expect(model.getByText("1 个项目指定", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "测试 模型" }).click();
   await expect(page.getByRole("dialog")).toContainText("可能产生费用");
   await page.getByRole("button", { name: "取消", exact: true }).click();

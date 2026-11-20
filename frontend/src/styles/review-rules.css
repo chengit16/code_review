@@ -39,7 +39,6 @@
 .rules-path-panel { display: grid; gap: 16px; min-width: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
 .rules-path-panel .rules-section-heading { margin: 0; }
 .rules-path-panel .ant-input { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; line-height: 1.7; }
-.rules-path-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--color-muted); }
 .rules-editor-empty { padding: 16px; border: 1px dashed var(--color-border-strong); border-radius: 8px; background: var(--color-surface); }
 .rules-editor-empty .ant-empty { margin-block: 16px 8px; }
 .rules-editor-empty > p { margin: 0; text-align: center; font-size: 12px; color: var(--color-muted); }
@@ -54,7 +53,7 @@
 @media (max-width: 1100px) {
   .rules-editor-grid { grid-template-columns: minmax(0, 1fr); }
   .rules-path-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .rules-path-panel > .rules-section-heading, .rules-path-note { grid-column: 1 / -1; }
+  .rules-path-panel > .rules-section-heading { grid-column: 1 / -1; }
 }
 @media (max-width: 600px) {
   .rules-context { padding: 12px; }

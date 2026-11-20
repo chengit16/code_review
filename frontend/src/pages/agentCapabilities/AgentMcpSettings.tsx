@@ -1,6 +1,6 @@
 /** @description 管理 MCP 服务、后台发现及仓库授权。 */
 
-import { Alert, App, Button, Card, Form, Input, InputNumber, Select, Space, Tag } from "antd";
+import { Alert, App, Button, Card, Empty, Form, Input, InputNumber, Select, Space, Tag } from "antd";
 import { useState } from "react";
 
 import { checkMcp, registerMcp, revokeGrant, saveGrant, updateMcp } from "../../api/agentCapabilities";
@@ -30,7 +30,7 @@ function ServiceCard({ token, service, repositories, onDiscovered }: {
     });
   }
 
-  return <Card size="small" title={`#${service.id} · ${service.name}`}
+  return <Card size="small" className="agent-mcp-service" title={`#${service.id} · ${service.name}`}
     extra={<Tag color={service.enabled ? "green" : undefined}>{service.enabled ? "已启用" : "已停用"}</Tag>}>
     <p className="agent-break">{service.endpoint} · {service.timeout_seconds} 秒 · {service.has_token ? "已保存令牌" : "无令牌"}</p>
     <Space wrap>
@@ -82,8 +82,11 @@ export function AgentMcpSettings({ token, services, repositories, onDiscovered }
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
   const action = useCapabilityAction();
-  return <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-    <Button type="primary" onClick={() => setOpen(true)}>登记 MCP 服务</Button>
+  return <div className="agent-settings-stack">
+    <div className="agent-settings-list-heading">
+      <span>{services.length} 个已登记服务</span>
+      <Button type="primary" disabled={open} onClick={() => setOpen(true)}>登记 MCP 服务</Button>
+    </div>
     {open && <Card size="small" title="登记规范检索服务">
       <Form form={form} layout="vertical" initialValues={{ token: "", timeout_seconds: 8 }}
         disabled={action.isPending} onFinish={(input) => action.mutate(async () => {
@@ -106,6 +109,7 @@ export function AgentMcpSettings({ token, services, repositories, onDiscovered }
     </Card>}
     {services.map((service) => <ServiceCard key={service.id} token={token} service={service}
       repositories={repositories} onDiscovered={onDiscovered} />)}
-    {services.length === 0 && !open && <Alert type="info" title="尚未登记 MCP 服务" />}
-  </Space>;
+    {services.length === 0 && !open && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description={<><strong>尚未登记 MCP 服务</strong><p>登记后可测试连接、发现只读工具，再为仓库授权。</p></>} />}
+  </div>;
 }

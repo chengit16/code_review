@@ -1,0 +1,75 @@
+/* 先读结论，长路径和代码的宽度由抽屉约束。 */
+.comparison-proof-drawer .ant-drawer-body { padding: var(--space-6); }
+.comparison-proof,
+.comparison-proof-header,
+.comparison-proof-materials,
+.comparison-proof-references,
+.comparison-proof-reference-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.comparison-proof { gap: var(--space-6); }
+.comparison-proof-header {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+}
+.comparison-proof-meta,
+.comparison-proof-location,
+.comparison-proof-version,
+.comparison-proof-method {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.comparison-proof-meta, .comparison-proof-version { align-items: center; flex-wrap: wrap; }
+.comparison-proof-meta .ant-tag, .comparison-proof-method .ant-tag { margin-inline-end: 0; }
+.comparison-proof-meta, .comparison-proof-location, .comparison-proof-version { color: var(--color-muted); font-size: 12px; }
+.comparison-proof-header h2 { margin: 0; color: var(--color-ink); font-size: 21px; line-height: 1.4; }
+.comparison-proof-location svg, .comparison-proof-version svg { flex: none; }
+.comparison-proof-location { line-height: 1.55; }
+.comparison-proof-location svg { margin-top: 2px; }
+.comparison-proof-version code { font-size: 12px; }
+.comparison-proof-heading { margin: 0; color: var(--color-ink); font-size: 16px; line-height: 1.5; }
+.comparison-proof-heading + .finding-description { margin-top: var(--space-3); }
+.comparison-proof .finding-description { grid-template-columns: minmax(0, 1fr); }
+.comparison-proof .finding-description-section {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+}
+.comparison-proof .finding-description-section h4 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.comparison-proof .finding-description-section[data-tone="consequence"] h4 { color: var(--color-warning); }
+.comparison-proof .finding-description-section[data-tone="suggestion"] h4 { color: var(--color-accent-text); }
+.comparison-proof-references h4 { margin: 0; color: var(--color-ink); font-size: 13px; }
+.comparison-proof-references h4 span { margin-inline-start: var(--space-1); color: var(--color-muted); font-weight: 400; }
+.comparison-proof-reference-label { min-width: 0; }
+.comparison-proof-reference-label strong { display: block; font-size: 13px; }
+.comparison-proof-reference-label span, .comparison-proof-reference-body > small { color: var(--color-muted); font-size: 12px; }
+.comparison-proof-reference-body { color: var(--color-muted); font-size: 13px; }
+.comparison-proof-reference-body p, .comparison-proof-note { margin: 0; white-space: pre-wrap; }
+.comparison-proof-reference-body .finding-description { color: var(--color-ink); }
+.comparison-proof .finding-code-block pre { max-height: 280px; }
+.comparison-proof .finding-code-block pre code { white-space: pre; overflow-wrap: normal; }
+.comparison-proof-method {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+.comparison-proof-note, .comparison-proof-heading + .ant-tag { margin-top: var(--space-2); }
+
+@media (max-width: 600px) {
+  .comparison-proof-drawer .ant-drawer-body { padding: var(--space-3); }
+  .comparison-proof { gap: var(--space-4); }
+  .comparison-proof-header h2 { font-size: 18px; }
+}

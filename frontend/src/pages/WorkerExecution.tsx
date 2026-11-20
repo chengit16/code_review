@@ -9,9 +9,8 @@ const states: Record<string, string> = { idle: "空闲", running: "执行中", s
 /** 仅展示持久化事实；历史缺失和心跳过期不能显示成健康或自动抢占。 */
 export function WorkerExecution({ snapshot }: { /** 旧版 API 可能不提供执行槽。 */ snapshot?: SchedulerSnapshot }) {
   return <section className="section execution-panel"><div className="section-head"><h2>Worker 调度与执行槽</h2></div>
-    <p>模型任务并发 {snapshot?.model_task_concurrency ?? "未知"}（已保存上限） · 模型诊断与评审共用模型槽；事件和投递独立执行。</p>
+    <p>模型任务并发 {snapshot?.model_task_concurrency ?? "未知"}（已保存上限）</p>
     <p>已应用上限 {snapshot?.applied_concurrency ?? "未知"} · 持久化执行中 {snapshot?.running_model_tasks ?? "未知"}{snapshot?.applied_version != null && snapshot.applied_version !== snapshot.config_version ? " · 新配置待应用" : ""}{snapshot?.draining ? " · 正在排空，暂停领取至满足新上限" : ""}</p>
     {!snapshot?.slots.length ? <p className="coverage-note">尚无新版协调器执行记录，不能据此确认解耦已在本机生效。</p> : <div className="execution-grid">{snapshot.slots.map((slot) => <article key={slot.slot_id ?? slot.lane}><h3>{lanes[slot.lane] ?? slot.lane}{slot.lane === "model" ? ` #${slot.slot_index ?? 1}` : ""}</h3><p>{states[slot.state] ?? slot.state}{slot.state === "running" ? ` · ${tasks[slot.task_kind ?? ""] ?? "任务"} #${slot.task_id}` : ""}{slot.lane === "model" && (slot.slot_index ?? 1) > (snapshot.applied_concurrency ?? snapshot.model_task_concurrency) ? " · 超出上限，不再领取" : ""}</p><p>心跳 {formatTime(slot.heartbeat_at)}</p>{!["stopped", "interrupted"].includes(slot.state) && slot.heartbeat_age_seconds > 15 && <p className="attention-note">协调心跳过期，执行状态待核实；不会自动抢占或重复评审。</p>}</article>)}</div>}
-    <p className="coverage-note">解耦不代表后续短评审可以越过前序评审；同仓库顺序仍保留。中断恢复以进程锁为栅栏，不仅凭过期心跳重新执行。</p>
   </section>;
 }

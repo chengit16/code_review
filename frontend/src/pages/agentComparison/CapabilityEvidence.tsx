@@ -1,6 +1,6 @@
 /** @description 以只读抽屉展示本次运行的配置、阶段、动作及固定证据。 */
 
-import { Button, Card, Collapse, Descriptions, Drawer, Space, Table, Tag, Timeline } from "antd";
+import { Button, Card, Collapse, Descriptions, Drawer, Pagination, Segmented, Space, Tabs, Tag, Timeline } from "antd";
 import { ListTree } from "lucide-react";
 import { useState } from "react";
 
@@ -9,6 +9,7 @@ import type { AgentCapabilityEvent } from "../../api/agentCapabilities";
 import type { AgentComparison } from "../../api/agentComparisons";
 import { Status } from "../../ui/Status";
 import { formatTime, shortSha } from "../../ui/format";
+import { FindingCodeBlock } from "../FindingCodeBlock";
 import { AgentWorkflow } from "./AgentWorkflow";
 
 const statuses: Record<string, string> = {
@@ -17,15 +18,19 @@ const statuses: Record<string, string> = {
 };
 const labels: Record<string, string> = { skill: "Skill", read_file: "补查文件", mcp: "MCP" };
 
-/** 引用只显示 Worker 持久化的证据位置和摘录。 */
-export function CapabilityEventDetails({ event }: { event: AgentCapabilityEvent }) {
+/** 运行明细和单条发现统一使用已记录的能力状态。 */
+export function capabilityStatusText(status: string): string {
+  return statuses[status] ?? status;
+}
+
+function CapabilityEventDetails({ event }: { event: AgentCapabilityEvent }) {
   const proof = event.evidence;
   return <div className="agent-evidence">
-    <p><strong>{event.source}</strong> · {statuses[event.status] ?? event.status} · 证据 #{event.id}</p>
-    {proof?.path && <p>{proof.path} · 第 {proof.line} 行 · {shortSha(proof.commit ?? "")}</p>}
+    {proof?.path && <p>{proof.path}{proof.line != null && ` · 第 ${proof.line} 行`}
+      {proof.commit && <span title={proof.commit}> · {shortSha(proof.commit)}</span>}</p>}
     {proof?.document && <p>{proof.document} · {proof.version ? `版本 ${proof.version}` : formatTime(event.created_at)}</p>}
     {proof?.message && <p>{proof.message}</p>}
-    {proof?.excerpt && <pre>{proof.excerpt}</pre>}
+    {proof?.excerpt && <FindingCodeBlock content={proof.excerpt} language="" caption={proof.document ? "文档摘录" : "代码摘录"} />}
     {proof?.sha256 && <p title={proof.sha256}>证据摘要 {proof.sha256.slice(0, 12)}</p>}
   </div>;
 }
@@ -58,14 +63,29 @@ function AgentRunStatus({ comparison, coverage }: {
 }
 
 function CapabilityEvents({ events }: { events: AgentCapabilityEvent[] }) {
-  return <Table size="small" rowKey="id" dataSource={events} pagination={{ pageSize: 10, showSizeChanger: false }}
-      scroll={{ x: 520 }} expandable={{ expandedRowRender: (event) => <CapabilityEventDetails event={event} />,
-        rowExpandable: (event) => event.evidence !== null }} columns={[
-        { title: "能力", render: (_, event) => labels[event.step] ?? event.step },
-        { title: "来源", dataIndex: "source" },
-        { title: "处理文件", render: (_, event) => event.path || "整次运行" },
-        { title: "实际状态", render: (_, event) => statuses[event.status] ?? event.status },
-      ]} />;
+  const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState<"all" | "excerpt">("all");
+  const pageSize = 8;
+  const withExcerpt = events.filter((event) => event.evidence?.excerpt);
+  const filtered = filter === "excerpt" && withExcerpt.length ? withExcerpt : events;
+  const current = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
+  const visible = filtered.slice((current - 1) * pageSize, current * pageSize);
+  return <>
+    {withExcerpt.length > 0 && <Segmented<"all" | "excerpt"> className="agent-run-event-filter" size="small" aria-label="筛选能力证据"
+      value={filter} onChange={(value) => { setFilter(value); setPage(1); }}
+      options={[{ value: "all", label: "全部记录" }, { value: "excerpt", label: `有摘录（${withExcerpt.length}）` }]} />}
+    <ul className="agent-run-events">{visible.map((event) => {
+      const summary = <div className="agent-run-event">
+        <div><Tag>{labels[event.step] ?? event.step}</Tag><span>{capabilityStatusText(event.status)} · #{event.id}</span></div>
+        <strong>{event.source}</strong>
+        {event.path && event.path !== event.evidence?.path && <small>处理文件 {event.path}</small>}
+      </div>;
+      return <li key={event.id}>{event.evidence ? <Collapse size="small" ghost destroyOnHidden
+        items={[{ key: event.id, label: summary, children: <CapabilityEventDetails event={event} /> }]} /> : summary}</li>;
+    })}</ul>
+    {filtered.length > pageSize && <Pagination size="small" current={current} pageSize={pageSize} total={filtered.length}
+      showSizeChanger={false} onChange={setPage} />}
+  </>;
 }
 
 /** 保留历史比较语义，同一次运行轮询时原位刷新抽屉。 */
@@ -77,28 +97,27 @@ export function CapabilityEvidence({ comparison, coverage }: {
   const { agent, status, id } = comparison;
   const settings = agent.capabilities;
   const events = agent.capability_events ?? [];
-  if (!settings) return <p className="agent-comparison-reason">历史运行未记录能力配置</p>;
-
   return <>
-    <Button className="agent-run-trigger" icon={<ListTree size={16} aria-hidden />} onClick={() => setOpen(true)}>
-      查看本次 Agent 配置与执行
+    <Button className="agent-run-trigger" size="small" type="link" aria-label="查看 Agent 运行详情"
+      icon={<ListTree size={14} aria-hidden />} onClick={() => setOpen(true)}>
+      运行详情
     </Button>
     <Drawer title="Agent 运行详情" open={open} destroyOnHidden onClose={() => setOpen(false)}
       size="min(720px, 100vw)" rootClassName="agent-run-drawer">
       <div className="agent-run-detail">
         <Card size="small" className="agent-run-summary">
           <div className="agent-run-summary-top">
-            <Space size={6} wrap><Tag>Agent #{id}</Tag>{settings.trial && <Tag color="warning">试跑</Tag>}</Space>
+            <Space size={6} wrap><Tag>Agent #{id}</Tag>{settings?.trial && <Tag color="warning">试跑</Tag>}</Space>
             <Status value={status} />
           </div>
-          <h3>{settings.name}</h3>
+          {settings && <h3>{settings.name}</h3>}
           <div className="agent-run-summary-facts">
-            <span>方案 #{settings.scheme_id}</span>
+            {settings && <span>方案 #{settings.scheme_id}</span>}
             <span>OCR 初审第 {comparison.source_attempt} 次</span>
             {agent.usage.model && <span>{agent.usage.model}</span>}
           </div>
-          <Collapse size="small" ghost className="agent-run-config" items={[{
-            key: "config", label: "评审配置", children: <Descriptions size="small" column={1} items={[
+          {settings ? <Collapse size="small" ghost className="agent-run-config" items={[{
+            key: "config", label: "评审配置", children: <Descriptions layout="vertical" size="small" column={1} items={[
               { key: "model", label: "模型档案", children: settings.model_profile_id
                 ? `#${settings.model_profile_id} · 版本 ${settings.model_profile_version}` : "服务配置" },
               { key: "steps", label: "已配置步骤", children: ["读取差异", ...settings.steps.map((step) => agentNodeLabels[step]),
@@ -106,19 +125,16 @@ export function CapabilityEvidence({ comparison, coverage }: {
               { key: "skill", label: "已选 Skill", children: settings.skills.join("、") || "未配置" },
               { key: "mcp", label: "已选 MCP", children: settings.mcp ?? "未配置" },
             ]} />,
-          }]} />
+          }]} /> : <p className="agent-run-note">历史运行未记录能力配置</p>}
         </Card>
         <section>
           <h3 className="agent-run-section-title">任务状态</h3>
           <AgentRunStatus comparison={comparison} coverage={coverage} />
         </section>
-        {events.length > 0 && <Collapse size="small" destroyOnHidden items={[{
-          key: "evidence", label: `能力证据 · ${events.length} 条`, children: <CapabilityEvents events={events} />,
-        }]} />}
-        <section>
-          <h3 className="agent-run-section-title">工作流程</h3>
-          <AgentWorkflow steps={agent.workflow_steps ?? []} status={status} />
-        </section>
+        <Tabs size="small" items={[
+          { key: "workflow", label: "工作流程", children: <AgentWorkflow steps={agent.workflow_steps ?? []} status={status} /> },
+          ...(events.length > 0 ? [{ key: "evidence", label: `能力证据（${events.length}）`, children: <CapabilityEvents events={events} /> }] : []),
+        ]} />
       </div>
     </Drawer>
   </>;

@@ -101,7 +101,7 @@ export function SettingsPage({ token, embedded = false }: {
   }
   const list = useLocalList(profiles.error ? undefined : profiles.data, (item) => `${item.name} ${item.model} ${item.provider} ${item.base_url}`, (item) => item.enabled ? "enabled" : "disabled", "model_");
   return <div className={`configuration-list-page ${embedded ? "settings-content" : "page"}`}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="评审模型" subtitle="Open Code Review 评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
+    <PageHeader headingLevel={embedded ? 2 : 1} title="评审模型" actions={<Button type="primary" icon={<Plus size={17} />} onClick={() => { setEditing(null); setBaseline(initial); setForm(initial); create.reset(); update.reset(); catalog.reset(); setOpen(true); }}>新增模型</Button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {(activate.error || remove.error) && <p className="form-error" role="alert">{(activate.error || remove.error)?.message}</p>}
@@ -118,20 +118,18 @@ export function SettingsPage({ token, embedded = false }: {
           <div className="configuration-card-actions">{!profile.enabled && <Button type="text" aria-label={`启用 ${profile.name}`} disabled={activate.isPending} onClick={() => activate.mutate(profile.id)}>设为默认</Button>}<Button type="text" aria-label={`编辑 ${profile.name}`} onClick={() => beginEdit(profile)}>编辑</Button><Button danger type="text" aria-label={`删除 ${profile.name}`} disabled={Boolean(profile.enabled) || remove.isPending} onClick={() => { if (window.confirm(`确定删除模型“${profile.name}”？`)) remove.mutate(profile.id); }}>删除</Button></div></footer>
         </article>
       </Card>} />
-      <p className="form-note">保存不发起调用；每个模型可独立测试，不改变默认模型。非默认模型仍可由项目指定使用。</p>
     </section>
     {open && <Modal titleId="model-title" onClose={closeEditor}>
       <div className="modal-heading"><h2 id="model-title">{editing ? `编辑 ${editing.name}` : "新增模型"}</h2><button className="icon-button" type="button" title="关闭" aria-label="关闭" onClick={closeEditor}><X size={19} /></button></div>
       <form className="settings-form hook-form" noValidate onSubmit={submit}><fieldset className="form-fields" disabled={create.isPending || update.isPending}>
-        <p className="form-note">可随时保存，字段留空或尚未填写完整也不影响保存。保存不代表模型可用，请另行测试模型。</p>
+        <p className="form-note">可保存为草稿，补全后测试模型。</p>
         <label>配置名称<input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
         <SelectField label="Provider" value={form.provider} onValueChange={(value) => { catalog.reset(); setForm((current) => ({ ...current, provider: value })); }} options={[{ value: "dashscope", label: "百练 / DashScope" }, { value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} />
-        {form.provider === "dashscope" && <p className="form-note">百练模型使用 DashScope API Key 和模型标识；Base URL 留空即可使用内置端点。</p>}
         <Collapse defaultActiveKey={form.base_url ? ["endpoint"] : []} items={[{ key: "endpoint", label: form.base_url ? "自定义端点（已设置）" : "可选：自定义服务端点", children: <>        <label>Base URL<Input value={form.base_url} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, base_url: event.target.value })); }} placeholder="内置 Provider 可留空" /></label>
-<p className="form-note">使用兼容服务时填写其完整端点；保存后请测试此模型配置。</p></> }]} />
+<p className="form-note">兼容服务需填写完整端点。</p></> }]} />
         <label>API Key<input type="password" autoComplete="new-password" value={form.api_key} onChange={(event) => { catalog.reset(); setForm((current) => ({ ...current, api_key: event.target.value })); }} placeholder={editing ? "留空则保留现有密钥" : "可留空，后续补充"} /></label>
         <div className="form-actions"><button className="button button-secondary" type="button" disabled={(!form.api_key.trim() && !editing?.has_api_key) || catalog.isPending} onClick={() => catalog.mutate({ provider: form.provider, base_url: form.base_url, api_key: form.api_key, profile_id: editing?.id })}><RefreshCw size={16} />{catalog.isPending ? "获取中…" : "自动获取模型"}</button></div>
-        <p className="form-note">编辑时可留空 API Key，使用已保存的密钥获取模型；更换 Provider 或 Base URL 后需重新填写密钥。获取列表不代表所有模型均支持代码评审。</p>
+        <p className="form-note">更换 Provider 或 Base URL 后需重新填写 API Key。</p>
         {catalogMatches && catalog.error && <p className="form-error" role="alert">{catalog.error.message}</p>}
         {catalogModels.length > 0 && <><p className="form-success" role="status">已获取 {catalogModels.length} 个模型，请选择</p><SelectField label="选择模型" placeholder="请选择模型" value={catalogModels.includes(form.model) ? form.model : ""} onValueChange={(value) => setForm((current) => ({ ...current, model: value }))} options={catalogModels.map((model) => ({ value: model, label: model }))} /></>}
         <label>模型标识<input value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} /></label>

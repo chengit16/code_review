@@ -31,7 +31,7 @@ export function GitLabPublicationSetting({ token, repositoryId, onStatusChange }
     <p className="publication-section-description">将合并后评审中可定位的发现发布到 MR，需项目令牌具备创建 discussion 的权限。</p>
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     <div className="publication-toggle-row">
-      <div><label htmlFor={fieldId}>向 MR 发布可定位的评审发现</label><p id={`${fieldId}-help`}>修改后自动保存；此开关不发布合并前审查结果。</p></div>
+      <div><label htmlFor={fieldId}>向 MR 发布可定位的评审发现</label><p id={`${fieldId}-help`}>仅发布合并后评审结果。</p></div>
       <Switch id={fieldId} aria-label="向 MR 发布可定位的评审发现" aria-describedby={`${fieldId}-help`} checked={query.data?.enabled ?? false} disabled={save.isPending || !query.data} loading={save.isPending} onChange={(enabled) => save.mutate(enabled)} />
     </div>
     {save.isPending && <p className="publication-save-status" role="status">正在保存行内评论配置…</p>}

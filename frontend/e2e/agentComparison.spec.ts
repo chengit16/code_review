@@ -17,12 +17,15 @@ test.describe("任务双评审", () => {
     await page.getByRole("textbox", { name: "共同根因" }).fill("重试路径缺少订单去重");
     await page.getByRole("button", { name: "保存裁定" }).click();
     await expect(panel.getByText("重试路径缺少订单去重", { exact: true })).toBeVisible();
-    await panel.getByText("Agent 独有（1）", { exact: true }).click();
+    await panel.getByText("Agent 未匹配（1）", { exact: true }).click();
     await expect(panel.getByText("阿里 OCR", { exact: true })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: "查看证据：重试造成重复登记" })).toHaveCount(0);
     await panel.getByRole("button", { name: "查看证据：重试入口没有校验订单号" }).click();
     const evidence = page.getByRole("dialog", { name: "固定版本证据" });
     await expect(evidence.getByText("orders.py · 新版第 1 行")).toBeVisible();
+    await expect(evidence.getByRole("heading", { name: "问题与影响" })).toBeVisible();
+    await expect(evidence.getByText("def retry_order(order_id):", { exact: true })).toBeHidden();
+    await evidence.getByRole("button", { name: "代码依据" }).click();
     await expect(evidence.getByText("def retry_order(order_id):", { exact: true })).toBeVisible();
     await evidence.getByRole("button", { name: "裁定发现" }).click();
     const edit = page.getByRole("dialog", { name: "裁定发现" });
@@ -50,8 +53,9 @@ test.describe("任务双评审", () => {
     await expect(panel.getByText("OCR 初审第 1 次 · Agent #2")).toBeVisible();
     await expect(panel.getByText("25/25", { exact: true })).toBeVisible({ timeout: 10000 });
     await panel.getByRole("combobox", { name: "比较版本" }).click();
-    await page.getByRole("option", { name: /Agent #1/ }).click();
+    await page.locator(".ant-select-dropdown:visible").getByText(/^Agent #1 ·/).click();
     await expect(panel.getByText("OCR 初审第 1 次 · Agent #1")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "回到最新比较" })).toBeVisible();
     await expect(panel.getByText("成立", { exact: true })).toBeVisible();
     await panel.getByRole("button", { name: "上一条裁定" }).click();
     await expect(panel.getByRole("button", { name: "回到最新裁定" })).toBeVisible();
@@ -69,6 +73,8 @@ test.describe("任务双评审", () => {
     await panel.getByRole("button", { name: "编辑分组" }).click();
     await page.getByRole("button", { name: "拆除分组" }).click();
     await expect(panel.getByText("同位置待核对", { exact: true })).toBeVisible();
+    await panel.getByRole("button", { name: "回到最新比较" }).click();
+    await expect(panel.getByText("OCR 初审第 1 次 · Agent #2")).toBeVisible();
   });
 
   test("窄屏可以切换到历史、展开证据并用键盘关闭", async ({ page }, info) => {
@@ -88,6 +94,7 @@ test.describe("任务双评审", () => {
     await expect(dialog.getByText("orders.py · 新版第 24 行")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
+    await expect(button).toBeFocused();
     await page.goto("/jobs/2#job-agent-comparison");
     await expect(panel.getByText("仅 OCR", { exact: true })).toBeVisible();
     await expect(panel.getByRole("button", { name: "运行 Agent" })).toBeDisabled();

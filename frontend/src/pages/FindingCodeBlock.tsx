@@ -9,10 +9,11 @@ import { copyText } from "../ui/clipboard";
 export interface FindingCodeBlockProps {
   /** 去除 Markdown 围栏后的原始代码。 */ content: string;
   /** 围栏声明的语言，仅作为文字显示，不执行动态加载。 */ language: string;
+  /** 附件可显示来源名称，Markdown 围栏默认使用语言名。 */ caption?: string;
 }
 
 /** 点击或键盘激活后复制当前代码；失败保留代码供手动选择，不虚报成功。 */
-export function FindingCodeBlock({ content, language }: FindingCodeBlockProps) {
+export function FindingCodeBlock({ content, language, caption }: FindingCodeBlockProps) {
   const [copyState, setCopyState] = useState<"idle" | "pending" | "copied" | "error">("idle");
   const copying = useRef(false);
   async function handleCopy() {
@@ -29,12 +30,12 @@ export function FindingCodeBlock({ content, language }: FindingCodeBlockProps) {
     }
   }
   return <figure className="finding-code-block">
-    <figcaption><span>{language || "代码"}</span><Button type="text" size="small"
+    <figcaption><span>{caption ?? (language || "代码")}</span><Button type="text" size="small"
       icon={copyState === "copied" ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
       aria-label="复制代码" title="复制代码" loading={copyState === "pending"} onClick={() => void handleCopy()}>
       {copyState === "copied" ? "已复制" : "复制"}
     </Button></figcaption>
-    <pre tabIndex={0} aria-label={`${language || "文本"}代码，可横向滚动`}><code>{content}</code></pre>
+    <pre tabIndex={0} aria-label={caption ? `${caption}，可滚动` : `${language || "文本"}代码，可横向滚动`}><code>{content}</code></pre>
     <span className="finding-code-copy-status" role="status">{copyState === "copied" ? "代码已复制" : copyState === "error" ? "复制失败，请手动选择代码复制。" : ""}</span>
   </figure>;
 }

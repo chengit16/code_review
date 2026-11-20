@@ -31,33 +31,50 @@
   padding: 9px 12px;
   border-radius: 6px;
   background: var(--color-accent-soft);
-  color: var(--color-text);
+  color: var(--color-ink);
   font-size: 13px;
 }
-.agent-version-select { max-width: 100%; min-width: min(230px, 100%); }
+.agent-version-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; }
+.agent-version-field label { color: var(--color-muted); font-size: 12px; }
+.agent-version-select { width: 300px; max-width: 100%; }
 .agent-history-actions, .agent-usage { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .agent-comparison-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  align-items: start;
+  gap: 0 var(--space-3);
 }
 .agent-comparison-columns--single { grid-template-columns: minmax(0, 1fr); }
-.agent-coverage {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px 7px;
-  align-items: baseline;
-  font-size: 13px;
+.agent-engine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  min-width: 0;
 }
-.agent-coverage strong { font-size: 23px; font-variant-numeric: tabular-nums; }
-.agent-coverage span, .agent-usage, .agent-comparison-reason { font-size: 12px; color: var(--color-muted); }
-.agent-usage { margin: 4px 0 8px; overflow-wrap: anywhere; }
+.agent-engine-summary { padding: var(--space-3); background: var(--color-surface-subtle); border-radius: var(--radius-control) var(--radius-control) 0 0; }
+.agent-engine-title, .agent-engine-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.agent-engine-title h3 { font-size: 15px; margin-inline-end: auto; }
+.agent-engine-facts { gap: var(--space-1) var(--space-4); margin-top: var(--space-2); font-size: 12px; color: var(--color-muted); }
+.agent-engine-facts strong { margin-inline-end: 2px; color: var(--color-ink); font-size: 18px; font-variant-numeric: tabular-nums; }
+.agent-engine-results { border-block: 1px solid var(--color-border); }
+.agent-engine-results .ant-empty { margin-block: var(--space-4); }
+.agent-engine-results .ant-empty-image { height: 32px; }
+.agent-engine-results .ant-empty-description { overflow-wrap: anywhere; font-size: 13px; }
+.agent-usage, .agent-comparison-reason { font-size: 12px; color: var(--color-muted); }
+.agent-engine-summary .agent-comparison-reason { margin: var(--space-1) 0 0; }
+.agent-usage { margin-block-end: var(--space-2); overflow-wrap: anywhere; }
 .agent-coverage-files, .agent-finding-files ul, .agent-human-review ul { margin: 0; padding: 0; list-style: none; }
-.agent-coverage-files li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 4px 0; }
-.agent-finding-files section { padding-top: 10px; border-top: 1px solid var(--color-border); }
-.agent-finding-files h4 { font-family: var(--font-mono, monospace); font-size: 12px; overflow-wrap: anywhere; }
-.agent-finding-files li, .agent-curation-row {
+.agent-coverage-files li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: var(--space-2) 0; border-top: 1px solid var(--color-border); }
+.agent-finding-files section { padding: var(--space-3); }
+.agent-finding-files section + section { border-top: 1px solid var(--color-border); }
+.agent-finding-files h4 { display: grid; gap: 2px; padding-block-end: var(--space-2); font-size: 13px; overflow-wrap: anywhere; }
+.agent-finding-files h4 span { color: var(--color-muted); font-size: 11px; font-weight: 400; }
+.agent-finding-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding-block: var(--space-2); }
+.agent-finding-files li + li { border-top: 1px solid var(--color-border); }
+.agent-finding-label { display: grid; gap: var(--space-1); overflow-wrap: anywhere; font-size: 13px; }
+.agent-finding-label .ant-tag { margin-inline-end: 0; }
+.agent-curation-row {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -73,19 +90,20 @@
 .agent-match-links { display: flex; flex-wrap: wrap; gap: 2px; }
 .agent-evidence { display: grid; gap: 10px; }
 .agent-evidence h3, .agent-evidence p { margin: 0; }
-.agent-evidence pre { max-width: 100%; overflow: auto; padding: 12px; background: var(--color-accent-soft); border-radius: 6px; }
+.agent-evidence .finding-code-block pre { max-height: 260px; }
+.agent-evidence .finding-code-block pre code { white-space: pre; overflow-wrap: normal; }
 .agent-editor-fields { display: grid; gap: 8px; min-width: 0; }
 .agent-editor-fields fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .agent-editor-fields fieldset legend { margin-bottom: 6px; }
 .agent-editor-fields label { font-weight: 500; }
 
-.agent-run-trigger { margin-block: 4px 8px; max-width: 100%; }
+.agent-run-trigger { max-width: 100%; }
 .agent-run-drawer .agent-run-detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   min-width: 0;
-  color: var(--color-text);
+  color: var(--color-ink);
   overflow-wrap: anywhere;
 }
 .agent-run-summary { background: var(--color-surface-subtle); }
@@ -100,6 +118,14 @@
 .agent-run-summary h3 { margin: 8px 0 4px; font-size: 16px; }
 .agent-run-summary-facts, .agent-run-note { font-size: 12px; color: var(--color-muted); }
 .agent-run-config { margin-top: 8px; }
+.agent-run-event-filter { margin-block-end: var(--space-2); }
+.agent-run-events { display: grid; gap: var(--space-2); margin: 0 0 var(--space-3); padding: 0; list-style: none; }
+.agent-run-events li { min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.agent-run-event { min-width: 0; display: grid; gap: var(--space-1); font-size: 13px; }
+.agent-run-events li > .agent-run-event { padding: var(--space-2) var(--space-3); }
+.agent-run-event > div { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.agent-run-event .ant-tag { margin-inline-end: 0; }
+.agent-run-event span:not(.ant-tag), .agent-run-event small { color: var(--color-muted); font-size: 12px; }
 .agent-run-section-title {
   margin: 0 0 10px;
   padding-inline-start: 8px;
@@ -153,10 +179,19 @@
 .agent-workflow-actions li > :last-child { color: var(--color-muted); }
 
 @media (max-width: 920px) {
-  .agent-comparison-columns { grid-template-columns: minmax(0, 1fr); }
+  .agent-comparison-columns { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-3); }
+}
+
+@media (min-width: 921px) {
+  /* 保持两路结果的起点一致，较长的状态说明只增加摘要行高度。 */
+  .agent-comparison-columns:not(.agent-comparison-columns--single) .agent-engine {
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+  }
 }
 
 @media (max-width: 480px) {
+  .agent-run-drawer .ant-drawer-body { padding: var(--space-3); }
   .agent-run-drawer .agent-run-detail { gap: 16px; }
   .agent-workflow-page-label { grid-template-columns: auto minmax(0, 1fr); }
   .agent-workflow-page-label .ant-tag { grid-column: 2; justify-self: start; }

@@ -63,7 +63,7 @@ function JobsContent({ token, canEdit }: { token: string; canEdit: boolean }) {
     else next.set("feedback_state", value);
     applyFilters(next);
   }
-  return <div className="page jobs-migration"><PageHeader title="评审任务" subtitle="查看评审进度、问题处理与通知状态。" actions={
+  return <div className="page jobs-migration"><PageHeader title="评审任务" actions={
     <div className="row-actions"><RouteButton to="/events">合并事件记录</RouteButton><Button aria-label="刷新任务" icon={<RefreshCw size={18} />} disabled={batchPending} loading={jobs.isFetching} onClick={() => void jobs.refetch()}>刷新</Button></div>
   } />
     <Card size="small" className="jobs-search-card">

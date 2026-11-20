@@ -25,7 +25,6 @@ export function AuditLogPanel({ token, active = true }: {
     if (key !== "page") next.delete("audit_page"); setParams(next);
   }
   return <section className="section list-surface"><div className="section-head"><h2>管理操作审计</h2><span>{query.error ? "—" : query.data?.total ?? "—"} 条</span></div>
-    <p className="form-note">只展示脱敏的操作人、动作、对象与结果，不保存请求内容、密码或密钥。</p>
     <div className="list-toolbar"><ListSearch key={q} label="搜索审计" value={q} onSearch={(value) => update("q", value)} placeholder="操作人、动作、对象类型或编号" /></div>
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     <ListTable rowKey="id" dataSource={query.data?.items ?? []} loading={query.isFetching} pagination={false} scroll={{ x: 750 }} locale={{ emptyText: query.error ? "无法读取审计" : "暂无匹配操作" }} columns={[

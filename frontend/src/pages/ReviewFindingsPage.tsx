@@ -84,7 +84,7 @@ function FindingsContent({ token, canEdit }: { token: string; canEdit: boolean }
         finally { setConfirming(false); }
       }, onCancel: () => setConfirming(false), afterClose: () => setConfirming(false) });
   }
-  return <div className="page"><PageHeader title="评审发现" subtitle="有帮助、误报或忽略均表示已处理；撤销后回到待处理" actions={<Space><Link to="/issues?status=all">历史问题与修复记录</Link><Button disabled={locked} onClick={() => void findings.refetch()}>刷新发现</Button></Space>} />
+  return <div className="page"><PageHeader title="评审发现" actions={<Space><Link to="/issues?status=all">历史问题与修复记录</Link><Button disabled={locked} onClick={() => void findings.refetch()}>刷新发现</Button></Space>} />
     <section className="list-surface">
       <Space wrap className="finding-list-filters">
         <div><Select virtual={false} aria-label="发现处理状态" disabled={locked} value={query.get("handling")} onChange={(value) => applyFilters({ handling: value })} options={[{ value: "all", label: "全部发现" }, { value: "pending", label: "待处理" }, { value: "handled", label: "已处理" }]} /></div>

@@ -36,7 +36,7 @@ export function OnboardingPage({ token }: { /** 内存管理会话。 */ token: 
   const known = repositories.isSuccess && models.isSuccess && checks.isSuccess && (!repo || effective.isSuccess);
   const complete = steps.filter((step) => step.done).length;
   return <div className="page setup-migration">
-    <PageHeader title="项目接入清单" subtitle="平台配置可复用，每个项目独立验证；新项目不会清零其他项目进度。" actions={<RouteButton to="/repositories">返回项目配置</RouteButton>} />
+    <PageHeader title="项目接入清单" actions={<RouteButton to="/repositories">返回项目配置</RouteButton>} />
     <div className="setup-feedback"><ReadFeedback name="项目" loading={repositories.isPending} error={repositories.error} onRetry={() => void repositories.refetch()} /><ReadFeedback name="模型" loading={models.isPending} error={models.error} onRetry={() => void models.refetch()} /><ReadFeedback name="连接测试" loading={checks.isPending} error={checks.error} onRetry={() => void checks.refetch()} />{repo && <ReadFeedback name="生效配置" loading={effective.isPending} error={effective.error} onRetry={() => void effective.refetch()} />}</div>
     <div className="row-actions"><RouteButton to="/settings?tab=model">平台模型准备{models.isSuccess ? `（${models.data.length} 个已保存）` : ""}</RouteButton><RouteButton to="/settings?tab=feishu">可选通知通道</RouteButton><RouteButton to="/settings?tab=rules">共用评审规则</RouteButton></div>
     <label className="setup-project-select">当前项目<Select virtual={false} aria-label="当前项目" value={repo?.id} placeholder="请先添加仓库" options={repositories.data?.map((item) => ({ value: item.id, label: item.name }))} onChange={(value) => { const next = new URLSearchParams(params); next.set("repository", String(value)); setParams(next); }} /></label>

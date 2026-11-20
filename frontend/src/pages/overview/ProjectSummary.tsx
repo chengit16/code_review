@@ -13,7 +13,7 @@ export function ProjectSummary({ quality }: {
   const [params] = useSearchParams();
   const rows = [...(quality?.projects ?? [])].sort((a, b) => b.unmarked - a.unmarked || a.name.localeCompare(b.name) || a.id - b.id);
   return <section className="overview-panel overview-projects" aria-label="项目概况">
-    <div className="section-head"><h2>项目概况</h2><span>按本期待反馈发现排序 · {rows.length} 个项目</span></div>
+    <div className="section-head"><h2>项目概况</h2><span>{rows.length} 个项目</span></div>
     {!quality ? <p>反馈聚合待升级</p> : <ListTable rowKey="id" pagination={rows.length > 5 ? { pageSize: 5, showSizeChanger: false } : false} scroll={{ x: 640 }} dataSource={rows} locale={{ emptyText: "本期暂无有效发现" }} columns={[
       { title: "项目", key: "name", render: (_, row) => <Link to={qualitySampleHref(params, quality, { repositoryId: row.id })}>{row.name}</Link> },
       { title: "本期发现", dataIndex: "total" },

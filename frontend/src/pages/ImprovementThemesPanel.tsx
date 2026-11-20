@@ -37,7 +37,7 @@ export function ImprovementThemesPanel({ token }: { /** 管理员内存会话。
     setParams(next);
   }
   return <section className="list-surface improvement-theme-panel" aria-label="优化历程">
-    <PageHeader title="优化历程" subtitle="按主题组织目标、阶段、验证结论与遗留工作" actions={<Button type="primary" onClick={() => setAdding(true)}><Plus size={17} />新增优化主题</Button>} />
+    <PageHeader title="优化历程" actions={<Button type="primary" onClick={() => setAdding(true)}><Plus size={17} />新增优化主题</Button>} />
     <ListStatusNav value={params.get("theme_status") ?? "all"} labels={{ all: "全部", ...statuses }} counts={themes.error ? undefined : themes.data?.status_counts} onChange={(value) => update("theme_status", value)} />
     <ListToolbar advanced={<SelectField label="归档范围" value={params.get("theme_archive") ?? "active"} onValueChange={(value) => update("theme_archive", value)} options={[{ value: "active", label: "未归档" }, { value: "archived", label: "已归档" }, { value: "all", label: "全部（含归档）" }]} />}>
       <ListSearch key={params.get("theme_q") ?? ""} label="搜索优化主题" value={params.get("theme_q") ?? ""} onSearch={(value) => update("theme_q", value)} />

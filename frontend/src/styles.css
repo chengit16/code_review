@@ -102,7 +102,7 @@ td.file-path { white-space: normal; overflow-wrap: anywhere; }
 .operations-page .operations-metrics .metric { min-height: 106px; }
 .reconciliation-card { margin-top: 14px; }
 .reconciliation-card .section-head { align-items: center; }
-.reconciliation-note, .reconciliation-timestamp { color: var(--color-muted); font-size: 12px; line-height: 1.6; }
+.reconciliation-timestamp { color: var(--color-muted); font-size: 12px; line-height: 1.6; }
 .reconciliation-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 9px; margin: 13px 0; padding: 13px 15px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface-subtle); color: var(--color-muted); font-size: 12px; }
 .reconciliation-summary strong { color: var(--color-danger); font-size: 21px; }
 .reconciliation-issues { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
@@ -383,7 +383,7 @@ input:not(:where([class^="ant-"], [class*=" ant-"])):focus, button:not(:where([c
 .improvement-history-entry { padding-block: 16px; border-top: 1px solid var(--color-border); overflow-wrap: anywhere; }
 .improvement-history-entry summary { cursor: pointer; line-height: 1.7; }
 .improvement-records-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0 14px; }
-.improvement-records-heading p { margin: 0; color: var(--color-muted); }
+.improvement-records-heading h2 { margin: 0; font-size: 16px; }
 .improvement-theme-panel { padding: 0; border: 0; }
 .theme-phases-heading, .theme-phase-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .theme-phases-heading h3, .theme-phase-heading h4 { margin: 0; }
@@ -412,7 +412,7 @@ input:not(:where([class^="ant-"], [class*=" ant-"])):focus, button:not(:where([c
 .summary-filters > label { display: grid; gap: 7px; min-width: 0; }
 .summary-filters input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-control); color: inherit; background: var(--color-surface); font: inherit; }
 .summary-filters > p { flex-basis: 100%; margin-bottom: 0; }
-.summary-scope { padding: 16px 20px; border-left: 3px solid var(--color-accent-text); background: var(--color-accent-soft); line-height: 1.7; overflow-wrap: anywhere; }
+.summary-scope { padding-block: 8px; line-height: 1.7; overflow-wrap: anywhere; }
 .summary-scope p { margin: 4px 0; }
 .summary-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
 .summary-metrics article { padding: 18px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
@@ -430,6 +430,10 @@ input:not(:where([class^="ant-"], [class*=" ant-"])):focus, button:not(:where([c
 .summary-day { display: flex; align-items: end; gap: 1px; height: 100%; flex: 1; min-width: 0; }
 .summary-day > span { flex: 1; min-width: 0; background: var(--color-accent); }
 .summary-day > .summary-day-updates { background: var(--color-warning); }
+.summary-activity-legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0; color: var(--color-muted); font-size: 12px; }
+.summary-activity-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.summary-activity-legend i { width: 10px; height: 10px; border-radius: 2px; background: var(--color-accent); }
+.summary-activity-legend .summary-legend-updates { background: var(--color-warning); }
 .summary-chart-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 11px; margin: 7px 0 18px; }
 .summary-table-scroll table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 .summary-table-scroll th, .summary-table-scroll td { padding: 10px; border-bottom: 1px solid var(--color-border); text-align: left; font-size: 12px; }

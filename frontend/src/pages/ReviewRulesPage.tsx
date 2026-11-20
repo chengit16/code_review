@@ -100,7 +100,7 @@ export function ReviewRulesPage({ token, embedded = false }: {
 
   const busy = save.isPending || remove.isPending || restore.isPending;
   const scopeName = repositoryId === null ? "全局规则" : repositories.data?.find((repo) => repo.id === repositoryId)?.name ?? `项目 #${repositoryId}`;
-  return <div className={`review-rules-page ${embedded ? "settings-content" : "page"}`}><PageHeader headingLevel={embedded ? 2 : 1} title="审核规则" subtitle="按文件路径定制评审要求" />
+  return <div className={`review-rules-page ${embedded ? "settings-content" : "page"}`}><PageHeader headingLevel={embedded ? 2 : 1} title="审核规则" />
     <UnsavedChangesGuard dirty={dirty} />
     <QueryState loading={repositories.isLoading || configurations.isLoading} error={repositories.error || configurations.error} onRetry={() => { void repositories.refetch(); void configurations.refetch(); }} />
     {!repositories.isLoading && !configurations.isLoading && !repositories.error && !configurations.error && <>

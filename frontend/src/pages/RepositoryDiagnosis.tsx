@@ -29,17 +29,17 @@ export function RepositoryDiagnosis({ token, repository, targets }: {
   const target = targets.find((item) => item.id === repository.feishu_target_id);
   const error = readiness.error || models.error || limits.error || events.error;
   return <div className="repository-diagnosis">
-    <Alert type="info" showIcon title="诊断基于已保存配置" description="打开此页不会调用外部服务。测试由 Worker 执行；模型可能产生费用，飞书会发送真实消息，均需再次确认。" />
+    <Alert type="warning" showIcon title="模型测试可能产生费用，飞书测试会发送真实消息" />
     <QueryState loading={readiness.isLoading || models.isLoading || limits.isLoading || events.isLoading} error={error} onRetry={() => { void readiness.refetch(); void models.refetch(); void limits.refetch(); void events.refetch(); }} />
     <dl className="diagnosis-checklist">
       <div><dt>事件接收</dt><dd>{repository.enabled ? "已启用" : "已暂停"} · 合并前 MR {repository.premerge_enabled ? "开启" : "关闭"} · 目标分支 Push {repository.enable_default_branch_pushes ? "开启" : "关闭"}</dd></div>
       <div><dt>目标分支</dt><dd><div className="repository-branch-tags">{(repository.target_branches ?? [repository.target_branch]).map((branch) => <Tag key={branch} className="mono">{branch}</Tag>)}</div></dd></div>
-      <div><dt>Git / GitLab API</dt><dd>{state ? `${checkLabels[state.git] ?? state.git} / ${checkLabels[state.gitlab] ?? state.gitlab}` : "读取中"}{state?.status === "needs_check" && <small>当前配置尚未完成验证；旧版本测试成功不代表当前配置有效。</small>}</dd></div>
-      <div><dt>Webhook</dt><dd>{repository.last_webhook_at ? `最近通过验证：${formatTime(repository.last_webhook_at)}` : "尚无通过验证的回调记录"}<small>回调通过验证不代表一定生成任务；仍需符合事件类型、分支和去重条件。</small></dd></div>
-      <div><dt>评审模型</dt><dd>{models.error || limits.error ? "状态读取失败" : models.isLoading || limits.isLoading ? "读取中" : model ? `${model.name} · ${limits.data?.model_profile_id ? "项目指定" : "继承全局"}` : "未找到可用模型"}<small>已配置不等于调用成功；项目模型覆盖在“评审参数”中修改。</small><Link to="/settings?tab=model">管理模型 →</Link></dd></div>
-      <div><dt>飞书通知</dt><dd>{target?.name ?? (repository.has_feishu_webhook ? "使用项目独立通知配置" : "未关联通知配置")}<small>通知独立重试，失败时无需重新调用模型评审。</small><Link to="/settings?tab=feishu">管理通知 →</Link></dd></div>
+      <div><dt>Git / GitLab API</dt><dd>{state ? `${checkLabels[state.git] ?? state.git} / ${checkLabels[state.gitlab] ?? state.gitlab}` : "读取中"}{state?.status === "needs_check" && <small>当前配置待验证</small>}</dd></div>
+      <div><dt>Webhook</dt><dd>{repository.last_webhook_at ? `最近通过验证：${formatTime(repository.last_webhook_at)}` : "尚无通过验证的回调记录"}</dd></div>
+      <div><dt>评审模型</dt><dd>{models.error || limits.error ? "状态读取失败" : models.isLoading || limits.isLoading ? "读取中" : model ? `${model.name} · ${limits.data?.model_profile_id ? "项目指定" : "继承全局"}` : "未找到可用模型"}<Link to="/settings?tab=model">管理模型 →</Link></dd></div>
+      <div><dt>飞书通知</dt><dd>{target?.name ?? (repository.has_feishu_webhook ? "使用项目独立通知配置" : "未关联通知配置")}<Link to="/settings?tab=feishu">管理通知 →</Link></dd></div>
     </dl>
-    <section className="diagnosis-tests" aria-label="连接测试"><div className="section-head"><h3>连接测试</h3><span className="form-note">状态对应最近一次执行结果</span></div><div className="diagnosis-test-list">
+    <section className="diagnosis-tests" aria-label="连接测试"><div className="section-head"><h3>连接测试</h3></div><div className="diagnosis-test-list">
       <ConnectionChecks token={token} kinds={["git", "gitlab"]} repositoryId={repository.id} compact />
       {model ? <ConnectionChecks token={token} kinds={["model"]} modelProfileId={model.id} enabled={Boolean(model.model && model.has_api_key)} compact /> : <p className="diagnosis-test-unavailable">模型 · 尚未配置可用模型，配置后可测试。</p>}
       {repository.has_feishu_webhook ? <ConnectionChecks token={token} kinds={["feishu"]} {...(repository.feishu_target_id != null ? { notificationTargetId: repository.feishu_target_id } : { repositoryId: repository.id })} compact /> : <p className="diagnosis-test-unavailable">飞书 · 未关联通知通道，配置后可测试。</p>}

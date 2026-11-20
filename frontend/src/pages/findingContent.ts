@@ -68,7 +68,7 @@ export function splitFindingContent(content: string): FindingContentSection[] {
   return sections.length ? sections : [{ label: null, content }];
 }
 
-function extractSuggestions(content: string): { description: string; suggestions: string[] } {
+function extractSuggestions(content: string, suggestionEnd: RegExp): { description: string; suggestions: string[] } {
   const masked = maskFindingLiterals(content);
   const pattern = /建议(?=用|使用|将|把|删除|移除|增加|添加|改|统一|抽|提取|拆|合并|保留|补|检查|先|在|对|仅|通过|等待|确保|避免|恢复|关闭|修复|返回|调用|限制|启用|禁用|不)/g;
   const suggestions: string[] = [];
@@ -93,7 +93,7 @@ function extractSuggestions(content: string): { description: string; suggestions
       suggestions.push(content.slice(index, end).trim());
       end++;
     } else {
-      const rest = masked.slice(index).search(/[。；;\n]/);
+      const rest = masked.slice(index).search(suggestionEnd);
       end = rest < 0 ? content.length : index + rest + (masked[index + rest] === "\n" ? 0 : 1);
       suggestions.push(content.slice(index, end).trim());
     }
@@ -104,20 +104,23 @@ function extractSuggestions(content: string): { description: string; suggestions
 }
 
 /** 历史与新描述共用的只读整理；明确建议移入修复建议，无标签正文统一问题描述，不写回原文。 */
-export function presentFindingContent(content: string): FindingContentSection[] {
+export function presentFindingContent(content: string, { keepSuggestionClauses = false }: {
+  /** Agent 的独立影响字段内，分号可接续同一句修复建议。 */ keepSuggestionClauses?: boolean;
+} = {}): FindingContentSection[] {
   const sections = splitFindingContent(normalizeFindingNewlines(content));
+  const suggestionEnd = keepSuggestionClauses ? /[。\n]/ : /[。；;\n]/;
   const suggestions: string[] = [];
   const result = sections.map((section) => {
     if (section.label === "修复建议") { suggestions.push(section.content); return null; }
     const blocks = splitFindingBlocks(section.content);
     const description = blocks.map((block) => {
       if (block.kind === "paragraph") {
-        const extracted = extractSuggestions(block.content);
+        const extracted = extractSuggestions(block.content, suggestionEnd);
         suggestions.push(...extracted.suggestions);
         return extracted.description;
       }
       return block.items.map((item) => {
-        const extracted = extractSuggestions(item.content);
+        const extracted = extractSuggestions(item.content, suggestionEnd);
         suggestions.push(...extracted.suggestions.map((text) => `${item.marker} ${text}`));
         return extracted.description.trim() ? `${item.marker} ${extracted.description}` : "";
       }).join("\n");

@@ -101,7 +101,7 @@ export function FeishuHooksPage({ token, embedded = false }: {
   const list = useLocalList(targets.error ? undefined : targets.data, (item) => item.name, undefined, "feishu_");
 
   return <div className={embedded ? "settings-content" : "page"}>
-    <PageHeader headingLevel={embedded ? 2 : 1} title="飞书配置" subtitle="维护可供多个仓库共用的通知通道" actions={<Button type="primary" icon={<Plus size={17} />} onClick={beginAdd}>新增飞书配置</Button>} />
+    <PageHeader headingLevel={embedded ? 2 : 1} title="飞书配置" actions={<Button type="primary" icon={<Plus size={17} />} onClick={beginAdd}>新增飞书配置</Button>} />
     <UnsavedChangesGuard dirty={dirty} />
     {feedback && <p className="form-success" role="status">{feedback}</p>}
     {remove.error && <p className="form-error" role="alert">{remove.error.message}</p>}

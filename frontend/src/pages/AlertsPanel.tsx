@@ -50,8 +50,8 @@ export function AlertsPanel({ token, active = true }: {
   const retry = useMutation({ retry: false, mutationFn: (id: number) => apiRequest(token, `/api/alerts/${id}/retry`, { method: "POST" }), onSuccess: () => void client.invalidateQueries({ queryKey: ["alerts"] }) });
   return <div className="operations-alerts-section"><QueryState loading={query.isLoading || targets.isLoading} error={query.error || targets.error || retry.error} />
     {query.data && <>
-      <Card title="主动告警设置"><p className="operations-caption">由独立 monitor 检查与发送；配置成功和通知投递成功是两件事。</p><Editor token={token} config={query.data.config} targets={targets.data ?? []} unavailable={!targets.data || !!targets.error} /></Card>
-      <Card title="告警与恢复通知"><p className="operations-caption">仅显示最近 100 条投递，不代表全部历史或实时活跃告警数量。</p><Table rowKey="id" dataSource={query.data.deliveries} size="small" scroll={{ x: 750 }} pagination={{ current: Math.min(page, Math.max(1, Math.ceil(query.data.deliveries.length / 10))), onChange: setPage, pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "暂无告警通知" }} columns={[
+      <Card title="主动告警设置"><Editor token={token} config={query.data.config} targets={targets.data ?? []} unavailable={!targets.data || !!targets.error} /></Card>
+      <Card title="告警与恢复通知" extra="最近 100 条"><Table rowKey="id" dataSource={query.data.deliveries} size="small" scroll={{ x: 750 }} pagination={{ current: Math.min(page, Math.max(1, Math.ceil(query.data.deliveries.length / 10))), onChange: setPage, pageSize: 10, showSizeChanger: false }} locale={{ emptyText: "暂无告警通知" }} columns={[
         { title: "消息", dataIndex: "message", width: 300, render: (message: string) => <ListExcerpt text={message} limit={70} /> }, { title: "状态", dataIndex: "status", render: (status: string) => <Status value={status} /> },
         { title: "尝试", dataIndex: "attempts" }, { title: "时间", dataIndex: "created_at", render: (time: string) => <ListTime value={time} /> },
         { title: "诊断", dataIndex: "error", render: (error: string | null) => <ListExcerpt text={error} /> },

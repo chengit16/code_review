@@ -5,6 +5,7 @@ import Markdown from "react-markdown";
 
 import { FindingCodeBlock } from "./FindingCodeBlock";
 import { presentFindingContent } from "./findingContent";
+import type { FindingContentSection } from "./findingContent";
 import { maskFindingLiterals, splitFindingBlocks } from "./findingLists";
 import "../styles/findings.css";
 
@@ -42,17 +43,25 @@ function FindingParagraph({ content }: { content: string }) {
     </li>)}</ol> : <FindingMarkdown key={index} content={block.content} />)}</div>;
 }
 
+/** 共用安全正文渲染，可按已识别的段落单独展示结论与代码依据。 */
+export function FindingSections({ sections, numbered = true, heading: Heading = "h3" }: {
+  /** 只读整理后的正文片段。 */ sections: FindingContentSection[];
+  /** 现有发现卡保留编号，紧凑的证据抽屉只显示段落标题。 */ numbered?: boolean;
+  /** 段落在所在页面中的标题层级。 */ heading?: "h3" | "h4";
+}) {
+  let sectionNumber = 0;
+  return <div className="finding-description">{sections.map((section, index) => {
+    const tone = section.label === "实际后果" ? "consequence" : section.label === "修复建议" ? "suggestion" : "plain";
+    return section.label ? <div className="finding-description-section" data-tone={tone} key={index}>
+      <Heading>{numbered && <span className="finding-section-number" aria-hidden="true">{String(++sectionNumber).padStart(2, "0")}</span>}{section.label}</Heading>
+      <FindingParagraph content={section.content} />
+    </div> : <div className="finding-description-plain" key={index}><FindingParagraph content={section.content} /></div>;
+  })}</div>;
+}
+
 /** 旧正文归问题描述，明确建议归修复建议；安全呈现格式且不写回模型原文。 */
 export function FindingDescription({ content }: {
   /** 原始 OCR 描述；HTML 仍作为文本，图片不发起请求，链接只允许安全协议。 */ content: string;
 }) {
-  const sections = presentFindingContent(content);
-  let numbered = 0;
-  return <div className="finding-description">{sections.map((section, index) => {
-    const tone = section.label === "实际后果" ? "consequence" : section.label === "修复建议" ? "suggestion" : "plain";
-    return section.label ? <div className="finding-description-section" data-tone={tone} key={index}>
-      <h3><span className="finding-section-number" aria-hidden="true">{String(++numbered).padStart(2, "0")}</span>{section.label}</h3>
-      <FindingParagraph content={section.content} />
-    </div> : <div className="finding-description-plain" key={index}><FindingParagraph content={section.content} /></div>;
-  })}</div>;
+  return <FindingSections sections={presentFindingContent(content)} />;
 }

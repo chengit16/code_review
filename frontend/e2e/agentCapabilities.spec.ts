@@ -12,6 +12,10 @@ test("从系统方案管理走到项目试点与双评审证据", async ({ page,
   await page.getByLabel("检查步骤").fill("核对重复调用是否造成重复写入。");
   await page.getByRole("button", { name: "发布 Skill 版本" }).click();
   await expect(page.getByText("#1 · 订单重试检查", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("tab", { name: "Skill", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "查看检查步骤" }).click();
+  await expect(page.getByText("核对重复调用是否造成重复写入。")).toBeVisible();
   await page.getByRole("tab", { name: "评审方案" }).click();
   await page.getByRole("button", { name: "复制为草稿" }).click();
   await page.getByLabel("方案名称").fill("订单方案");
@@ -26,6 +30,7 @@ test("从系统方案管理走到项目试点与双评审证据", async ({ page,
 
   await page.goto("/repositories?repository=1&section=agent");
   await page.getByRole("switch", { name: "启用仓库试点" }).click();
+  await expect(page.getByRole("region", { name: "方案与模型摘要" }).getByText("将启用试点")).toBeVisible();
   await page.getByRole("button", { name: "保存 Agent 设置" }).click();
   await expect(page.getByText("Agent 设置已保存")).toBeVisible();
 
@@ -38,13 +43,14 @@ test("从系统方案管理走到项目试点与双评审证据", async ({ page,
   await page.getByRole("button", { name: "试跑此方案" }).click();
   await page.getByRole("button", { name: "确认试跑" }).click();
   await expect(page).toHaveURL(/\/jobs\/1\?agent_comparison=1/);
-  await page.getByRole("button", { name: "查看本次 Agent 配置与执行" }).click();
+  await page.getByRole("button", { name: "查看 Agent 运行详情" }).click();
   const run = page.getByRole("dialog", { name: "Agent 运行详情" });
   await expect(run.getByRole("heading", { name: "任务状态" })).toBeVisible();
-  await run.getByRole("button", { name: /能力证据/ }).click();
-  await expect(run.getByRole("row", { name: /订单重试检查.*orders.py.*命中/ })).toBeVisible();
+  await run.getByRole("tab", { name: /能力证据/ }).click();
+  await expect(run.getByRole("listitem").filter({ hasText: /命中.*订单重试检查.*orders.py/ }).first()).toBeVisible();
   await expect.poll(async () => (await (await request.get("/api/jobs/1/agent-comparisons/1")).json()).status)
     .toBe("complete");
+  await run.getByRole("tab", { name: "工作流程" }).click();
   await run.getByRole("button", { name: /orders.py.*已核对/ }).first().click();
   await expect(run.getByText(/本页已核对，保留/)).toBeVisible();
 

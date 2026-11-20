@@ -1,17 +1,18 @@
 /** @description 展示固定范围下的双路证据、覆盖与人工裁定，保留各自的覆盖口径。 */
 
-import { App, Button, Card, Collapse, Drawer, Empty, Segmented, Space, Tag, Typography } from "antd";
-import { useState } from "react";
+import { App, Button, Collapse, Empty, Segmented, Space, Typography } from "antd";
+import { useEffect, useRef, useState } from "react";
 
-import type { AgentComparison, ComparisonFinding, ComparisonUsage, Evaluation, FindingMatch } from "../../api/agentComparisons";
+import type { AgentComparison, ComparisonFinding, FindingMatch } from "../../api/agentComparisons";
 import { createCommandId } from "../../api/commandId";
 import { Status } from "../../ui/Status";
 import { formatTime, shortSha } from "../../ui/format";
 
-import { FindingDescription } from "../FindingDescription";
-import { evaluateFinding, verdictLabels } from "./comparisonEdits";
+import { CapabilityEvidence } from "./CapabilityEvidence";
+import { ComparisonUsageDetails, EvidenceRows, FindingLocation } from "./ComparisonEngine";
+import { ComparisonFindingDrawer } from "./ComparisonFindingDrawer";
+import { evaluateFinding } from "./comparisonEdits";
 import type { ComparisonEdit } from "./comparisonEdits";
-import { CapabilityEventDetails, CapabilityEvidence } from "./CapabilityEvidence";
 
 const reasonLabels: Record<string, string> = {
   read_budget: "达到读取页数限制", model_budget: "达到模型预算限制", model_timeout: "模型响应超时",
@@ -27,40 +28,6 @@ const ruleSources: Record<string, string> = {
   custom: "项目配置", project: "仓库规则", global: "全局规则", system: "内置规则",
 };
 
-function FindingLocation({ finding }: { finding: Pick<ComparisonFinding, "side" | "path" | "line"> }) {
-  return <span className="agent-comparison-location">
-    {finding.path}{finding.line === null ? " · 文件级" : ` · ${finding.side === "base" ? "旧版" : finding.side === "head" ? "新版" : "记录"}第 ${finding.line} 行`}
-  </span>;
-}
-
-function Usage({ usage }: { usage: ComparisonUsage }) {
-  return <div className="agent-usage">
-    {usage.model && <span>{usage.model}</span>}
-    <span>{usage.input_tokens !== null && usage.output_tokens !== null
-      ? `输入 ${usage.input_tokens.toLocaleString()} · 输出 ${usage.output_tokens.toLocaleString()} Token` : "用量未记录"}</span>
-    {usage.unknown_calls > 0 && <Tag color="warning">{usage.unknown_calls} 次用量未知</Tag>}
-    <span>{usage.cost === null ? "费用未知" : `估算费用 ${usage.currency ?? ""} ${usage.cost}`}</span>
-  </div>;
-}
-
-function EvidenceRows({ items, evaluations, onEvidence }: {
-  items: ComparisonFinding[]; evaluations: Evaluation[]; onEvidence: (finding: ComparisonFinding) => void;
-}) {
-  const files = new Map<string, ComparisonFinding[]>();
-  const byId = new Map(evaluations.map((item) => [item.finding_id, item]));
-  for (const item of items) files.set(item.path, [...(files.get(item.path) ?? []), item]);
-  return <div className="agent-finding-files">{Array.from(files, ([path, findings]) => <section key={path}>
-    <h4>{path}</h4>
-    <ul>{findings.map((finding) => <li key={finding.id}>
-      <div><strong>{finding.title}</strong><FindingLocation finding={finding} /></div>
-      <Space size={4} wrap>
-        {byId.has(finding.id) && <Tag>{verdictLabels[byId.get(finding.id)?.verdict ?? "insufficient"]}</Tag>}
-        <Button size="small" type="link" aria-label={`查看证据：${finding.title}`} onClick={() => onEvidence(finding)}>查看证据</Button>
-      </Space>
-    </li>)}</ul>
-  </section>)}</div>;
-}
-
 /** 展示两个引擎的固定查证材料；匹配必须由评审者确认。 */
 export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVersion }: {
   comparison: AgentComparison; canEdit: boolean; onEdit: (edit: ComparisonEdit) => void;
@@ -68,6 +35,17 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
 }) {
   const [filter, setFilter] = useState<"all" | "agent">("all");
   const [evidence, setEvidence] = useState<ComparisonFinding | null>(null);
+  const evidenceTrigger = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const trigger = evidenceTrigger.current;
+    if (evidence || !trigger) return;
+    // 等抽屉释放焦点锁后再恢复入口焦点。
+    const frame = requestAnimationFrame(() => {
+      evidenceTrigger.current = null;
+      trigger.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [evidence]);
   const { message } = App.useApp();
   const { agent, ocr, curation } = comparison;
   const { document } = curation;
@@ -78,10 +56,15 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
     total: current.total + file.total,
   }), { reviewed: 0, delivered: 0, total: 0 });
   const matched = new Set(document.matches.flatMap((item) => [...item.ocr_ids, ...item.agent_ids]));
-  const agentOnly = agent.findings.filter((item) => !matched.has(item.id));
+  const unmatchedAgent = agent.findings.filter((item) => !matched.has(item.id));
+  const displayedAgentFindings = filter === "all" ? agent.findings : unmatchedAgent;
   const suggestions = comparison.suggestions.filter((item) => [...item.ocr_ids, ...item.agent_ids].every((id) => !matched.has(id)));
   const all = new Map([...ocr.findings, ...agent.findings].map((item) => [item.id, item]));
   const evaluation = document.evaluations.find((item) => item.finding_id === evidence?.id);
+  function showEvidence(finding: ComparisonFinding, trigger: HTMLElement) {
+    evidenceTrigger.current = trigger;
+    setEvidence(finding);
+  }
   function addRecord(kind: "match" | "missed") {
     try {
       const id = `${kind}:${createCommandId()}`;
@@ -95,7 +78,7 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
     return <li key={group.id} className="agent-curation-row">
       <div><strong>{group.label}</strong><div className="agent-match-links">{[...group.ocr_ids, ...group.agent_ids].map((id) => {
         const item = all.get(id);
-        return item && <Button key={id} type="link" size="small" onClick={() => setEvidence(item)}>
+        return item && <Button key={id} type="link" size="small" onClick={(event) => showEvidence(item, event.currentTarget)}>
           {id.startsWith("ocr:") ? "OCR" : "Agent"} {item.line ? `· ${item.line} 行` : "· 文件级"}
         </Button>;
       })}</div></div>
@@ -109,7 +92,7 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
     </div>
     <div className="agent-comparison-controls">
       <Segmented aria-label="发现筛选" value={filter} onChange={setFilter} options={[
-        { label: "全部发现", value: "all" }, { label: `Agent 独有（${agentOnly.length}）`, value: "agent" },
+        { label: "全部发现", value: "all" }, { label: `Agent 未匹配（${unmatchedAgent.length}）`, value: "agent" },
       ]} />
       <Space wrap size={6}>
         {curation.version > 0 && <span title={formatTime(curation.created_at)}>裁定 v{curation.version} · {curation.actor}</span>}
@@ -118,37 +101,60 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
       </Space>
     </div>
     <div className={`agent-comparison-columns${filter === "agent" ? " agent-comparison-columns--single" : ""}`}>
-      {filter === "all" && <Card size="small" title="阿里 OCR" extra={<Status value={ocr.status} />}>
-        <div className="agent-coverage"><strong>{ocr.coverage ? `${ocr.coverage.completed}/${ocr.coverage.selected}` : "未知"}</strong> 文件完成
-          {ocr.coverage && <span>复用 {ocr.coverage.reused} · 失败 {ocr.coverage.failed} · 豁免 {ocr.coverage.waived}</span>}</div>
-        <Usage usage={ocr.usage} />
-        {ocr.findings.length ? <EvidenceRows items={ocr.findings} evaluations={document.evaluations} onEvidence={setEvidence} />
-          : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={ocr.status === "complete" && ocr.coverage && ocr.coverage.completed === ocr.coverage.selected ? "初审没有报告发现" : "暂无可展示的初审发现"} />}
-      </Card>}
-      <Card size="small" title="自建 Agent" extra={<Status value={comparison.status} />}>
-        <div className="agent-coverage"><strong>{totals ? `${totals.reviewed}/${totals.total}` : "未知"}</strong> 条差异已核对
-          {totals && <span>已交付 {totals.delivered} 条 · 排除 {agent.excluded_paths.length} 个文件</span>}</div>
-        <Usage usage={agent.usage} />
-        <CapabilityEvidence comparison={comparison} coverage={totals} />
-        {agent.reason && agent.reason !== "covered" && <p className="agent-comparison-reason">{reasonLabels[agent.reason] ?? `结束原因：${agent.reason}`}</p>}
-        {agent.files && (agent.files.length > 0 || agent.excluded_paths.length > 0) && <Collapse size="small" ghost
-          items={[{ key: "scope", label: "查看文件覆盖", children: <ul className="agent-coverage-files">
-            {agent.files.map((file) => <li key={file.path}>
-              <div>
-                <div>{file.path}</div>
-                {file.rule && <Typography.Text type="secondary" title={file.rule.sha256}>
-                  规则 · {ruleSources[file.rule.source] ?? file.rule.source} · {file.rule.pattern} · {file.rule.sha256.slice(0, 12)}
-                </Typography.Text>}
-              </div>
-              <span>{file.reviewed}/{file.total} 已核对</span>
-            </li>)}
-            {agent.excluded_paths.map((path) => <li key={path}><span>{path}</span><span>无文本差异</span></li>)}
-          </ul> }]} />}
-        {(filter === "all" ? agent.findings : agentOnly).length > 0
-          ? <EvidenceRows items={filter === "all" ? agent.findings : agentOnly} evaluations={document.evaluations} onEvidence={setEvidence} />
-          : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === "agent" && agent.findings.length > 0
-            ? "没有未匹配的 Agent 发现" : comparison.status === "complete" ? "Agent 没有报告发现" : "暂无可展示的 Agent 发现"} />}
-      </Card>
+      {filter === "all" && <section className="agent-engine" aria-label="阿里 OCR 发现">
+        <header className="agent-engine-summary">
+          <div className="agent-engine-title"><h3>阿里 OCR</h3><Status value={ocr.status} /></div>
+          <div className="agent-engine-facts">
+            <span><strong>{ocr.coverage ? `${ocr.coverage.completed}/${ocr.coverage.selected}` : "未知"}</strong> 文件完成</span>
+            <span><strong>{ocr.findings.length}</strong> 条发现</span>
+          </div>
+        </header>
+        <div className="agent-engine-results">
+          {ocr.findings.length ? <EvidenceRows items={ocr.findings} evaluations={document.evaluations} onEvidence={showEvidence} />
+            : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={ocr.status === "complete" && ocr.coverage && ocr.coverage.completed === ocr.coverage.selected ? "初审没有报告发现" : "暂无可展示的初审发现"} />}
+        </div>
+        <Collapse ghost size="small" items={[{ key: "data", label: "覆盖与用量", children: <>
+          {ocr.coverage && <div className="agent-usage">复用 {ocr.coverage.reused} 个 · 失败 {ocr.coverage.failed} 个 · 豁免 {ocr.coverage.waived} 个</div>}
+          <ComparisonUsageDetails usage={ocr.usage} />
+        </> }]} />
+      </section>}
+      <section className="agent-engine" aria-label="自建 Agent 发现">
+        <header className="agent-engine-summary">
+          <div className="agent-engine-title">
+            <h3>自建 Agent</h3><Status value={comparison.status} />
+            <CapabilityEvidence comparison={comparison} coverage={totals} />
+          </div>
+          <div className="agent-engine-facts">
+            <span><strong>{totals ? `${totals.reviewed}/${totals.total}` : "未知"}</strong> 条差异已核对</span>
+            <span><strong>{displayedAgentFindings.length}</strong> 条{filter === "agent" ? "未匹配发现" : "发现"}</span>
+          </div>
+          {agent.reason && agent.reason !== "covered" && <p className="agent-comparison-reason">{reasonLabels[agent.reason] ?? `结束原因：${agent.reason}`}</p>}
+        </header>
+        <div className="agent-engine-results">
+          {displayedAgentFindings.length > 0
+            ? <EvidenceRows items={displayedAgentFindings} evaluations={document.evaluations} onEvidence={showEvidence} />
+            : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter === "agent" && agent.findings.length > 0
+              ? "没有未匹配的 Agent 发现" : comparison.status === "complete" ? "Agent 没有报告发现" : "暂无可展示的 Agent 发现"} />}
+        </div>
+        <div className="agent-engine-footer">
+          <Collapse size="small" ghost items={[{ key: "data", label: "覆盖与用量", children: <>
+            {totals && <div className="agent-usage">已交付 {totals.delivered} 条 · 排除 {agent.excluded_paths.length} 个文件</div>}
+            <ComparisonUsageDetails usage={agent.usage} />
+            {agent.files && (agent.files.length > 0 || agent.excluded_paths.length > 0) && <ul className="agent-coverage-files">
+              {agent.files.map((file) => <li key={file.path}>
+                <div>
+                  <div>{file.path}</div>
+                  {file.rule && <Typography.Text type="secondary" title={file.rule.sha256}>
+                    规则 · {ruleSources[file.rule.source] ?? file.rule.source} · {file.rule.pattern} · {file.rule.sha256.slice(0, 12)}
+                  </Typography.Text>}
+                </div>
+                <span>{file.reviewed}/{file.total} 已核对</span>
+              </li>)}
+              {agent.excluded_paths.map((path) => <li key={path}><span>{path}</span><span>无文本差异</span></li>)}
+            </ul>}
+          </> }]} />
+        </div>
+      </section>
     </div>
     <section className="agent-human-review" aria-label="人工整理">
       <div className="agent-comparison-controls"><h3>人工整理</h3>{editable && <Space wrap>
@@ -163,19 +169,11 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
       </li>)}</ul></>}
       {!document.matches.length && !suggestions.length && !document.missed.length && <p>暂无匹配或共同漏报记录。</p>}
     </section>
-    <Drawer open={evidence !== null} title="固定版本证据" size="min(620px, 100vw)" onClose={() => setEvidence(null)}
-      extra={editable && evidence ? <Button type="primary" onClick={() => { onEdit(evaluateFinding(comparison, evidence)); setEvidence(null); }}>裁定发现</Button> : null}>
-      {evidence && <div className="agent-evidence">
-        <div><Tag>{evidence.id.startsWith("ocr:") ? "阿里 OCR" : "自建 Agent"}</Tag>比较 #{comparison.id}</div>
-        <h3>{evidence.title}</h3><FindingLocation finding={evidence} />
-        <Typography.Text code>{evidence.side === "base" ? comparison.base_sha : evidence.side === "head" ? comparison.head_sha : `${shortSha(comparison.base_sha)} → ${shortSha(comparison.head_sha)}`}</Typography.Text>
-        {evidence.excerpt && <pre>{evidence.excerpt}</pre>}
-        {agent.capability_events?.filter((item) => evidence.capability_refs?.includes(item.id))
-          .map((item) => <CapabilityEventDetails key={item.id} event={item} />)}
-        <FindingDescription content={evidence.content} />
-        {evidence.impact && <p><strong>影响</strong> {evidence.impact}</p>}
-        {evaluation && <div><Tag>{verdictLabels[evaluation.verdict]}</Tag>{evaluation.worth_fixing !== null && <Tag>{evaluation.worth_fixing ? "值得处理" : "无需处理"}</Tag>}{evaluation.note && <p>{evaluation.note}</p>}</div>}
-      </div>}
-    </Drawer>
+    <ComparisonFindingDrawer comparison={comparison} finding={evidence} evaluation={evaluation}
+      onClose={() => setEvidence(null)} onEvaluate={editable ? (finding) => {
+        evidenceTrigger.current = null;
+        onEdit(evaluateFinding(comparison, finding));
+        setEvidence(null);
+      } : undefined} />
   </>;
 }

@@ -24,7 +24,7 @@ export function ProblemDistributions({ kind, data, repositoryId }: {
     : data.categories.map((item) => ({ key: item.category, label: formatCategory(item.category), count: item.generated }));
   const max = Math.max(1, ...rows.map((row) => row.count));
   return <section className={`overview-panel overview-distribution ${isSeverity ? "overview-severity" : "overview-category"}`} aria-label={title}>
-    <div className="section-head"><h2>{title}</h2><span>{isSeverity ? "同一窗口 · 未评价发现" : "本期出现次数 · 前 20 类"}</span></div>
+    <div className="section-head"><h2>{title}</h2>{!isSeverity && <span>前 20 类</span>}</div>
     {isSeverity && !current ? <p>当前服务暂不提供分级汇总</p> : <>
       {(!isSeverity && !rows.length) || (isSeverity && current?.open_count === 0) ? <p className="overview-empty">{isSeverity ? "本期没有待反馈发现" : "本期没有发现记录"}</p> : null}
       <ul className="overview-bars">{rows.map((row) => <li key={row.key} className={`overview-bar-${row.key}`}>

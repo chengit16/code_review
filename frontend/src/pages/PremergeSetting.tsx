@@ -1,6 +1,6 @@
 /** @description 项目级合并前配置；读取成功后才允许编辑，草稿不被后台刷新覆盖，服务端复核权限。 */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Checkbox, Collapse, Input, Switch, Tag } from "antd";
+import { Alert, Button, Checkbox, Collapse, Input, Switch } from "antd";
 import { useId } from "react";
 
 import { apiRequest } from "../api/client";
@@ -50,8 +50,7 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
   }
 
   return <section className="section repository-publication-setting">
-    <div className="publication-section-heading"><h3>{contextOnly ? "合并前审查背景" : "合并前审查"}</h3><Tag>手动保存</Tag></div>
-    <p className="publication-section-description">在 MR 合并前，审查相对目标分支基准的完整差异。</p>
+    <div className="publication-section-heading"><h3>{contextOnly ? "合并前审查背景" : "合并前审查"}</h3></div>
     <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
     {value && <>
       <fieldset className="configuration-fields publication-fields" disabled={save.isPending}>
@@ -59,15 +58,13 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
           <div><label htmlFor={`${fieldId}-enabled`}>审查未合并 MR 的完整差异</label><p id={`${fieldId}-enabled-help`}>新建、重新打开或更新 MR 时触发；相同提交与背景的重复事件不会重复审查。</p></div>
           <Switch id={`${fieldId}-enabled`} aria-label="审查未合并 MR 的完整差异" aria-describedby={`${fieldId}-enabled-help`} checked={value.enabled} disabled={save.isPending} onChange={(enabled) => changeValue({ ...value, enabled })} />
         </div>}
-        {contextOnly && <p className="form-note">合并前 MR 评审开关统一在「基础接入」设置，此处仅配置审查使用的业务背景。</p>}
         <div className="publication-context">
           <div className="publication-field-label">审查背景 <span>可选</span></div>
           <Checkbox checked={value.include_description} disabled={save.isPending} onChange={(event) => changeValue({ ...value, include_description: event.target.checked })}>包含 GitLab MR 描述</Checkbox>
-          <p className="publication-field-help">将 MR 中的需求和验收说明作为业务背景，辅助理解代码。</p>
           <div className="publication-document-field">
             <label htmlFor={`${fieldId}-paths`}>仓库业务文档路径</label>
             <Input.TextArea id={`${fieldId}-paths`} aria-label="仓库业务文档路径" aria-describedby={`${fieldId}-paths-help${pathsError ? ` ${fieldId}-paths-error` : ""}`} aria-invalid={Boolean(pathsError)} status={pathsError ? "error" : undefined} rows={3} value={value.context_paths.join("\n")} disabled={save.isPending} onChange={(event) => changeValue({ ...value, context_paths: event.target.value.split("\n") })} placeholder="例如：docs/review-context.md" />
-            <p id={`${fieldId}-paths-help`} className="publication-field-help">每行一份，最多 3 份 .md 或 .txt 文件；从 MR 的头提交读取，可留空。</p>
+            <p id={`${fieldId}-paths-help`} className="publication-field-help">每行一份，最多 3 份 .md 或 .txt 文件，取自 MR 头提交。</p>
             {pathsError && <p id={`${fieldId}-paths-error`} className="publication-validation" role="alert">{pathsError}</p>}
           </div>
         </div>
@@ -79,8 +76,8 @@ export function PremergeSetting({ token, repositoryId, targetBranch, onOpenDiagn
       {save.error && <Alert type="error" showIcon title={`保存失败：${save.error.message}`} description="草稿已保留，请重试保存。" />}
     </>}
     <div className="publication-trigger-help">
-      <Alert role="note" type="info" showIcon title="开启并保存后，新建 MR 可自动进入审查队列" description="需接通 GitLab Webhook，并由运行中的 Worker 执行。结果统一在「评审任务」查看，并按项目通知配置推送飞书；合入相同版本时复用原任务。GitLab 行内发布仍由独立开关控制，不强制阻止合并。" />
       <Collapse ghost size="small" items={[{ key: "setup", label: "自动触发需要哪些配置？", children: <div className="publication-setup-help">
+        <p>开启并保存后，新建 MR 可自动进入审查队列。结果在「评审任务」查看，按项目配置通知飞书；合入相同版本时复用原任务。GitLab 行内发布独立控制，不强制阻止合并。</p>
         <ol>
           <li>在 GitLab 的 Settings → Webhooks 填写本项目回调地址和对应 Token，勾选 <strong>Merge request events</strong>；只勾选 Push events 不够。</li>
           <li>保持项目的 Webhook 接收开关开启，MR 目标分支须属于{targetBranch ? <>已保存的目标分支：<code>{targetBranch}</code></> : "基础接入中选择的目标分支"}。</li>

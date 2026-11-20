@@ -118,7 +118,7 @@ function ReviewIssuesContent({ token, canEdit }: { token: string; canEdit: boole
     { title: "最近发现", dataIndex: "last_seen_at", key: "last_seen_at", width: 160, render: (value: string) => <ListTime value={value} /> },
   ];
   return <div className="page">
-    <PageHeader title="历史问题与修复记录" subtitle="保留原问题编号、独立处置及跨任务出现历史" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
+    <PageHeader title="历史问题与修复记录" actions={<button className="icon-button" type="button" title="刷新问题" aria-label="刷新问题" disabled={batch.mutation.isPending} onClick={() => { batch.selectAll(false); batch.mutation.reset(); refresh(); }}><RefreshCw size={18} /></button>} />
     <p>这里保留原问题处置，不代表发现反馈进度。<Link to={`/findings?handling=all${selectedId ? `&issue_id=${selectedId}` : ""}`}>{selectedId ? `查看问题 #${selectedId} 关联的全部当前发现` : "进入评审发现"}</Link>；一个问题可能关联多条发现，请逐条反馈。</p>
     <section className="list-surface"><ListStatusNav label="问题处置状态" value={status} labels={{ all: "全部（不含已合并）", ...labels }} counts={issues.error ? undefined : issues.data?.status_counts} disabled={batch.mutation.isPending} onChange={(value) => updateFilter("status", value)} />
       <div className="issue-filter-grid">

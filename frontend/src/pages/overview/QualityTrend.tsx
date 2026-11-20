@@ -19,8 +19,7 @@ export function QualityTrend({ quality, days }: {
   const step = Math.max(1, Math.ceil(peak / 4));
   const max = step * 4;
   return <div className="quality-trend">
-    <div className="quality-legend">{feedbackSeries.map((series) => <span key={series.key}><i className={`quality-color-${series.key}`} />{series.label}</span>)}</div>
-    <p className="quality-caption">按发现产生日分组，四类并排展示当前反馈；旧版修复标记按未评价处理，后续补标会更新历史柱。{days === 90 ? "从窗口首日起每 7 天汇总，末组按实际天数" : "每日"} · UTC · 悬停、聚焦或点击日期区域查看数量与占比，窄屏可横向滚动</p>
+    <div className="quality-trend-heading"><h3>反馈趋势</h3><span>{days === 90 ? "每 7 天" : "每日"} · UTC</span></div>
     {quality.summary.total === 0 && <p className="overview-empty">本期暂无有效发现样本</p>}
     <div className="quality-chart-viewport" role="region" aria-label="反馈趋势图，可横向滚动" tabIndex={0}
       onScroll={() => setActiveDay(null)} onKeyDown={(event) => { if (event.key === "Escape") setActiveDay(null); }}>

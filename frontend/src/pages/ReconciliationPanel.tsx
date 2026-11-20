@@ -49,7 +49,6 @@ export function ReconciliationPanel({ token, active = true }: {
       <button className="icon-button" type="button" title="刷新对账" aria-label="刷新对账" onClick={() => void report.refetch()}><RefreshCw size={17} /></button>
       <button className="button button-secondary" type="button" disabled={download.isPending} onClick={() => download.mutate()}><Download size={16} />下载诊断包</button>
     </div></div>
-    <p className="reconciliation-note">检查事件、任务、尝试、通知与工件目录之间的一致性。报告不会自动修复业务数据。</p>
     <QueryState loading={report.isLoading} error={report.error || download.error} />
     {data && <>
       <div className="reconciliation-summary"><strong>{data.issue_count}</strong><span>项待核对差异</span><span>已检查 {data.checked.events} 个事件、{data.checked.jobs} 个任务、{data.orphan_artifact_directories} 个孤儿工件目录</span></div>

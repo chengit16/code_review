@@ -28,7 +28,7 @@ export interface FindingActionsProps {
 /** 同时只选中一项；再次点击撤销为未评价，按钮不包含修复等问题处置。 */
 export function FindingActions({ index, marked, canSubmit, onFeedback }: FindingActionsProps) {
   return <div className="finding-feedback"><div className="finding-actions" role="group" aria-label={`发现 ${index + 1} 的反馈`}>
-    {findingFeedbackOptions.map(({ value, label, title }) => <Button key={value} aria-label={label} title={title}
+    {findingFeedbackOptions.map(({ value, label, title }) => <Button key={value} aria-label={label} title={marked === value ? `${title}；再次点击撤销反馈` : title}
       aria-pressed={marked === value} type={marked === value ? "primary" : "default"} disabled={!canSubmit}
       onClick={() => onFeedback(index, marked === value ? null : value)}>{label}</Button>)}
   </div>{marked === "fixed" && <small className="finding-feedback-legacy">旧版“已修复”标记不计入价值评价，请按需重新评价。</small>}</div>;

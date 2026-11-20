@@ -26,7 +26,7 @@ export function ImprovementsPage({ token }: { /** 内存管理员会话。 */ to
   const view = params.get("view") === "themes" ? "themes" : params.get("view") === "summary" ? "summary" : "records";
   return <div className="page"><h1>问题与改进</h1><nav className="settings-tabs" aria-label="问题与改进视图">
     {[{ value: "records", label: "问题记录" }, { value: "themes", label: "优化历程" }, { value: "summary", label: "复盘汇总" }].map((item) => <Button key={item.value} className={`repository-editor-tab${view === item.value ? " is-active" : ""}`} aria-pressed={view === item.value} onClick={() => { const next = new URLSearchParams(params); if (item.value !== "records") next.set("view", item.value); else next.delete("view"); setParams(next); }}>{item.label}</Button>)}
-  </nav><Collapse onChange={(keys) => setToolsActive(keys.includes("maintenance"))} className="improvement-tools-collapse" items={[{ key: "maintenance", label: "维护与聊天收件箱（低频工具）", children: <div className="improvement-tools-content"><ImprovementMaintenancePanel token={token} /><ChatCapturePanel token={token} active={toolsActive} /></div> }]} />{view === "themes" ? <ImprovementThemesPanel token={token} /> : view === "summary" ? <ImprovementSummaryPanel token={token} /> : <ImprovementRecords token={token} />}</div>;
+  </nav><Collapse onChange={(keys) => setToolsActive(keys.includes("maintenance"))} className="improvement-tools-collapse" items={[{ key: "maintenance", label: "维护与聊天收件箱", children: <div className="improvement-tools-content"><ImprovementMaintenancePanel token={token} /><ChatCapturePanel token={token} active={toolsActive} /></div> }]} />{view === "themes" ? <ImprovementThemesPanel token={token} /> : view === "summary" ? <ImprovementSummaryPanel token={token} /> : <ImprovementRecords token={token} />}</div>;
 }
 
 function ImprovementRecords({ token }: { token: string }) {
@@ -47,10 +47,9 @@ function ImprovementRecords({ token }: { token: string }) {
     if (key !== "page") next.delete("page");
     setParams(next);
   }
-  return <div><div className="improvement-records-heading"><p>记录平台问题、解决过程与阶段性改进，不是 OCR 发现的问题列表</p><Button type="primary" onClick={() => { setFeedback(""); setAdding(true); }}><Plus size={17} />新增记录</Button></div>
+  return <div><div className="improvement-records-heading"><h2>平台问题记录</h2><Button type="primary" onClick={() => { setFeedback(""); setAdding(true); }}><Plus size={17} />新增记录</Button></div>
     <section className="list-surface">
       <ListStatusNav value={params.get("status") ?? "all"} labels={{ all: "全部", ...progressLabels }} counts={records.error ? undefined : records.data?.status_counts} onChange={(value) => filter("status", value)} />
-      <p className="muted">代码已修改、本地验证通过、部署已生效分别记录。未解决的问题也可先保存排查进展。</p>
       <ListToolbar advanced={<>
         <SelectField label="记录类型" value={params.get("kind") ?? "all"} onValueChange={(value) => filter("kind", value)} options={[{ value: "all", label: "全部" }, ...Object.entries(kindLabels).map(([value, label]) => ({ value, label }))]} />
         <SelectField label="分类" value={params.get("category") ?? "all"} onValueChange={(value) => filter("category", value)} options={[{ value: "all", label: "全部" }, ...Object.entries(categoryLabels).map(([value, label]) => ({ value, label }))]} />

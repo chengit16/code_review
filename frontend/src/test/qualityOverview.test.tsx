@@ -61,13 +61,15 @@ it("旧接口明确缺失，不以历史处置补反馈计数", () => {
   expect(screen.queryByText("问题状态")).not.toBeInTheDocument();
 });
 
-it("四类占比使用全部有效发现作分母，包含未评价并保留一位小数", () => {
+it("四类占比使用全部有效发现作分母，口径按需展开且保留一位小数", async () => {
   show(<QualityOverview data={{ ...data, quality: { ...quality, summary: { total: 78, helpful: 35, false_positive: 16, ignored: 19, unmarked: 8 } } }} days={7} repositoryId="1" />);
   const feedback = screen.getByRole("region", { name: "评审反馈" });
   expect(within(feedback).getAllByRole("definition").map((entry) => entry.textContent)).toEqual([
     "35条占 44.9%", "16条占 20.5%", "19条占 24.4%", "8条占 10.3%",
   ]);
-  expect(screen.getByText(/全部 78 条有效发现为分母（含未评价）/)).toBeVisible();
+  expect(screen.queryByText(/全部 78 条有效发现为分母（含未评价）/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "反馈统计口径" }));
+  await waitFor(() => expect(screen.getByText(/全部 78 条有效发现为分母（含未评价）/)).toBeVisible());
 });
 
 it("零样本占比保持未定义，有样本但该类为零时显示零占比", () => {

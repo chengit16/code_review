@@ -44,7 +44,7 @@ export function SystemSettingsPage({ token }: {
   const tab = tabs.find((item) => item.id === params.get("tab"))?.id ?? "model";
 
   return <div className="page system-settings-page">
-    <PageHeader title="系统设置" subtitle="集中管理共用模型、通知、规则与访问权限" actions={<RouteButton to="/onboarding">接入帮助</RouteButton>} />
+    <PageHeader title="系统设置" actions={<RouteButton to="/onboarding">接入帮助</RouteButton>} />
     <div className="settings-tabs" role="tablist" aria-label="系统设置分类">
       {tabs.map((item) => {
         const target = new URLSearchParams(params);

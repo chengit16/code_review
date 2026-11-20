@@ -29,7 +29,7 @@ export function ImprovementActivity({ days }: {
   }), { records: 0, recordUpdates: 0, themes: 0, themeUpdates: 0 });
   return <section className="section" aria-label="窗口内活动"><h3>窗口内活动</h3>
     <p>新增记录 {totals.records} 条 · 记录追加进展 {totals.recordUpdates} 次 · 新增主题 {totals.themes} 个 · 主题追加进展 {totals.themeUpdates} 次</p>
-    <p className="muted">绿色为新增记录与主题，棕色为追加进展。追加次数包含归档与恢复；一次保存不是解决一次；初始版本不重复计为追加。分类按当前归属统计，不是历史分类回放。</p>
+    <div className="summary-activity-legend" aria-label="活动图例"><span><i />新增</span><span><i className="summary-legend-updates" />追加进展</span></div>
     <div className="summary-chart-scroll" tabIndex={0} role="region" aria-label="活动柱图，可横向滚动">
       <div className="summary-activity-chart" style={{ minWidth: Math.max(280, days.length * 8) }} role="img" aria-label={`按日活动柱图，共 ${days.length} 天；精确数值见逐日活动明细表`}>
         {days.map((day) => <div className="summary-day" key={day.date} title={`${day.date}：新增 ${day.records_created + day.themes_created}，追加 ${day.record_updates + day.theme_updates}`}>

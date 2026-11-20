@@ -136,6 +136,14 @@ describe("发现描述分区", () => {
     expect(content).toContain("。建议删除");
   });
 
+  it("保留 Agent 影响字段中同句建议的并列分句", () => {
+    expect(presentFindingContent("实际后果：列表为空。建议检查组织是否就绪；对缺少映射的组织提供提示。", { keepSuggestionClauses: true }))
+      .toEqual([
+        { label: "实际后果", content: "列表为空。" },
+        { label: "修复建议", content: "建议检查组织是否就绪；对缺少映射的组织提供提示。" },
+      ]);
+  });
+
   it("括号标签及冒号别名均兼容，建议集中且只出现一个标题", () => {
     const content = "【触发条件】用户点击确认。【代码依据】`done()` 提前执行。【实际后果】内容丢失。【建议】等待保存完成。\n补充：回调重复，建议抽取公共方法。";
     const sections = presentFindingContent(content);

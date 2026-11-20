@@ -74,7 +74,7 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
     && entry.source_attempt === current?.current_source_attempt);
   return <section id="job-agent-comparison" className="job-detail-region agent-comparison" aria-labelledby="job-agent-comparison-title">
     <div className="agent-comparison-main-heading">
-      <div><h2 id="job-agent-comparison-title">双评审对比</h2><p>阿里 OCR 初审与自建 Agent</p></div>
+      <div><h2 id="job-agent-comparison-title">双评审对比</h2></div>
       {canEdit && current && <Space wrap>
         {current.pilot.enabled && <Button type="primary" disabled={!canRun} onClick={() => {
           if (current.current_source_attempt === null) return;
@@ -97,12 +97,15 @@ export function AgentComparisonPanel({ token, jobId, canEdit }: { token: string;
       <a href="#job-result">查看 OCR 初审发现</a>
     </div>}
     {selected !== null && <>
-      <div className="agent-comparison-controls">
-        <Select aria-label="比较版本" className="agent-version-select" popupMatchSelectWidth={false} value={selected}
-          options={options} onChange={(id) => selectComparison(id)} />
+      <div className="agent-comparison-controls agent-comparison-version">
+        <div className="agent-version-field">
+          <label htmlFor="agent-comparison-version">比较版本</label>
+          <Select id="agent-comparison-version" className="agent-version-select" value={selected}
+            options={options} onChange={(id) => selectComparison(id)} />
+        </div>
         <div className="agent-history-actions">
           {index.hasNextPage && <Button size="small" loading={index.isFetchingNextPage} onClick={() => void index.fetchNextPage()}>加载更早版本</Button>}
-          {!selectedLoaded && runs.length > 0 && <Button size="small" onClick={() => selectComparison(null)}>回到最新比较</Button>}
+          {runs[0] && selected !== runs[0].id && <Button size="small" onClick={() => selectComparison(null)}>回到最新比较</Button>}
         </div>
       </div>
       {canEdit && current?.unavailable_reason && <p className="agent-comparison-reason">{current.unavailable_reason}</p>}

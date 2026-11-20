@@ -1,6 +1,5 @@
 /* 首批工作台只定义布局；Ant Design 内部控件样式由主题管理。 */
 .operations-page { min-width: 0; }
-.operations-received { color: var(--color-muted); font-size: 12px; margin: 14px 0 0; }
 .operations-page h2 { margin: 0 0 12px; font-size: 17px; }
 .operations-caption, .operations-summary small { color: var(--color-muted); font-size: 12px; line-height: 1.7; }
 .operations-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 4px 0 16px; }
@@ -25,6 +24,8 @@
 .operations-capacity-facts dd { margin: 4px 0 0; font-size: 20px; color: var(--color-ink); }
 .operations-extra { margin-top: 16px; }
 .operations-maintenance, .operations-alerts-section { display: grid; gap: 16px; }
+.operations-deployment .ant-descriptions-item-label, .operations-deployment .ant-descriptions-item-content { white-space: normal; overflow-wrap: anywhere; }
+.operations-deployment p { overflow-wrap: anywhere; }
 .operations-maintenance .operation-facts { margin-top: 0; }
 .operations-maintenance .operation-facts dt { color: var(--color-muted); font-size: 12px; }
 .operations-maintenance .operation-facts dd { margin: 0; font-size: 14px; }

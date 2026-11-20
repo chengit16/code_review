@@ -12506,3 +12506,139 @@
 - 关联文件或证据：frontend/src/pages/agentComparison/AgentWorkflow.tsx、frontend/e2e/agentCapabilities.spec.ts、.local-data/backups/agent-run-detail-20261120 下的 `deploy.json`、`browser-live.jsonl` 和运行详情截图。
 - 遗留与下一步：现有记录的逐动作时间未保存，页面按已记录顺序呈现；本轮无其他未完成的展示改动。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-003｜受理：重新设计双评审发现证据抽屉
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已受理，开始核对两路发现的字段和现有布局。
+- 关联记录：PI-20261120-001、PI-20261120-002。
+- 现象或目标：统一优化阿里 OCR 和自建 Agent 的证据详情。Agent 的多段代码目前把问题说明和影响推到页面下方；OCR 抽屉的分类标题和位置也需更清晰。
+- 原因或分析：截图中两路共用抽屉标题，但正文、版本位置和代码材料的优先级不一致。
+- 处理与改进：对照实际数据重新组织问题摘要和证据，保留固定版本与人工裁定入口。
+- 代码修改：仅追加受理记录。
+- 本地验证：`git status --short --branch` 确认工作区起点，功能检查待执行。
+- 部署生效：本轮尚未部署。
+- 关联文件或证据：用户提供的两张双评审发现截图、PI-20261120-001。
+- 遗留与下一步：读取两路展示和现有 Markdown 处理，完成布局及本机浏览器复验。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261120-003｜双评审证据抽屉已在本机生效
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：阿里 OCR 与自建 Agent 的证据抽屉已重新设计，并用两张截图对应的真实发现复验。
+- 关联记录：本编号受理记录、PI-20261120-001、PI-20261120-002。
+- 现象或目标：打开证据时先核对问题、位置与后果，再按需查阅代码和补查资料，保留人工裁定入口。
+- 原因或分析：旧抽屉依次平铺代码和能力摘录，Agent 的正文易被推离首屏，OCR 的左侧编号与标题压缩了正文宽度。实际样本还包含同一句修复建议的多个分句，需一并呈现。
+- 处理与改进：两路共用来源与固定版本摘要、全宽问题正文和证据区。OCR 展示中文分类，Agent 展示已报告严重级别。代码依据与补查摘录默认折叠，展开可滚动、复制代码并核对引用位置。保留裁定及备注，键盘关闭可回到原入口。
+- 代码修改：新增 `ComparisonFindingDrawer.tsx` 和抽屉样式，复用安全 Markdown、代码块和能力状态渲染，调整影响字段建议分句并补充回归检查。后端、数据库结构及评审结果无变更。
+- 本地验证：`npm --prefix frontend run lint`、`npm --prefix frontend test`（285 项）、`npm --prefix frontend run build -- --outDir /tmp/open-code-review-finding-drawer-20261120 --emptyOutDir`、`git diff --check` 均通过。启用双评审隔离夹具的 `playwright test agentComparison.spec.ts` 通过 2 项，覆盖历史、裁定、单侧重跑、键盘关闭和焦点复位。预览与发布后通过 `node /tmp/ocr-comparison-finding-drawer-20261120.cjs` 实测 #622/24 和 #476/21，覆盖定位、建议分区、折叠、补查引用、代码复制与 320/390 像素窄屏。
+- 部署生效：`.venv/bin/python /tmp/ocr-comparison-finding-deploy-20261120.py` 备份本机前端入口，复制带指纹资源并原子替换入口。8781 和 8000 均返回新构建，健康检查通过，Worker 持续运行。真实样本浏览器验证只开放同源读取。
+- 关联文件或证据：`frontend/src/pages/agentComparison/ComparisonFindingDrawer.tsx`、`frontend/e2e/agentComparison.spec.ts`、`.local-data/backups/comparison-finding-drawer-20261120` 内的 `deploy.json`、`browser-live.jsonl` 与截图。
+- 遗留与下一步：布局变更已完成，本轮发布范围为本机。OCR 历史发现按已有分类和正文呈现。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-004｜受理：检查并优化自建 Agent 页面
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已受理，开始核对自建 Agent 的操作路径和界面布局。
+- 关联记录：PI-20261120-001、PI-20261120-002、PI-20261120-003。
+- 现象或目标：从日常评审与设置的角度发现剩余页面问题，直接完成有依据的布局与交互优化。
+- 原因或分析：此前已调整运行详情和单条发现抽屉，本轮需要检查任务对比入口、能力管理及项目设置的整体阅读与操作路径。
+- 处理与改进：查看当前布局、真实与隔离样本，确认问题后修改并复验。
+- 代码修改：仅追加受理记录，工作区包含前一轮改动。
+- 本地验证：`git status --short --branch` 已检查起点，本轮功能检查待执行。
+- 部署生效：本轮尚未部署。
+- 关联文件或证据：`frontend/src/pages/agentComparison`、`frontend/src/pages/agentCapabilities`。
+- 遗留与下一步：检查页面与窄屏行为，完成修正和本机验证。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261120-004｜自建 Agent 页面布局已优化并在本机生效
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：双评审对比、运行详情、方案管理和项目配置的布局及交互已调整，完成本机复验。
+- 关联记录：本编号受理记录、PI-20261120-002、PI-20261120-003。
+- 现象或目标：让评审者更快并排核对发现、找到证据，管理员可直接判断仓库实际使用的方案和模型。
+- 原因或分析：真实任务 #476/21 的两路发现被不同高度的用量及运行按钮错开。同一文件的完整路径在组内重复。390 像素视口的方案流程溢出容器 35 像素，能力证据的宽表需横向滚动。项目当前方案和模型在表单底部。
+- 处理与改进：对比卡对齐发现起点并按文件分组，收合用量与覆盖明细，明确标记未匹配发现和回到最新比较的入口。运行详情拆分工作流程与能力证据，采用可换行条目、分页和摘录筛选。方案流程可换行，试跑命中表整合为文件与能力两列，Skill 检查步骤默认折叠，能力子页可在刷新后恢复。项目前置当前配置和待保存摘要，区分试点即将开启与已启用。
+- 代码修改：调整 `frontend/src/pages/agentComparison`、`frontend/src/pages/agentCapabilities` 及双评审、能力管理端到端用例。本轮变更为前端布局和交互。
+- 本地验证：`npm --prefix frontend run lint`、`npm --prefix frontend test`（285 项）、`npm --prefix frontend run build -- --outDir /tmp/open-code-review-agent-ui-20261120 --emptyOutDir`、`git diff --check` 通过。`OCR_BROWSER_AGENT_COMPARISON=1` 下 `playwright test agentComparison.spec.ts` 通过 2 项；同时启用 `OCR_BROWSER_AGENT_PILOT=1 OCR_BROWSER_AGENT_CAPABILITIES=1` 后 `playwright test agentCapabilities.spec.ts` 通过 1 项，覆盖 Skill 创建、方案复制与发布、试跑、项目保存及重新进入子页。
+- 部署生效：`.venv/bin/python /tmp/ocr-agent-ui-deploy-20261120.py` 备份原入口后切换本机静态资源。8781、8000 返回新入口，健康检查通过，Worker 持续运行。`OCR_AGENT_AUDIT_MODE=live node /tmp/ocr-agent-ui-audit-20261120.cjs` 以同源只读请求检查真实 #476/21、项目配置及能力目录，在 1440、390、320 像素宽度均未发现区域横向溢出；MCP 已登记状态采用浏览器合成数据复验。
+- 关联文件或证据：`.local-data/backups/agent-ui-audit-20261120` 内的 `deploy.json`、`browser-live.jsonl` 和改动前后截图。
+- 遗留与下一步：本机目录没有已登记的 MCP 服务，真实连接仍待具备服务条件后联调。本轮发布范围为本机。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-004｜发布复验：修正项目配置双栏间距
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：发布后的截图复核发现项目配置双栏缺少间距，已修正并复验。
+- 关联记录：本编号布局完成记录。
+- 现象或目标：当前配置摘要和编辑表单在桌面双栏中相贴，需要恢复可辨识的间距。
+- 原因或分析：项目配置使用了未定义的间距变量，浏览器将网格间距按默认值处理。对比区和运行抽屉另有未定义的文本颜色变量。
+- 处理与改进：改用已有的 16 像素间距和正文颜色，保持移动端单列排布。
+- 代码修改：仅修改 `agentCapabilities.css` 与 `agentComparison.css` 的变量引用。
+- 本地验证：`npm --prefix frontend run build -- --outDir /tmp/open-code-review-agent-ui-20261120 --emptyOutDir`、`git diff --check` 通过。沿用本编号已通过的前端与端到端检查，本次样式微调通过浏览器复验。
+- 部署生效：`.venv/bin/python /tmp/ocr-agent-ui-deploy-20261120.py` 更新本机入口并通过 8781、8000 健康核对。`OCR_AGENT_AUDIT_MODE=final node /tmp/ocr-agent-ui-audit-20261120.cjs` 复测 1440、390、320 像素的实际页面、能力证据展开和合成 MCP 卡片，项目配置的计算间距为 16 像素，检查区域无横向溢出。
+- 关联文件或证据：`.local-data/backups/agent-ui-audit-20261120` 内的 `deploy-spacing.json`、`browser-final.jsonl` 与 `final-*` 截图。
+- 遗留与下一步：样式问题已解决，真实 MCP 联调条件见本编号上一条记录。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-005｜受理：全站精简辅助标签与说明
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已受理，开始排查。
+- 关联记录：PI-20261120-004。
+- 现象或目标：用户指出项目总览及其他页面存在过多辅助说明，要求把“避免不必要的辅助标签与说明，让布局本身发挥解释说明，多花心思在 UI 和交互上”写入全局并全站排查处理。
+- 原因或分析：截图中标题副文案、指标脚注、读取成功时间和统计解释重复占据主要阅读区域，具体影响范围待逐页核对。
+- 处理与改进：先登记本事项，再核对全局与项目前端规范、页面结构和自动化验证入口；保留必要的风险、错误与操作前提。
+- 代码修改：仅追加受理记录；工作区已有上一轮 Agent 页面等未提交改动，不归入本轮新增结论。
+- 本地验证：已执行 `git status --short`、读取项目约定与前端规范；本轮功能检查尚未运行。
+- 部署生效：尚未部署。
+- 关联文件或证据：用户提供的项目总览截图、`AGENTS.md`、`docs/governance/frontend-code-standards.md`。
+- 遗留与下一步：补充全局约定，完成全站冗余说明排查、针对性修改和桌面／窄屏验证，再核对台账同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261120-005｜进展：全局原则和全站精简已完成，浏览器回归中
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：代码修改完成，继续浏览器验证。
+- 关联记录：本编号受理记录、PI-20261120-004。
+- 现象或目标：移除重复标题、常驻读取成功时间、指标脚注和实现解释，保留可操作的界面层级。
+- 原因或分析：静态副标题与控件、表头重复；总览的统计口径、图例和时间多次重复。刷新失败仍需显示缓存时间，费用、危险操作与覆盖缺失仍需就地提示。
+- 处理与改进：新增用户全局 `~/.codex/AGENTS.md` 原则，补充项目约定和前端规范；精简各页面标题与辅助文案，总览、质量分组、配置优先级和复盘口径按需展开，保留图表日期、反馈、失败恢复和草稿保护。
+- 代码修改：前端页面、样式与对应测试已修改；不修改后端或业务记录。工作区原有 Agent 改动继续保留。
+- 本地验证：`npm --prefix frontend run lint`、`npm --prefix frontend test`（46 文件／285 项）及 `npm --prefix frontend run build -- --outDir /tmp/open-code-review-ui-copy-20261120 --emptyOutDir` 已通过；构建仍有大于 500 kB 的既有包体积提示。`git diff --check` 通过，Impeccable `detect --json` 返回空数组。`OCR_UI_COPY_DIST=/tmp/open-code-review-ui-copy-20261120 node /tmp/ocr-ui-copy-browser-20261120.cjs` 以同源只读请求检查十类真实页面在 1440、390、320 像素下的预览，均无页面横向溢出。72 项隔离 Playwright 正在运行，已发现清理确认结束时页面宽度的时序断言失败，需核对。
+- 部署生效：尚未切换本机前端入口，当前仅隔离构建和预览。
+- 关联文件或证据：`.local-data/backups/ui-copy-cleanup-20261120` 中的改动前截图、`browser-preview.jsonl` 和预览截图；`/tmp/ocr-ui-copy-*-20261120.log`。
+- 遗留与下一步：定位浏览器断言，完成回归和最终截图核对，按实际发布结果追加记录。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"modified","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261120-005｜全站辅助说明已精简并在本机生效
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：全局原则已持久化，全站精简及本机发布复验完成。
+- 关联记录：本编号受理与进展记录、PI-20261120-004。
+- 现象或目标：以标题、分组、对齐、控件名称与状态解释常用操作，移除重复副标题、标签、指标脚注和面向实现者的常驻说明。
+- 原因或分析：此前阶段记录中的清理确认宽度失败，进一步定位为维护页部署配置把长说明拼接在数值后导致 320 像素页面溢出，已修正。另有旧浏览器用例仍使用统一任务页迁移前的路由、按钮或详情入口定位，本轮按实际行为更新并保留失败、只读恢复和关联可逆验证。
+- 处理与改进：原则写入 `~/.codex/AGENTS.md`、项目 `AGENTS.md` 和前端规范；精简总览、任务、发现、项目配置、系统设置、运行监控、改进记录及复盘等页面。统计口径、配置来源、优先级和进阶帮助按需展开；费用、真实消息、危险操作、草稿、数据缺失和失败缓存时间提示保留。维护页数值与说明分离，内容在窄屏可换行。
+- 代码修改：本轮修改前端文案、对应布局、局部样式及回归用例，新增 `frontend/e2e/uiClarity.spec.ts`。保留本轮开始前的 Agent 页面等未提交改动，不将其计入本轮新增；未修改后端、数据库结构或业务评审记录。
+- 本地验证：`npm --prefix frontend run lint`、`npm --prefix frontend test`（46 文件／285 项）、`npm --prefix frontend run build -- --outDir /tmp/open-code-review-ui-copy-20261120 --emptyOutDir`、`git diff --check` 通过。构建仍有既有大于 500 kB 的资源体积提示。此前 Impeccable `detect --json` 返回空数组，仅作为机械检查结果。
+- 本地验证补充：在 `frontend` 执行 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' OCR_BROWSER_FRONTEND_DIST=/tmp/open-code-review-ui-copy-20261120 npx playwright test e2e/uiClarity.spec.ts e2e/overview.spec.ts e2e/qualityTrendTooltip.spec.ts e2e/navigation.spec.ts e2e/publicationSettings.spec.ts e2e/configurationPolish.spec.ts e2e/setupSimplification.spec.ts e2e/operations.spec.ts e2e/ux.spec.ts e2e/improvementSummary.spec.ts e2e/rulesLayout.spec.ts e2e/reviewFindings.spec.ts --output /tmp/ocr-ui-copy-e2e-final-20261120`，72 项中 70 项通过，另 2 项分别为首次导航超时和旧恢复按钮定位；随后执行同环境 `npx playwright test e2e/publicationSettings.spec.ts e2e/ux.spec.ts e2e/uiClarity.spec.ts e2e/improvementMaintenance.spec.ts --output /tmp/ocr-ui-copy-e2e-recheck-20261120`，16 项全部通过。启用独立合成聊天夹具 `OCR_BROWSER_CHAT_CAPTURE=1` 后执行 `npx playwright test e2e/chatCapture.spec.ts --output /tmp/ocr-ui-copy-chat-final-20261120`，4 项通过，覆盖健康与失败、320 像素布局、关联与解除关联、暂停恢复及折叠停止轮询；不读取或绑定真实聊天。
+- 部署生效：`.venv/bin/python /tmp/ocr-ui-copy-deploy-20261120.py` 备份原入口、复制带指纹静态资源并原子切换本机前端入口。8781、8000 均返回本轮构建，健康检查 `status=ok`、`worker=running`；未重启 API、Worker 或 monitor。随后 `node /tmp/ocr-ui-copy-browser-20261120.cjs` 只允许本机同源 GET／HEAD，复验 1440、390、320 像素共 36 个页面／展开状态，均无页面横向溢出，同时检查折叠帮助及趋势键盘提示。发布前同范围隔离构建预览亦通过。
+- 关联文件或证据：`frontend/src/pages/OverviewPage.tsx`、`frontend/src/pages/operations/DeploymentSummary.tsx`、`frontend/e2e/uiClarity.spec.ts`；`.local-data/backups/ui-copy-cleanup-20261120` 内的 `deploy.json`、`browser-preview.jsonl`、`browser-live.jsonl` 及改动前后截图；`/tmp/ocr-ui-copy-*-20261120.log`。
+- 遗留与下一步：本轮发布范围为本机，刷新页面可查看；现有包体积提示未在本事项扩展处理。本条追加后等待既有 monitor 自然同步，并运行 `PYTHONPATH=backend .venv/bin/python -m ocr_manager.improvement_log_check --database .local-data/local/app.db --source-id PI-20261120-005 --minimum-entries 3` 核对来源与页面，不据自动采集推断语义零遗漏。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-005｜续办：准备将已验证的前端改动推送远程
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已受理远程推送，待核对目标分支与提交范围。
+- 关联记录：PI-20261120-003、PI-20261120-004、本编号完成记录。
+- 现象或目标：用户要求将本机前端改动推送到项目现有 Git 远程。
+- 原因或分析：本机前端已发布，源码改动仍在工作区；本地 `master` 追踪 `origin/main`。
+- 处理与改进：核对远程分支、文件范围和补丁，提交并执行常规推送，随后核对远程提交。
+- 代码修改：仅追加本条；待提交工作区包含自建 Agent 页面、双评审证据抽屉及全站辅助说明精简。
+- 本地验证：`git status --short --branch` 与 `git log -6 --oneline --decorate` 已核对本地状态，功能验证沿用上述已执行记录。
+- 部署生效：既有本机前端已生效；远程源码推送待执行，远程应用部署尚未确认。
+- 关联文件或证据：`AGENTS.md`、前端规范、`frontend/src`、`frontend/e2e`。
+- 遗留与下一步：核查补丁与远程分支后提交、推送并验证远程分支引用。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

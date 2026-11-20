@@ -22,14 +22,14 @@ export function ReviewEffectivenessSection({ data, days, repositoryId }: {
   const counts = quality?.summary;
   return <section className="overview-analytics" aria-label="项目数据">
     <section className="overview-kpis" aria-label="项目核心指标">
-      <div><span>本期评审数</span><strong>{summary.reviews}</strong><small>次终态评审 · 近 {days} 天</small></div>
-      <div><span>本期发现</span><strong>{counts?.total ?? "—"}</strong><small>当前有效发现 · 同一窗口</small></div>
-      <div><span>待反馈发现</span>{quality && counts ? <Link to={qualitySampleHref(params, quality, { handling: "pending" })} aria-label={`查看待反馈 ${counts.unmarked} 条发现`}><strong>{counts.unmarked}</strong></Link> : "—"}<small>本期未评价发现</small></div>
-      <div><span>已处理发现</span><strong>{counts ? counts.total - counts.unmarked : "—"}</strong><small>已有帮助、误报或忽略反馈</small></div>
+      <div><span>本期评审数</span><strong>{summary.reviews}</strong></div>
+      <div><span>本期发现</span><strong>{counts?.total ?? "—"}</strong></div>
+      <div><span>待反馈发现</span>{quality && counts ? <Link to={qualitySampleHref(params, quality, { handling: "pending" })} aria-label={`查看待反馈 ${counts.unmarked} 条发现`}><strong>{counts.unmarked}</strong></Link> : "—"}</div>
+      <div><span>已处理发现</span><strong>{counts ? counts.total - counts.unmarked : "—"}</strong></div>
     </section>
     <QualityOverview data={data} days={days} repositoryId={repositoryId} />
     <Collapse items={[{ key: "diagnostics", label: "展开问题诊断", children: <>     <section className="overview-diagnostics" aria-labelledby="overview-diagnosis-title">
-      <div className="overview-diagnosis-heading"><h2 id="overview-diagnosis-title">问题诊断</h2><p>查看同一窗口内待反馈发现与反馈构成。</p></div>
+      <div className="overview-diagnosis-heading"><h2 id="overview-diagnosis-title">问题诊断</h2></div>
       <div className="overview-diagnosis-grid"><ProblemDistributions kind="severity" data={data} repositoryId={repositoryId} />
         <QualityBreakdown quality={data.quality} /></div>
     </section>

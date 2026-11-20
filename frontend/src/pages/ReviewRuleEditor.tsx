@@ -36,10 +36,10 @@ export function ReviewRuleEditor({ value, includeText, excludeText, scopeName, c
   return <form className="rules-editor-form" onSubmit={onSubmit}>
     <div className="rules-editor-grid">
       <section className="rules-editor-main" aria-label="规则条目编辑">
-        <div className="rules-section-heading"><div><h3>规则条目 <Tag>{value.rules.length}</Tag></h3><p>按顺序维护文件匹配模式和审核要求</p></div>
+        <div className="rules-section-heading"><div><h3>规则条目 <Tag>{value.rules.length}</Tag></h3></div>
           <Button icon={<Plus size={16} />} disabled={busy} onClick={() => onChange({ ...value, rules: [...value.rules, { path: "", rule: "", merge_system_rule: true }] })}>添加规则</Button>
         </div>
-        {value.rules.length === 0 && <div className="rules-editor-empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前范围尚无自定义条目" /><p>添加规则，或在路径过滤中设置文件范围。</p></div>}
+        {value.rules.length === 0 && <div className="rules-editor-empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前范围尚无自定义条目" /></div>}
         <div className="rules-editor-list">{value.rules.map((entry, index) => <article className="rules-entry" aria-label={`规则 ${index + 1}`} key={index}>
           <header className="rules-entry-heading"><strong>规则 {index + 1}</strong><div className="rules-entry-actions">
             <Button type="text" icon={<ArrowUp size={16} />} aria-label={`上移规则 ${index + 1}`} title="上移规则" disabled={busy || index === 0} onClick={() => move(index, -1)} />
@@ -55,7 +55,6 @@ export function ReviewRuleEditor({ value, includeText, excludeText, scopeName, c
         <div className="rules-section-heading"><div><h3>路径过滤</h3><p>每行一个路径模式</p></div></div>
         <div className="rules-path-field"><label htmlFor={`${fieldId}-include`}>额外纳入的路径</label><Input.TextArea id={`${fieldId}-include`} autoSize={{ minRows: 3, maxRows: 8 }} value={includeText} disabled={busy} onChange={(event) => onIncludeChange(event.target.value)} placeholder="**/*.test.ts" /></div>
         <div className="rules-path-field"><label htmlFor={`${fieldId}-exclude`}>排除的路径</label><Input.TextArea id={`${fieldId}-exclude`} autoSize={{ minRows: 5, maxRows: 10 }} value={excludeText} disabled={busy} onChange={(event) => onExcludeChange(event.target.value)} placeholder={"**/node_modules/**\n**/dist/**\n**/generated/**"} /></div>
-        <p className="rules-path-note">规则条目和路径过滤将一并保存到当前配置范围。</p>
       </aside>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}

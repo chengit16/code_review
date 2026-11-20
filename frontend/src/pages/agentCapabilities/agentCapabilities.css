@@ -1,16 +1,86 @@
+/* 方案摘要、编排和项目配置共用可换行的流程与事实区。 */
+.agent-settings-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.agent-settings-list-heading,
 .agent-scheme-toolbar,
 .agent-workflow-order,
 .agent-capability-grants li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
-.agent-scheme-select {
-  min-width: min(100%, 16rem);
-  max-width: 100%;
+.agent-settings-list-heading, .agent-scheme-toolbar { justify-content: space-between; }
+.agent-settings-list-heading > span:not(.ant-tag) { color: var(--color-muted); font-size: 13px; }
+.agent-scheme-toolbar { align-items: end; }
+.agent-scheme-picker { display: grid; gap: var(--space-1); flex: 1 1 220px; min-width: 0; max-width: 460px; }
+.agent-scheme-picker label { color: var(--color-muted); font-size: 12px; }
+.agent-scheme-select { width: 100%; min-width: 0; }
+.agent-scheme-toolbar-actions { max-width: 100%; }
+.agent-scheme-card, .agent-skill-card, .agent-mcp-service, .agent-trial, .agent-project-effective { overflow-wrap: anywhere; }
+.agent-skill-card .ant-tag, .agent-mcp-service .ant-tag { max-width: 100%; white-space: normal; }
+.agent-scheme-card .ant-card-head-title, .agent-skill-card .ant-card-head-title, .agent-mcp-service .ant-card-head-title {
+  padding-block: var(--space-2);
+  white-space: normal;
 }
+
+.agent-scheme-flow h3, .agent-project-effective h3 { margin: 0; font-size: 14px; }
+.agent-scheme-flow, .agent-project-effective {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-control);
+}
+.agent-step-sequence {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.agent-step-sequence li { color: var(--color-ink); max-width: 100%; }
+.agent-step-sequence li:not(:last-child)::after {
+  content: "→" / "";
+  margin-inline-start: var(--space-2);
+  color: var(--color-muted);
+}
+.agent-scheme-facts, .agent-scheme-capabilities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+.agent-scheme-facts dt, .agent-scheme-capabilities span { color: var(--color-muted); font-size: 12px; }
+.agent-scheme-facts dd, .agent-scheme-capabilities strong { display: block; margin: var(--space-1) 0 0; font-size: 13px; }
+.agent-scheme-capabilities {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.agent-scheme-capabilities ul, .agent-trial-hits { margin: var(--space-1) 0 0; padding-inline-start: 0; list-style: none; }
+.agent-scheme-capabilities li + li, .agent-trial-hits li + li { margin-top: var(--space-1); }
+.agent-trial .ant-alert, .agent-trial .ant-table-wrapper, .agent-mcp-service .ant-alert { margin-block-start: var(--space-3); }
+.agent-project-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+.agent-project-effective { border: 1px solid var(--color-border); }
+.agent-project-effective p, .agent-project-effective .agent-scheme-facts { margin: 0; }
+.agent-project-effective .agent-scheme-facts { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.agent-project-effective p { font-weight: 600; }
+.agent-project-effective .ant-tag { margin-inline-end: 0; }
 
 .agent-workflow-order {
   margin-block-end: 16px;
@@ -32,5 +102,11 @@
 }
 
 .agent-skill-body {
+  margin: 0;
   white-space: pre-wrap;
+}
+
+@media (max-width: 620px) {
+  .agent-project-layout, .agent-scheme-capabilities { grid-template-columns: minmax(0, 1fr); }
+  .agent-scheme-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

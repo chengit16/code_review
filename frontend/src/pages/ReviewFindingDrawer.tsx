@@ -38,7 +38,6 @@ export function ReviewFindingDrawer({ token, findingId, canEdit, onClose }: {
       <p>来源尝试 {finding.source_attempt} · 版本 {finding.revision} · <code>{finding.finding_id}</code></p>
       <FindingDescription content={finding.content} />
       {canEdit && <FindingActions index={0} marked={finding.feedback === "unmarked" ? undefined : finding.feedback} canSubmit={!feedback.isPending && !feedback.error && !query.isFetching && !query.error} onFeedback={(_, verdict) => feedback.mutate({ ...finding, verdict })} />}
-      <p>有帮助、误报或忽略均表示已处理；再次点击当前反馈可撤销。已处理不代表代码已修复。</p>
       {finding.issue_id && <p><Link to={`/issues?issue=${finding.issue_id}&status=all`}>查看原问题 #{finding.issue_id} 的修复记录与跨任务历史</Link></p>}
     </>}
   </Drawer>;
