@@ -12642,3 +12642,18 @@
 - 关联文件或证据：`AGENTS.md`、前端规范、`frontend/src`、`frontend/e2e`。
 - 遗留与下一步：核查补丁与远程分支后提交、推送并验证远程分支引用。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-005｜远程 main 已收到前端改动
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已提交并推送远程，读回 `main` 引用确认源码提交。
+- 关联记录：本编号续办记录、PI-20261120-003、PI-20261120-004。
+- 现象或目标：把已在本机验证的界面改动同步至项目现有远程。
+- 原因或分析：Git 直连 GitHub 超时，沿用本机系统代理完成本次远程操作；推送前确认远程 `main` 与本地基线一致。
+- 处理与改进：提交 `fefebdc`，包含全站界面说明精简、自建 Agent 页面优化、双评审证据抽屉、对应测试及仓库内规范；常规快进推送 `HEAD:refs/heads/main` 成功。
+- 代码修改：本轮完成现有改动的源码提交，新增操作记录；无新增应用逻辑。用户级全局规则、私有配置、数据库、截图及本机构建产物均在提交范围之外。
+- 本地验证：`git diff --cached --check` 通过，暂存范围包含 80 个源码、测试与规范台账文件。功能验证沿用本编号及关联事项的实跑记录。
+- 部署生效：`git push origin HEAD:refs/heads/main` 成功，`git ls-remote --exit-code origin refs/heads/main` 返回 `fefebdc5540557b495b4083dc5576e6ee8f19e2c`。源码推送已确认，既有本机前端已生效，未执行或验证远程应用部署。
+- 关联文件或证据：远程 `origin/main` 的提交 `fefebdc`、本机 `git status --short --branch`。
+- 遗留与下一步：将本条验证结果同步至同一远程，按本编号 5 条记录核对本机页面同步。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
