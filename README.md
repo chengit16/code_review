@@ -9,6 +9,7 @@
 - [项目总览](docs/project-overview.md)：功能、架构、目录、业务流程、状态边界和后续维护。
 - [文档索引](docs/README.md)：全部文档的用途、阅读顺序与历史记录说明。
 - [后台配置与接入操作](docs/configuration-guide.md)：模型、飞书、项目、规则、问题处理与账号权限。
+- [图文操作手册](docs/operation-manual.md)：按页面步骤完成首次接入、任务处理、异常恢复和自建 Agent 试点。
 - [本地部署与联调](docs/deployment.md)：依赖安装、API / Worker / monitor、主密钥、备份和恢复。
 - [前端交互回归](docs/frontend-interaction-checks.md)：草稿、批量操作、分页和窄屏布局检查。
 - [项目完善实施路线](docs/implementation-roadmap.md)：四轮优先级、实施进度及后续验收边界。

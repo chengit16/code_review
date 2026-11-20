@@ -12657,3 +12657,46 @@
 - 关联文件或证据：远程 `origin/main` 的提交 `fefebdc`、本机 `git status --short --branch`。
 - 遗留与下一步：将本条验证结果同步至同一远程，按本编号 5 条记录核对本机页面同步。
 - 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-006｜受理：编写图文操作手册
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：使用文档改进，已受理。
+- 关联记录：本编号首次登记。
+- 现象或目标：为项目使用者提供可以对照界面执行的中文步骤与配图。
+- 原因或分析：需从当前前端和项目配置说明核对入口、按钮与结果。
+- 处理与改进：登记任务，计划从接入、查看评审到处理异常按场景编排。
+- 代码修改：仅追加受理记录。
+- 本地验证：尚未运行手册验证。
+- 部署生效：不适用，任务为文档编制。
+- 关联文件或证据：当前会话需求、`docs/configuration-guide.md`。
+- 遗留与下一步：核对工作流、采集演示截图并检查成品。
+
+### PI-20261120-006｜图文操作手册已完成并通过渲染检查
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：使用文档改进，已完成。
+- 关联记录：本编号受理记录。
+- 现象或目标：提供能够按照当前管理台逐步执行的中文操作手册，并附隔离演示截图。
+- 原因或分析：原配置指南信息完整但篇幅较长，缺少按真实页面路径串联的图文入口；截图需避免业务数据与凭据。
+- 处理与改进：新增图文手册，覆盖模型、飞书、GitLab 项目与 Webhook、接入诊断、任务与发现、问题处置、部分结果恢复及自建 Agent；使用临时 SQLite 和合成数据采集 12 张界面图；生成 Word 与 PDF 版本，并补充 README 和文档索引入口。
+- 代码修改：新增 `docs/operation-manual.md`、`docs/assets/operation-manual/` 截图及 `output/manual/` 成品；更新 `README.md`、`docs/README.md` 和本台账。未修改应用逻辑。
+- 本地验证：隔离浏览器服务成功打开全部截图页面；`render_docx.py ... --emit_pdf` 成功渲染 13 页 A4；逐页检查确认中文、截图、表格、分页和边界可读；待运行最终结构与台账检查。
+- 部署生效：不适用，本轮为仓库文档和本地成品，不涉及运行服务部署。
+- 关联文件或证据：`docs/operation-manual.md`、`docs/assets/operation-manual/`、`output/manual/Open-Code-Review-操作手册.docx`、`output/manual/Open-Code-Review-操作手册.pdf`、临时隔离服务 `127.0.0.1:8791`。
+- 遗留与下一步：页面入口或业务语义变化时同步更新手册和截图；真实环境验收仍须按手册执行，不以合成截图代替。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_applicable"}
+
+### PI-20261120-006｜续办：提交并推送图文操作手册
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：用户要求将已完成的手册提交至项目远程，准备推送。
+- 关联记录：本编号受理与手册交付记录。
+- 现象或目标：让远程仓库包含手册源文档、配图、Word 和 PDF 成品及文档入口。
+- 原因或分析：本地 `master` 跟踪 `origin/main`，手册文件尚未提交。
+- 处理与改进：限定提交范围为手册相关文件与台账，不包含本机业务数据或私有配置。
+- 代码修改：仅文档与成品，无应用代码改动。
+- 本地验证：`git status --short --branch` 与 `git branch -vv` 已核对工作区和跟踪关系，待检查暂存范围及远程引用。
+- 部署生效：不适用，本次是文档源码推送；尚未确认远程引用更新。
+- 关联文件或证据：`docs/operation-manual.md`、`docs/assets/operation-manual/`、`output/manual/`。
+- 遗留与下一步：检查暂存差异，正常快进推送并读回远程分支。

@@ -7,10 +7,11 @@
 1. [项目总览](project-overview.md)：了解平台用途、当前功能、目录与架构。
 2. [本地部署与联调](deployment.md)：安装依赖、启动服务、管理主密钥、备份与恢复。
 3. [后台配置与接入操作](configuration-guide.md)：实际配置 GitLab、模型、飞书、审核规则和权限。
-4. [前端交互回归](frontend-interaction-checks.md)：复核近期页面与批量操作改动。
-5. [工程规范采用说明](governance/README.md)：开发前阅读前后端规范及根目录 [AGENTS.md](../AGENTS.md)。
-6. [项目完善实施路线](implementation-roadmap.md)：查看四轮优先级、当前进度与验收边界。
-7. [评审稳定性与耗时优化方案](review-performance-plan.md)：查看失败归因、范围治理、重试预算、耗时展示和分阶段实施规划。
+4. [图文操作手册](operation-manual.md)：按当前界面完成首次接入、评审处理、异常恢复与自建 Agent 试点。
+5. [前端交互回归](frontend-interaction-checks.md)：复核近期页面与批量操作改动。
+6. [工程规范采用说明](governance/README.md)：开发前阅读前后端规范及根目录 [AGENTS.md](../AGENTS.md)。
+7. [项目完善实施路线](implementation-roadmap.md)：查看四轮优先级、当前进度及验收边界。
+8. [评审稳定性与耗时优化方案](review-performance-plan.md)：查看失败归因、范围治理、重试预算、耗时展示和分阶段实施规划。
 
 ## 当前维护文档
 
@@ -18,6 +19,7 @@
 | --- | --- |
 | [项目总览](project-overview.md) | 项目做什么、代码在哪里、业务如何流转、有哪些边界。 |
 | [操作指南](configuration-guide.md) | 页面怎么配置、如何处理误报 / 已修复问题、如何批量处理。 |
+| [图文操作手册](operation-manual.md) | 用当前界面截图串联首次接入、任务阅读、反馈处置、异常恢复和 Agent 试点。 |
 | [部署说明](deployment.md) | API、Worker、monitor、launchd、私有配置、备份和恢复。 |
 | [前端交互回归](frontend-interaction-checks.md) | 测试范围、执行命令、隔离数据和截图产物。 |
 | [运行监控页重设计规划](operations-redesign-plan.md) | 用户已确认的四分区设计、执行槽与并发前置、数据口径及分阶段验收；业务页面待实施。 |
