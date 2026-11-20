@@ -129,7 +129,7 @@ export function ComparisonWorkspace({ comparison, canEdit, onEdit, onCurationVer
         <div className="agent-coverage"><strong>{totals ? `${totals.reviewed}/${totals.total}` : "未知"}</strong> 条差异已核对
           {totals && <span>已交付 {totals.delivered} 条 · 排除 {agent.excluded_paths.length} 个文件</span>}</div>
         <Usage usage={agent.usage} />
-        <CapabilityEvidence agent={agent} />
+        <CapabilityEvidence comparison={comparison} coverage={totals} />
         {agent.reason && agent.reason !== "covered" && <p className="agent-comparison-reason">{reasonLabels[agent.reason] ?? `结束原因：${agent.reason}`}</p>}
         {agent.files && (agent.files.length > 0 || agent.excluded_paths.length > 0) && <Collapse size="small" ghost
           items={[{ key: "scope", label: "查看文件覆盖", children: <ul className="agent-coverage-files">

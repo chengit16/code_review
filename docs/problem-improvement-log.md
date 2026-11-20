@@ -12476,3 +12476,33 @@
 - 关联文件或证据：docs/review-agent-pilot-acceptance-20261119.md、.local-data/backups/agent-capabilities-20261120 下的 `live-611.json`、`live-representative-samples.json`、`live-476-expanded-context.json`、`browser-live-trials.json` 和 `mcp-local-tls.json`。
 - 遗留与下一步：本机尚无已登记的团队 MCP 服务，需取得获准端点、只读工具和所需认证后验证规范引用。四条比较的人工裁定版本均为 0，待核对同根因、成立条件和漏报，再决定是否发布草稿及绑定项目。
 - 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"passed","deployment_state":"confirmed"}
+
+### PI-20261120-002｜受理：优化自建 Agent 配置与执行展示
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：已受理，开始核对展示结构与运行数据。
+- 关联记录：PI-20261120-001。
+- 现象或目标：用户反馈任务详情中的 Agent 配置占用较多空间，逐页执行记录等权平铺，希望参考分析详情截图展示任务状态和工作流程。
+- 原因或分析：当前截图的配置、运行阶段及逐页动作叠放在同一展开区，需要核实可用的阶段、时间和证据字段。
+- 处理与改进：沿用双评审入口和 Ant Design，梳理阶段状态、最近动作及完整证据的浏览方式。
+- 代码修改：仅追加受理记录。
+- 本地验证：`git status --short --branch` 核对工作区，功能检查待执行。
+- 部署生效：本轮尚未部署。
+- 关联文件或证据：用户提供的两张界面截图、PI-20261120-001。
+- 遗留与下一步：读取现有数据契约，完成展示改造及浏览器验证。
+- 同步状态：{"kind":"improvement","category":"experience","status":"investigating","code_state":"unchanged","verification_state":"not_run","deployment_state":"not_deployed"}
+
+### PI-20261120-002｜Agent 运行详情抽屉已在本机生效
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：展示优化已完成，本机页面已发布并实测。
+- 关联记录：本编号受理记录、PI-20261120-001。
+- 现象或目标：让用户快速看清所用方案、运行到哪一步，并可定位某页读取、取证和校验明细。
+- 原因或分析：原展示将配置和逐页动作铺在比较卡片内；长任务会积累上千条动作。已保存的数据包含运行起讫及动作顺序中的登记、结束时间，缺少每个动作的独立时间戳。
+- 处理与改进：增加运行详情抽屉，按方案摘要、任务状态、能力证据和工作流程组织。每页呈现八条归组记录，最近记录在前。点击差异页可查看完整路径及对应动作。阶段仅显示已记录的时间和业务状态，证据仍按原关联查看。
+- 代码修改：更新 `CapabilityEvidence.tsx`、`ComparisonWorkspace.tsx` 和样式，新增 `AgentWorkflow.tsx`，调整隔离浏览器验收并添加下一页定位失败的回归验证。后端和数据库结构无变更。
+- 本地验证：`npm --prefix frontend run lint`、`npm --prefix frontend test`、定向 `npm --prefix frontend test -- src/test/agentWorkflow.test.tsx`、`npm --prefix frontend run build -- --outDir /tmp/open-code-review-agent-run-detail-20261120 --emptyOutDir` 和 `git diff --check` 均通过，前端全量 284 项。隔离 Playwright `test agentCapabilities.spec.ts` 通过，覆盖试跑入口、状态、能力证据和页内校验。
+- 部署生效：备份原入口，先复制带内容指纹的资源，再原子替换 `frontend/dist/index.html`。8781、8000 返回新前端入口，Worker 健康且无需重启。`node /tmp/ocr-agent-run-detail-browser-20261120.cjs` 实测 #626/22 运行中轮询、1159 条原始动作的归组分页，以及 #476/21 已完成状态、证据展开、390 像素抽屉宽度与键盘关闭，未见页面异常。
+- 关联文件或证据：frontend/src/pages/agentComparison/AgentWorkflow.tsx、frontend/e2e/agentCapabilities.spec.ts、.local-data/backups/agent-run-detail-20261120 下的 `deploy.json`、`browser-live.jsonl` 和运行详情截图。
+- 遗留与下一步：现有记录的逐动作时间未保存，页面按已记录顺序呈现；本轮无其他未完成的展示改动。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"confirmed"}

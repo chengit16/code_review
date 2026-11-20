@@ -38,10 +38,15 @@ test("从系统方案管理走到项目试点与双评审证据", async ({ page,
   await page.getByRole("button", { name: "试跑此方案" }).click();
   await page.getByRole("button", { name: "确认试跑" }).click();
   await expect(page).toHaveURL(/\/jobs\/1\?agent_comparison=1/);
-  await page.getByText("查看本次 Agent 配置与执行").click();
-  await expect(page.getByRole("row", { name: /订单重试检查.*orders.py.*命中/ })).toBeVisible();
+  await page.getByRole("button", { name: "查看本次 Agent 配置与执行" }).click();
+  const run = page.getByRole("dialog", { name: "Agent 运行详情" });
+  await expect(run.getByRole("heading", { name: "任务状态" })).toBeVisible();
+  await run.getByRole("button", { name: /能力证据/ }).click();
+  await expect(run.getByRole("row", { name: /订单重试检查.*orders.py.*命中/ })).toBeVisible();
   await expect.poll(async () => (await (await request.get("/api/jobs/1/agent-comparisons/1")).json()).status)
     .toBe("complete");
+  await run.getByRole("button", { name: /orders.py.*已核对/ }).first().click();
+  await expect(run.getByText(/本页已核对，保留/)).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 820 });
   await page.goto("/settings?tab=agent");
