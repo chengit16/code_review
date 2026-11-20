@@ -12700,3 +12700,18 @@
 - 部署生效：不适用，本次是文档源码推送；尚未确认远程引用更新。
 - 关联文件或证据：`docs/operation-manual.md`、`docs/assets/operation-manual/`、`output/manual/`。
 - 遗留与下一步：检查暂存差异，正常快进推送并读回远程分支。
+
+### PI-20261120-006｜远程 main 已收到图文操作手册
+
+- 记录日期：2026-11-20（北京时间）。
+- 类型与进展：文档已提交并推送，读回远程分支确认。
+- 关联记录：本编号续办记录与手册交付记录。
+- 现象或目标：在项目现有远程分享完整图文手册。
+- 原因或分析：推送前读回 `main`，确认远程引用与本地提交基线一致。
+- 处理与改进：提交 `b60551a` 并快进推送，包含 Markdown 手册、12 张截图、Word 和 PDF 成品、文档入口与此前的台账记录。
+- 代码修改：仅文档、配图及交付成品；无应用逻辑、业务数据或私有配置变更。
+- 本地验证：`git diff --cached --check` 通过；Python `ZipFile.testzip()` 及本地 Markdown 图片路径检查通过，确认 Word 内嵌 12 张图片；`pdfinfo` 确认 PDF 为 13 页 A4。验证范围限于文档与提交，不重新运行应用测试。
+- 部署生效：不适用，不涉及服务部署。`git push origin HEAD:refs/heads/main` 成功，`git ls-remote --exit-code origin refs/heads/main` 返回 `b60551ac8a164c8cf62287ebe5d7bbcc2033b562`。
+- 关联文件或证据：远程 `main` 的提交 `b60551a`、`docs/operation-manual.md`、`output/manual/`。
+- 遗留与下一步：同步本条远程推送证据，按本编号 4 条记录核对平台台账。
+- 同步状态：{"kind":"improvement","category":"experience","status":"resolved","code_state":"modified","verification_state":"passed","deployment_state":"not_applicable"}
